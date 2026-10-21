@@ -55,11 +55,10 @@ class DynamicMixin:
             base_url = str(self.config.get("IMAGE_GEN_API_BASE", "") or "https://image.novelai.net").strip().rstrip("/")
             model = str(self.config.get("IMAGE_GEN_MODEL", "") or "nai-diffusion-4-5-full").strip()
             return "novelai", api_key, base_url, model
-        api_key = self.config.get("IMAGE_GEN_API_KEY", "") or self.config.get("VIDEO_VISION_API_KEY", "")
-        base_url = self._normalize_openai_base_url(
-            self.config.get("IMAGE_GEN_API_BASE", "") or "https://openrouter.ai/api/v1"
-        )
-        model = str(self.config.get("IMAGE_GEN_MODEL", "") or "black-forest-labs/flux-schnell").strip()
+        api_key = self.config.get("IMAGE_GEN_API_KEY", "")
+        configured_base = str(self.config.get("IMAGE_GEN_API_BASE", "") or "").strip()
+        base_url = self._normalize_openai_base_url(configured_base) if configured_base else ""
+        model = str(self.config.get("IMAGE_GEN_MODEL", "") or "").strip()
         return "openai", api_key, base_url, model
 
     @staticmethod
@@ -160,8 +159,8 @@ class DynamicMixin:
 
     async def _generate_image(self, prompt, human_initiated=False):
         backend, api_key, base_url, model = self._get_image_gen_config()
-        if not api_key:
-            logger.warning("[BiliBot] 图片生成模型未配置")
+        if not api_key or not base_url or not model:
+            logger.warning("[BiliBot] 图片生成配置不完整，请填写独立密钥、接口地址和模型名称；本次跳过配图")
             return None
         styled_prompt = f"anime style illustration, not photorealistic, soft lighting, beautiful colors: {prompt}"
         if backend == "novelai":

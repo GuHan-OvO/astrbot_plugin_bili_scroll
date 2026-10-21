@@ -1608,19 +1608,19 @@
     "description": "【高级·图片生成】API Key / NovelAI Persistent API Token",
     "type": "string",
     "default": "",
-    "hint": "OpenAI兼容后端留空会复用 VIDEO_VISION_API_KEY；NovelAI 请填写 Persistent API Token。"
+    "hint": "填写生图服务的独立密钥，不复用其他功能的密钥；NovelAI 请填写 Persistent API Token。"
   },
   "IMAGE_GEN_API_BASE": {
     "description": "【高级·图片生成】API Base URL",
     "type": "string",
     "default": "",
-    "hint": "留空时 OpenAI 后端使用 OpenRouter，NovelAI 使用 https://image.novelai.net。"
+    "hint": "兼容后端请填写你使用的生图服务地址，留空则跳过配图；NovelAI 使用其官方接口。"
   },
   "IMAGE_GEN_MODEL": {
     "description": "【高级·图片生成】模型名称",
     "type": "string",
     "default": "",
-    "hint": "OpenAI后端如 Flux；NovelAI 留空默认 nai-diffusion-4-5-full。"
+    "hint": "兼容后端请填写你的服务支持的模型名称，留空则跳过配图；NovelAI 使用其默认模型或填写指定模型。"
   },
   "IMAGE_GEN_WIDTH": {
     "description": "【高级·图片生成】NovelAI 图片宽度",

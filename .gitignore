@@ -3,3 +3,8 @@ __pycache__/
 .DS_Store
 .ruff_cache/
 data/
+.local/
+.pytest_cache/
+# Local run reports are not publication artifacts.
+docs/*test-log*.md
+test-reports/
