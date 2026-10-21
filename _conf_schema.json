@@ -210,22 +210,16 @@
     "hint": "例如：回复要带一点傲娇感，偶尔用颜文字。"
   },
   "COMMENT_CONTEXT_ENABLED": {
-    "description": "【回复】允许回复模型按需获取资料",
+    "description": "【回复】自主查询总开关",
     "type": "bool",
     "default": true,
-    "hint": "评论区由同一个回复模型选择搜索、字幕、热评、简介或定向视频检查，再决定回复或保持沉默；查询过程不发送评论。"
+    "hint": "一个开关控制评论回复前的搜索、简介、字幕、热评和带问题检查视频。关闭后只用已有上下文；开启后按已配置能力查询。联网需配置搜索服务，视频核查需配置视觉模型。用 /bili日志 查询 看结果，/bili测试查询 BV号 做不发评论的实测。"
   },
   "COMMENT_CONTEXT_MAX_CALLS": {
     "description": "【回复】每条评论最多查询次数",
     "type": "int",
     "default": 4,
     "hint": "范围0～6，查询完最多再生成一次最终决定；相同请求不重复执行，视频检查最多2次。"
-  },
-  "COMMENT_VIDEO_INSPECTION_ENABLED": {
-    "description": "【回复】允许带着问题检查视频",
-    "type": "bool",
-    "default": true,
-    "hint": "仅检查当前评论所属视频，每次最多检查180秒；长视频默认检查开头、中间、结尾，可指定时间段。使用视频视觉模型；直读格式设为gemini/qwen且接口支持时保留音轨，抽帧回退不含声音。"
   },
   "ENABLE_PRIVATE_MESSAGES": {
     "description": "【B站私信·总开关】监听新私信",
@@ -1117,10 +1111,11 @@
     "hint": "每次失败后等待这么久再重试；重试次数由 AUTONOMOUS_PLAN_MAX_RETRIES 控制，全部失败或错过窗口，当天不再自动请求。手动重新生成不受影响。"
   },
   "SCHEDULE_PLAN_PROVIDER_ID": {
-    "description": "【自主安排】今日计划生成模型 provider ID",
+    "description": "【自主安排】今日计划生成模型",
     "type": "string",
     "default": "",
-    "hint": "留空则跟随 LLM_PROVIDER_ID / AstrBot 默认聊天模型；填写 AstrBot 中某个聊天 provider 的 ID 后，今日计划单独使用该模型。"
+    "hint": "从 AstrBot 已配置的模型提供商中选择；留空跟随 LLM_PROVIDER_ID / AstrBot 默认聊天模型。",
+    "_special": "select_provider"
   },
   "AUTONOMOUS_PLAN_MAX_RETRIES": {
     "description": "【自主安排】计划生成失败后自动重试次数",

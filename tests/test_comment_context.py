@@ -129,16 +129,64 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
         bot._get_video_info.assert_not_awaited()
 
     async def test_disabled_or_suspicious_or_wrong_comment_type_blocks_tools(self):
-        for mode in ("disabled", "suspicious", "dynamic", "vision_disabled", "web_disabled"):
+        for mode in ("disabled", "suspicious", "dynamic", "web_disabled"):
             name = "web_search" if mode == "web_disabled" else "video_inspect"
             bot = Bot([response("tool", name, "question")])
             if mode == "disabled": bot.config["COMMENT_CONTEXT_ENABLED"] = False
-            if mode == "vision_disabled": bot.config["COMMENT_VIDEO_INSPECTION_ENABLED"] = False
             if mode == "web_disabled": bot.config["ENABLE_WEB_SEARCH"] = False
             result = await bot._run_comment_reply_flow("p", "s", 123, 17 if mode == "dynamic" else 1, "t", suspicious=mode == "suspicious")
             self.assertEqual(result["decision"], "error", mode)
             bot._inspect_comment_video.assert_not_awaited()
             bot._web_search.assert_not_awaited()
+
+    async def test_single_switch_replaces_legacy_video_switch(self):
+        bot = Bot([response("tool", "video_inspect", "是否有猫？"), response()])
+        bot.config["COMMENT_VIDEO_INSPECTION_ENABLED"] = False
+        self.assertEqual((await bot.flow())["decision"], "reply")
+        bot._inspect_comment_video.assert_awaited_once()
+        bot.config["COMMENT_CONTEXT_ENABLED"] = False
+        self.assertEqual(bot._comment_context_tools(123, 1), [])
+
+    async def test_manual_diagnostic_uses_real_flow_but_never_applies_reply(self):
+        bot = Bot([response("tool", "video_description"), response()])
+        bot.config["BILI_TOOL_AUDIT_ENABLED"] = False
+        bot._get_video_oid = AsyncMock(return_value=123)
+        bot._get_system_prompt = AsyncMock(return_value="persona")
+        bot._apply_reply_result = AsyncMock()
+        text = await bot._test_comment_context(BV)
+        self.assertIn("简介：成功", text)
+        self.assertIn("回复预览（未发布）", text)
+        self.assertEqual(bot.logs[-1]["mode"], "test")
+        bot._apply_reply_result.assert_not_awaited()
+        bot._load_json = lambda *args: bot.logs
+        self.assertIn("只读实测", bot._render_comment_context_log(bot.logs[-1]["time"][:10]))
+
+    async def test_manual_diagnostic_respects_switch_and_validation(self):
+        bot = Bot([])
+        bot._get_video_oid = AsyncMock(return_value=123)
+        self.assertIn("完整 BV", await bot._test_comment_context("invalid"))
+        bot.config["COMMENT_CONTEXT_ENABLED"] = False
+        self.assertIn("已关闭", await bot._test_comment_context(BV))
+        bot._get_video_oid.assert_not_awaited()
+        bot._llm_call.assert_not_awaited()
+
+    async def test_model_error_produces_readable_failure_log(self):
+        bot = Bot([])
+        bot._llm_call.side_effect = RuntimeError("provider failed")
+        result = await bot.flow()
+        self.assertEqual(result["error"], "reply_model_failed")
+        text = bot._format_comment_context_record(bot.logs[-1])
+        self.assertIn("回复模型调用异常", text)
+        self.assertIn("不能据此确认查询能力正常", text)
+
+    async def test_timeout_log_preserves_failure_when_final_decision_succeeds(self):
+        bot = Bot([response("tool", "video_subtitles"), response("ignore")])
+        bot._get_video_subtitles.side_effect = asyncio.TimeoutError
+        self.assertEqual((await bot.flow())["decision"], "ignore")
+        text = bot._format_comment_context_record(bot.logs[-1])
+        self.assertIn("未取得结果", text)
+        self.assertIn("查询超时", text)
+        self.assertIn("最终决定：不回复", text)
 
     async def test_unknown_admin_tools_are_never_exposed(self):
         bot = Bot([response("tool", "shell", "rm")])

@@ -79,7 +79,7 @@ const PAGE_KEYS = {
   interaction: [
     "ENABLE_REPLY", "POLL_INTERVAL", "REPLY_COOLDOWN", "REPLY_PROBABILITY_PERCENT", "REPLY_ALWAYS_UIDS",
     "ENABLE_SIMILAR_SKIP", "REPLY_SIMILARITY_PERCENT", "CUSTOM_REPLY_INSTRUCTION",
-    "COMMENT_CONTEXT_ENABLED", "COMMENT_CONTEXT_MAX_CALLS", "COMMENT_VIDEO_INSPECTION_ENABLED",
+    "COMMENT_CONTEXT_ENABLED", "COMMENT_CONTEXT_MAX_CALLS",
     "ENABLE_INTEREST_BASED_REPLY", "INTEREST_SELECTION_PROMPT", "FILTER_LOW_VALUE_MESSAGES",
     "FILTER_DUPLICATE_MESSAGES", "FILTER_AD_MESSAGES", "INTEREST_APPLY_TO_PRIVATE",
     "ENABLE_PRIVATE_MESSAGES", "PRIVATE_MESSAGE_REPLY_SCOPE", "PRIVATE_MESSAGE_REPLY_WHITELIST_UIDS",
@@ -1432,7 +1432,7 @@ function renderInterestSnapshot() {
 }
 
 function renderInterestConfigSection() {
-  const keys = ["INTEREST_APPLY_TO_PRIVATE", "INTEREST_SELECTION_PROMPT", "CUSTOM_REPLY_INSTRUCTION", "COMMENT_CONTEXT_ENABLED", "COMMENT_CONTEXT_MAX_CALLS", "COMMENT_VIDEO_INSPECTION_ENABLED"].filter(hasKey);
+  const keys = ["INTEREST_APPLY_TO_PRIVATE", "INTEREST_SELECTION_PROMPT", "CUSTOM_REPLY_INSTRUCTION"].filter(hasKey);
   if (!keys.length) return "";
   return `<section class="card section-card interest-config-card">
     ${sectionHead("兴趣选择与评论提示词", "总开关、当前兴趣和回复提示词集中在这里", "star")}
@@ -1456,6 +1456,7 @@ function renderInteraction() {
       ${renderConfigSection("回复边界", "概率保留为最后一道节奏控制", ["ENABLE_REPLY", "REPLY_PROBABILITY_PERCENT", "REPLY_COOLDOWN", "POLL_INTERVAL", "REPLY_ALWAYS_UIDS", "ENABLE_SIMILAR_SKIP", "REPLY_SIMILARITY_PERCENT"], "controller")}
     </div>
     ${renderInterestConfigSection()}
+    ${renderConfigSection("回复前自主查询", "一个总开关控制搜索、简介、字幕、热评和视频核查；按已配置能力使用。/bili测试查询 BV号 可只读实测，/bili日志 查询 查看结果。", ["COMMENT_CONTEXT_ENABLED", "COMMENT_CONTEXT_MAX_CALLS"], "search")}
     <div class="two-column">
       ${renderConfigSection("B站私信回复", "先决定回复对象，再设置回复方式与人设补充", ["ENABLE_PRIVATE_MESSAGES", "PRIVATE_MESSAGE_REPLY_SCOPE", "PRIVATE_MESSAGE_REPLY_WHITELIST_UIDS", "PRIVATE_MESSAGE_AUTO_REPLY", "CUSTOM_PRIVATE_MESSAGE_INSTRUCTION"], "user")}
       ${renderConfigSection("B站私信轮询", "集中管理请求节奏、活跃窗口和单轮处理边界", ["PRIVATE_MESSAGE_POLL_INTERVAL", "PRIVATE_MESSAGE_IDLE_POLL_INTERVAL", "PRIVATE_MESSAGE_ACTIVE_WINDOW", "PRIVATE_MESSAGE_MAX_PER_POLL", "PRIVATE_MESSAGE_MAX_MESSAGE_AGE"], "clock")}

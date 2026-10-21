@@ -1,6 +1,7 @@
 """A bounded tool loop driven by the same model that writes public replies."""
 import asyncio
 import json
+import re
 import time
 from datetime import datetime
 
@@ -31,8 +32,7 @@ class CommentContextMixin:
         tools = []
         if comment_type == 1 and str(oid).isdigit() and int(oid) > 0:
             tools.extend(["video_description", "video_subtitles", "video_hot_comments"])
-            if self.config.get("COMMENT_VIDEO_INSPECTION_ENABLED", True):
-                tools.append("video_inspect")
+            tools.append("video_inspect")
         if self.config.get("ENABLE_WEB_SEARCH", False) and self.config.get("WEB_SEARCH_API_KEY", ""):
             tools.append("web_search")
         return tools
@@ -67,7 +67,7 @@ class CommentContextMixin:
             info, request["query"], request.get("start_seconds"), request.get("end_seconds")
         )
 
-    async def _run_comment_reply_flow(self, prompt, system_prompt, oid, comment_type, thread_id, *, suspicious=False):
+    async def _run_comment_reply_flow(self, prompt, system_prompt, oid, comment_type, thread_id, *, suspicious=False, test_mode=False):
         try:
             budget = max(0, min(6, int(self.config.get("COMMENT_CONTEXT_MAX_CALLS", 4))))
         except (TypeError, ValueError):
@@ -95,6 +95,10 @@ class CommentContextMixin:
             except asyncio.TimeoutError:
                 result = {"decision": "error", "error": "reply_model_timeout"}
                 break
+            except Exception as exc:
+                logger.warning(f"[BiliBot] 评论查询回复模型失败: {exception_detail(exc, self.config)}")
+                result = {"decision": "error", "error": "reply_model_failed"}
+                break
             if not raw:
                 result = {"decision": "error", "error": "model_unavailable"}
                 break
@@ -111,7 +115,7 @@ class CommentContextMixin:
             key = json.dumps(request, ensure_ascii=False, sort_keys=True)
             started = time.monotonic()
             if key in requested or (request["name"] == "video_inspect" and inspection_count >= 2):
-                outcome = {"status": "unavailable", "detail": "重复请求或已达视频检查次数上限，请作最终决定或换用其他资料"}
+                outcome = {"status": "unavailable", "reason": "request_limit", "detail": "重复请求或已达视频检查次数上限，请作最终决定或换用其他资料"}
             else:
                 requested.add(key)
                 if request["name"] == "video_inspect":
@@ -122,25 +126,97 @@ class CommentContextMixin:
                         self._execute_comment_context_tool(request, oid, comment_type, state), timeout=timeout
                     )
                 except asyncio.TimeoutError:
-                    outcome = {"status": "unavailable", "detail": "查询超时，未取得可靠结果"}
+                    outcome = {"status": "unavailable", "reason": "timeout", "detail": "查询超时，未取得可靠结果"}
                 except Exception as exc:
                     logger.warning(f"[BiliBot] 评论资料获取失败: {exception_detail(exc, self.config)}")
-                    outcome = {"status": "unavailable", "detail": "查询失败，未取得可靠结果"}
+                    outcome = {"status": "unavailable", "reason": "tool_failed", "detail": "查询失败，未取得可靠结果"}
             trace.append({"tool": request["name"], "status": outcome.get("status", "unavailable"),
-                          "cached": bool(outcome.get("from_cache")), "seconds": round(time.monotonic() - started, 2)})
+                          "cached": bool(outcome.get("from_cache")), "seconds": round(time.monotonic() - started, 2),
+                          "reason": outcome.get("reason", "" if outcome.get("status") == "ok" else "no_material")})
             # Each bounded block carries its question as well as its answer.
             evidence.append(wrap_untrusted(json.dumps({"request": request, "result": outcome}, ensure_ascii=False), "queried_material"))
             logger.info(f"[BiliBot] 评论资料请求 {request['name']}: {trace[-1]['status']}")
         if suspicious and result.get("decision") == "reply":
             result["score_delta"] = min(result.get("score_delta", 0), -3)
         result["_context_trace"] = trace
-        if self.config.get("BILI_TOOL_AUDIT_ENABLED", True):
+        if test_mode or self.config.get("BILI_TOOL_AUDIT_ENABLED", True):
             try:
                 self._append_json_list(COMMENT_CONTEXT_LOG_FILE, {
                     "time": datetime.now().isoformat(timespec="seconds"), "oid": str(oid),
                     "thread_id": str(thread_id), "decision": result.get("decision"), "calls": trace,
                     "error": result.get("error", ""),
+                    "mode": "test" if test_mode else "comment",
                 }, cap=200)
             except Exception:
                 logger.warning("[BiliBot] 评论资料调用日志保存失败")
         return result
+
+    @staticmethod
+    def _format_comment_context_record(record):
+        names = {"video_description": "简介", "video_subtitles": "字幕", "video_hot_comments": "热评",
+                 "web_search": "联网搜索", "video_inspect": "视频核查"}
+        decisions = {"reply": "生成回复", "ignore": "不回复", "observe": "仅观察", "error": "流程失败"}
+        reasons = {"timeout": "查询超时", "tool_failed": "调用异常，详细原因见 AstrBot 日志",
+                   "no_material": "无可用资料或未配置能力", "request_limit": "重复请求或次数已达上限",
+                   "reply_model_timeout": "回复模型超时", "reply_model_failed": "回复模型调用异常",
+                   "model_unavailable": "回复模型未返回内容", "invalid_model_output": "回复模型格式不正确",
+                   "context_budget_exhausted": "已达查询次数上限"}
+        lines = [f"{record.get('time', '')} · {'只读实测' if record.get('mode') == 'test' else '评论流程'}"]
+        calls = record.get("calls", [])
+        if not calls:
+            lines.append("未执行资料查询（直接决定或查询前失败），不能据此确认查询能力正常。")
+        for index, call in enumerate(calls, 1):
+            status = "成功" if call.get("status") == "ok" else "未取得结果"
+            cached = "，读取缓存" if call.get("cached") else ""
+            reason = reasons.get(call.get("reason"), "")
+            lines.append(f"{index}. {names.get(call.get('tool'), '查询')}：{status}{cached}，{call.get('seconds', 0)}秒"
+                         + (f"；{reason}" if reason else ""))
+        lines.append("最终决定：" + decisions.get(record.get("decision"), "未知"))
+        if record.get("error"):
+            lines.append("原因：" + reasons.get(record["error"], "流程异常"))
+        lines.append("未发送B站评论；未更改好感或画像。" if record.get("mode") == "test"
+                     else "此处记录模型决定；实际发送结果请查看回复日志。")
+        return "\n".join(lines)
+
+    def _render_comment_context_log(self, target_date, date_given=False):
+        rows = self._load_json(COMMENT_CONTEXT_LOG_FILE, [])
+        rows = [r for r in rows if isinstance(r, dict) and str(r.get("time", "")).startswith(target_date)] if isinstance(rows, list) else []
+        if not rows:
+            return f"{target_date} 暂无自主查询日志。可用 /bili测试查询 BV号 进行只读实测。"
+        return f"自主查询日志 {target_date}（共{len(rows)}条，最近5条）\n\n" + "\n\n".join(
+            self._format_comment_context_record(row) for row in rows[-5:])
+
+    async def _test_comment_context(self, bvid, question=""):
+        if not re.fullmatch(r"BV[0-9A-Za-z]{10}", bvid):
+            return "请填写完整 BV 号。用法：/bili测试查询 BV号 [要核实的问题]"
+        if not self.config.get("COMMENT_CONTEXT_ENABLED", True):
+            return "自主查询总开关已关闭，请先开启后再测试。"
+        if len(question) > 300:
+            return "测试问题请控制在300字以内。"
+        lock = getattr(self, "_comment_context_test_lock", None)
+        if lock is None:
+            lock = self._comment_context_test_lock = asyncio.Lock()
+        if lock.locked():
+            return "已有查询测试正在进行，请等待完成。"
+        async with lock:
+            try:
+                oid = await asyncio.wait_for(self._get_video_oid(bvid), timeout=25)
+                if not oid:
+                    return "无法获取该视频，测试未执行；请检查BV号、登录与网络。"
+                sp = await asyncio.wait_for(self._get_system_prompt(), timeout=30)
+            except Exception as exc:
+                logger.warning(f"[BiliBot] 自主查询测试准备失败: {exception_detail(exc, self.config)}")
+                return "测试准备失败，尚未调用查询流程；详细原因见 AstrBot 日志。"
+            prompt = (
+                "这是管理员发起的只读评论查询测试，不会发送B站评论。请先请求一项与问题相关的资料，"
+                "根据返回证据再决定回复或不回复；无法取得证据不要编造。\n当前视频：" + bvid + "\n" +
+                wrap_untrusted(question or "请读取简介，简短说说这个视频介绍了什么。", "test_question")
+            )
+            result = await self._run_comment_reply_flow(prompt, sp, oid, 1, "manual_test", test_mode=True)
+            record = {"time": datetime.now().isoformat(timespec="seconds"), "mode": "test",
+                      "decision": result.get("decision"), "calls": result.get("_context_trace", []),
+                      "error": result.get("error", "")}
+            text = self._format_comment_context_record(record)
+            if result.get("reply"):
+                text += "\n回复预览（未发布）：" + result["reply"]
+            return text
