@@ -4,6 +4,8 @@ B站 AI Bot 插件 for [AstrBot](https://github.com/AstrBotDevs/AstrBot) — 让
 
 内部模块正在采用渐进式统一事件与动作框架。现有功能与配置会继续兼容，不进行一次性重写。
 
+维护安排：[2026-10-21 维护任务书](docs/maintenance-plan-2026-10-21.md)（13 项待办、实施要求与验收标准；不代表已实现）。
+
 ## ✨ 功能
 
 ### 💬 评论与互动
