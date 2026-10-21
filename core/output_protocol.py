@@ -6,6 +6,7 @@ metadata and must pass validation before callers may send or commit state.
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Any
 
@@ -115,6 +116,7 @@ def parse_reply_envelope(
     channel: str,
     allowed_tools: set[str] | None = None,
     allow_tool_request: bool = False,
+    allow_context_request: bool = False,
 ) -> dict[str, Any]:
     """Parse and validate one complete JSON object; never salvage partial text."""
     text = str(raw or "").strip()
@@ -132,7 +134,8 @@ def parse_reply_envelope(
         raise ReplyProtocolError("reply_schema_mismatch")
 
     decision = str(value.get("decision") or "").strip().lower()
-    if decision not in DECISIONS:
+    context_mode = channel == "comment" and allow_context_request
+    if decision not in DECISIONS | ({"tool"} if context_mode else set()):
         raise ReplyProtocolError("invalid_decision")
     reply = _short_text(
         value.get("reply"), "reply", _reply_limit(channel),
@@ -159,10 +162,22 @@ def parse_reply_envelope(
     signals = _validate_signals(value.get("signals"))
 
     tool_request = value.get("tool_request")
-    if not isinstance(tool_request, dict) or set(tool_request) != TOOL_REQUEST_KEYS:
+    inspection_keys = TOOL_REQUEST_KEYS | {"start_seconds", "end_seconds"}
+    if not isinstance(tool_request, dict) or (
+        set(tool_request) != TOOL_REQUEST_KEYS
+        and not (context_mode and tool_request.get("name") == "video_inspect" and set(tool_request) == inspection_keys)
+    ):
         raise ReplyProtocolError("tool_request_schema_mismatch")
     tool_name = str(tool_request.get("name") or "").strip().lower()
-    tool_query = _short_text(tool_request.get("query"), "tool_query", 100)
+    tool_query = _short_text(tool_request.get("query"), "tool_query", 300 if context_mode else 100)
+    time_range = {}
+    if "start_seconds" in tool_request:
+        start, end = tool_request["start_seconds"], tool_request["end_seconds"]
+        if any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) for x in (start, end)):
+            raise ReplyProtocolError("invalid_inspection_range")
+        if not 0 <= start < end or end - start > 180:
+            raise ReplyProtocolError("inspection_range_exceeds_180_seconds")
+        time_range = {"start_seconds": float(start), "end_seconds": float(end)}
     tools = {str(name).strip().lower() for name in (allowed_tools or set())}
     if not allow_tool_request:
         tools = set()
@@ -171,7 +186,16 @@ def parse_reply_envelope(
     if tool_name == "none" and tool_query:
         raise ReplyProtocolError("none_tool_must_not_have_query")
 
-    if decision != "reply":
+    if context_mode and tool_name != "none":
+        if decision != "tool" or reply or delta or impression or user_facts:
+            raise ReplyProtocolError("context_request_has_side_effects")
+        if tool_name in {"web_search", "video_inspect"} and not tool_query:
+            raise ReplyProtocolError("context_query_required")
+        if tool_name in {"video_description", "video_subtitles", "video_hot_comments"} and tool_query:
+            raise ReplyProtocolError("current_video_tool_takes_no_query")
+    elif decision == "tool":
+        raise ReplyProtocolError("context_request_missing_tool")
+    elif decision != "reply":
         if reply or delta or impression or user_facts or tool_name != "none":
             raise ReplyProtocolError("silent_decision_has_side_effects")
     elif not reply:
@@ -184,16 +208,16 @@ def parse_reply_envelope(
         "impression": impression,
         "user_facts": user_facts,
         "signals": signals,
-        "tool_request": {"name": tool_name, "query": tool_query},
+        "tool_request": {"name": tool_name, "query": tool_query, **time_range},
         "permanent_memory": "",
         "_protocol_validated": True,
     }
 
 
-def reply_schema_instruction(*, tools: list[str] | None = None) -> str:
+def reply_schema_instruction(*, tools: list[str] | None = None, context_requests: bool = False) -> str:
     tool_names = ["none", *(tools or [])]
     tool_union = "|".join(dict.fromkeys(tool_names))
-    return (
+    instruction = (
         "只输出一个完整JSON对象，不要Markdown、解释或额外字段。格式必须严格为：\n"
         '{"decision":"reply|ignore|observe","reply":"唯一可发送文本",'
         '"score_delta":0,"impression":"","user_facts":[],'
@@ -208,3 +232,14 @@ def reply_schema_instruction(*, tools: list[str] | None = None) -> str:
         '{"event":"发生了什么","possible_mistake":"哪里可能做错了","next_time":"以后怎么做"}，'
         "普通交流必须为null。熟人玩笑要结合关系判断，不要只凭敏感词当攻击。"
     )
+    if context_requests:
+        instruction = instruction.replace('"decision":"reply|ignore|observe"', '"decision":"reply|ignore|observe|tool"')
+        instruction += (
+            "需要补资料时用decision=tool，reply、impression为空，user_facts=[]，score_delta=0；"
+            "查询阶段不会发送任何评论。最终reply/ignore/observe必须tool_request.name=none。"
+            "video_description、video_subtitles、video_hot_comments仅查当前视频，query必须为空。"
+            "web_search的query是检索词；video_inspect的query是交给视频模型核实的具体问题。"
+            "video_inspect可额外带start_seconds和end_seconds两个数字（原视频秒数，区间最多180秒）；"
+            "不带时由程序选取片段。不要把时间或参数写成query里的JSON。"
+        )
+    return instruction

@@ -214,6 +214,13 @@ class UtilsMixin:
             return 127, "", f"{args[0]} not found"
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.CancelledError:
+            # A cancelled inspection must not leave ffmpeg/yt-dlp writing into
+            # its temporary directory after the request has been cleaned up.
+            if proc.returncode is None:
+                proc.kill()
+            await proc.communicate()
+            raise
         except asyncio.TimeoutError:
             proc.kill()
             await proc.communicate()
@@ -335,7 +342,7 @@ class UtilsMixin:
             for name in os.listdir(temp_dir):
                 fp = os.path.join(temp_dir, name)
                 try:
-                    if temp_dir == TEMP_VIDEO_DIR and name.startswith("share_send_") and os.path.getmtime(fp) > share_cutoff:
+                    if temp_dir == TEMP_VIDEO_DIR and name.startswith(("share_send_", "inspection_")) and os.path.getmtime(fp) > share_cutoff:
                         continue
                     size = self._path_size(fp)
                     if os.path.isfile(fp):

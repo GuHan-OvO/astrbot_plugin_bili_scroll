@@ -1104,7 +1104,10 @@ class MemoryMixin:
         # 1.2 视频/动态内容
         bvid = ""
         if comment_type == 1 and oid:
-            vc, cache_entry = await self._get_video_context(oid, comment_type)
+            if channel == "comment":
+                vc, cache_entry = await self._get_comment_video_memory_context(oid)
+            else:
+                vc, cache_entry = await self._get_video_context(oid, comment_type)
             if vc:
                 parts.append(vc)
             if cache_entry:

@@ -15,12 +15,13 @@ from .config import (
     VIDEO_MEMORY_FILE,
 )
 from .runtime import ActionRequest, EventState, InboundEvent
+from .comment_context import CommentContextMixin
 from .output_protocol import (
     ReplyProtocolError, parse_reply_envelope, reply_schema_instruction,
 )
 
 
-class ReplyMixin:
+class ReplyMixin(CommentContextMixin):
     """回复生成与评论区轮询。"""
 
     _AD_PATTERNS = (
@@ -302,6 +303,7 @@ class ReplyMixin:
                 not is_suspicious
                 and not reference_context
                 and not is_live
+                and channel != "comment"
                 and not (is_private and allow_tool_request)
                 and self.config.get("ENABLE_WEB_SEARCH", False)
             ):
@@ -436,6 +438,10 @@ class ReplyMixin:
             custom_reply_inst = self.config.get(custom_key, "")
             if custom_reply_inst:
                 prompt += f"\n\n【补充提示词】{custom_reply_inst}"
+            if channel == "comment":
+                return await self._run_comment_reply_flow(
+                    prompt, sp, oid, comment_type, thread_id, suspicious=is_suspicious
+                )
             prompt += "\n\n" + reply_schema_instruction(tools=schema_tool_names)
             rt = await self._llm_call(prompt, system_prompt=sp)
             if not rt:
@@ -626,6 +632,8 @@ class ReplyMixin:
                 "oid": str(oid), "rpid": str(rpid),
                 "score_delta": sd,
             }
+            if result.get("_context_trace"):
+                log_entry["context_calls"] = result["_context_trace"]
             if bvid:
                 log_entry["bvid"] = bvid
             if video_title:

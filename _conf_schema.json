@@ -209,6 +209,24 @@
     "default": "",
     "hint": "例如：回复要带一点傲娇感，偶尔用颜文字。"
   },
+  "COMMENT_CONTEXT_ENABLED": {
+    "description": "【回复】允许回复模型按需获取资料",
+    "type": "bool",
+    "default": true,
+    "hint": "评论区由同一个回复模型选择搜索、字幕、热评、简介或定向视频检查，再决定回复或保持沉默；查询过程不发送评论。"
+  },
+  "COMMENT_CONTEXT_MAX_CALLS": {
+    "description": "【回复】每条评论最多查询次数",
+    "type": "int",
+    "default": 4,
+    "hint": "范围0～6，查询完最多再生成一次最终决定；相同请求不重复执行，视频检查最多2次。"
+  },
+  "COMMENT_VIDEO_INSPECTION_ENABLED": {
+    "description": "【回复】允许带着问题检查视频",
+    "type": "bool",
+    "default": true,
+    "hint": "仅检查当前评论所属视频，每次最多检查180秒；长视频默认检查开头、中间、结尾，可指定时间段。使用视频视觉模型；直读格式设为gemini/qwen且接口支持时保留音轨，抽帧回退不含声音。"
+  },
   "ENABLE_PRIVATE_MESSAGES": {
     "description": "【B站私信·总开关】监听新私信",
     "type": "bool",
@@ -1654,7 +1672,8 @@
     "description": "【高级·联网搜索】搜索判断模型（建议选轻量模型）",
     "type": "string",
     "default": "",
-    "_special": "select_provider"
+    "_special": "select_provider",
+    "hint": "保留用于旧式搜索判断路径；评论区按需资料流程由回复模型自行决定搜索，不再单独调用此模型。"
   },
   "WEB_SEARCH_BACKEND": {
     "description": "【高级·联网搜索】搜索后端",

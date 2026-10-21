@@ -8,10 +8,11 @@ from .video_diagnostics import media_failure, get_call_diagnostic, set_call_diag
 from datetime import datetime
 from astrbot.api import logger
 from .network import download_proxy_args, redact_proxy_error
+from .video_inspection import VideoInspectionMixin
 from .config import VIDEO_MEMORY_FILE, TEMP_VIDEO_DIR, EXTERNAL_MEMORY_FILE
 
 
-class VideoMixin:
+class VideoMixin(VideoInspectionMixin):
     """视频分析、下载、截帧、上下文。"""
 
     def _cached_video_memory(self, bvid):
@@ -757,14 +758,15 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
     _AUDIO_FILE_EXTS = {".m4a", ".mp3", ".aac", ".opus", ".flac", ".wav"}
     _VIDEO_DOWNLOAD_FORMAT_TIMEOUT = 120
 
-    def _pick_downloaded_video_file(self, bvid):
-        if not os.path.isdir(TEMP_VIDEO_DIR):
+    def _pick_downloaded_video_file(self, bvid, output_dir=None):
+        output_dir = output_dir or TEMP_VIDEO_DIR
+        if not os.path.isdir(output_dir):
             return None
         candidates = []
-        for name in os.listdir(TEMP_VIDEO_DIR):
+        for name in os.listdir(output_dir):
             if not name.startswith(bvid) or name.endswith("_cookies.txt"):
                 continue
-            fp = os.path.join(TEMP_VIDEO_DIR, name)
+            fp = os.path.join(output_dir, name)
             if not os.path.isfile(fp) or name.endswith((".part", ".ytdl")):
                 continue
             ext = os.path.splitext(name)[1].lower()
@@ -780,12 +782,13 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
         candidates.sort(reverse=True)
         return candidates[0][2]
 
-    async def _download_video(self, bvid, max_height=480):
+    async def _download_video(self, bvid, max_height=480, *, output_dir=None):
         set_call_diagnostic()
+        download_dir = output_dir or TEMP_VIDEO_DIR
         proxy_args = download_proxy_args(self.config)
-        output_template = os.path.join(TEMP_VIDEO_DIR, f"{bvid}.%(ext)s")
+        output_template = os.path.join(download_dir, f"{bvid}.%(ext)s")
         # 生成 Netscape 格式 cookie 文件，兼容新版 yt-dlp
-        cookie_file = os.path.join(TEMP_VIDEO_DIR, f"{bvid}_cookies.txt")
+        cookie_file = os.path.join(download_dir, f"{bvid}_cookies.txt")
         sessdata = self.config.get('SESSDATA', '')
         bili_jct = self.config.get('BILI_JCT', '')
         dede_uid = self.config.get('DEDE_USER_ID', '')
@@ -813,7 +816,7 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
             total_formats = len(formats)
             for format_index, fmt in enumerate(formats, start=1):
                 # 清理上一轮可能残留的部分文件
-                self._cleanup_partial_downloads(bvid)
+                self._cleanup_partial_downloads(bvid, output_dir=output_dir) if output_dir else self._cleanup_partial_downloads(bvid)
                 logger.info(
                     f"[BiliBot] 开始下载({bvid})，格式 {format_index}/{total_formats}，"
                     f"单次最多等待 {self._VIDEO_DOWNLOAD_FORMAT_TIMEOUT} 秒"
@@ -831,7 +834,7 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
                     timeout=self._VIDEO_DOWNLOAD_FORMAT_TIMEOUT,
                 )
                 if code == 0:
-                    fp = self._pick_downloaded_video_file(bvid)
+                    fp = self._pick_downloaded_video_file(bvid, output_dir=output_dir) if output_dir else self._pick_downloaded_video_file(bvid)
                     if fp:
                         logger.info(f"[BiliBot] 视频下载成功({bvid})，格式: {fmt}，文件: {os.path.basename(fp)}")
                         return fp
@@ -855,14 +858,15 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
         logger.warning(f"[BiliBot] 视频下载全部失败({bvid}): {safe_detail(last_err, self.config)}")
         return None
 
-    def _cleanup_partial_downloads(self, bvid):
+    def _cleanup_partial_downloads(self, bvid, output_dir=None):
         """清理某个 bvid 的残留下载文件（不删 cookie）"""
-        if not os.path.isdir(TEMP_VIDEO_DIR):
+        output_dir = output_dir or TEMP_VIDEO_DIR
+        if not os.path.isdir(output_dir):
             return
-        for name in os.listdir(TEMP_VIDEO_DIR):
+        for name in os.listdir(output_dir):
             if name.startswith(bvid) and not name.endswith("_cookies.txt"):
                 try:
-                    fp = os.path.join(TEMP_VIDEO_DIR, name)
+                    fp = os.path.join(output_dir, name)
                     if os.path.isfile(fp):
                         os.remove(fp)
                 except OSError:

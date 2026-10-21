@@ -164,6 +164,7 @@ class VisionMixin:
             resp = await self.context.llm_generate(
                 chat_provider_id=provider_id,
                 prompt=content_parts,
+                max_tokens=max_tokens,
             )
             if resp and resp.completion_text:
                 return resp.completion_text.strip()
