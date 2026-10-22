@@ -983,11 +983,14 @@ class WeeklySummaryMixin:
                     img_info = await self._upload_image_to_bilibili(image_path)
                     if img_info:
                         dynamic_text = "📅 这周的B站生活周报来啦，整理成图片存档一下。"
-                        success = await self._queue_dynamic_post(
+                        image_state = {"sent": False}
+                        outcome = await self._queue_dynamic_post(
                             dynamic_text,
-                            lambda: self._post_dynamic_with_image(dynamic_text, img_info),
+                            lambda: self._post_dynamic_with_image(dynamic_text, img_info, image_state),
+                            with_outcome=True,
                         )
-                        has_image = success
+                        success = outcome.success
+                        has_image = bool(outcome.success and image_state.get("sent"))
                 if not success:
                     success = await self._queue_dynamic_post(
                         summary, lambda: self._post_dynamic_text(summary)
@@ -1066,13 +1069,16 @@ class WeeklySummaryMixin:
                     image_info = await self._upload_image_to_bilibili(image_path)
                     if image_info:
                         dynamic_text = "今天的B站生活小结，留个轻量存档。"
-                        success = await self._queue_dynamic_post(
+                        image_state = {"sent": False}
+                        outcome = await self._queue_dynamic_post(
                             dynamic_text,
                             lambda: self._post_dynamic_with_image(
-                                dynamic_text, image_info
+                                dynamic_text, image_info, image_state
                             ),
+                            with_outcome=True,
                         )
-                        has_image = success
+                        success = outcome.success
+                        has_image = bool(outcome.success and image_state.get("sent"))
                 if not success:
                     success = await self._queue_dynamic_post(
                         summary, lambda: self._post_dynamic_text(summary)

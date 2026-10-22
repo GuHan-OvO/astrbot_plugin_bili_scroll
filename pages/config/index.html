@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>BiliBot 配置</title>
+  <link rel="stylesheet" href="./config.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">
+      <strong>BiliBot 配置</strong>
+      <span id="meta" class="meta"></span>
+    </div>
+    <div class="tools">
+      <input id="search" class="search" type="search" placeholder="搜索配置项、键名或说明" autocomplete="off" />
+      <button id="expand" class="btn" type="button">展开全部</button>
+      <button id="collapse" class="btn" type="button">收起全部</button>
+      <button id="save" class="btn primary" type="button" disabled>保存</button>
+    </div>
+  </header>
+
+  <main id="list" class="list">
+    <p class="hint-plain">正在读取配置…</p>
+  </main>
+
+  <footer id="dock" class="dock" hidden>
+    <span id="dock-text"></span>
+    <button id="revert" class="btn" type="button">撤销改动</button>
+  </footer>
+
+  <script type="module" src="./config.js"></script>
+</body>
+</html>

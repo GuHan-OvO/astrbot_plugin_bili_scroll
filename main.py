@@ -1479,8 +1479,11 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
             yield event.plain_result("❌ 请先 /bili登录")
             return
         yield event.plain_result("📢 正在发布动态...")
-        await self._run_dynamic(human_initiated=True)
-        yield event.plain_result("📢 动态发布流程已完成，请查看日志")
+        started = await self._run_dynamic(human_initiated=True)
+        if started is False:
+            yield event.plain_result("⏳ 已有一条动态在发布，本次跳过")
+        else:
+            yield event.plain_result("📢 动态发布流程已完成，请查看日志")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("bili看番")

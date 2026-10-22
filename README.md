@@ -105,7 +105,7 @@ Bot 可在聊天中通过自然语言触发以下能力，工具结果回到 LLM
 
 推荐起步设置：`RECOMMEND_OWNER_MIN_SCORE=7`、`RECOMMEND_OWNER_DAILY_LIMIT=3`、`RECOMMEND_OWNER_MIN_GAP_MINUTES=120`。有具体看点才分享，同一 BV 的成功分享记录单独保存，重启或清理观看流水后仍可去重。升级不会覆盖你现有的 8 分/1 次或其他自定义值；希望增加推荐时请主动修改这些设置。
 
-动态仍结合人设主动创作。`DYNAMIC_MIN_INTERVAL_DAYS=1` 表示每天最多一条，`2` 或 `3` 表示至少隔两天或三天；真实素材不足或内容重复时可跳过。素材来自近期公开视频、番剧和动态记忆，不使用 QQ/私信聊天或主人的私密画像。手动 `/bili动态` 不受间隔限制，仍遵守每日安全上限。
+动态仍结合人设主动创作。`DYNAMIC_MIN_INTERVAL_DAYS=1` 表示每天最多一条，`2` 或 `3` 表示至少隔两天或三天；真实素材不足或内容重复时可跳过。素材来自近期公开视频、番剧和动态记忆，不使用 QQ/私信聊天或主人的私密画像。手动 `/bili动态` 不受间隔限制，仍遵守每日安全上限。`DYNAMIC_DAILY_COUNT=0` 表示这条不额外限条数（仍受自主上限和统一行为预算约束）；周报和日报动态是固定投递，不占用这条最短间隔。
 
 已分析的视频再次出现在 QQ、B站私信或评论区时，优先使用原摘要、评分和感想；详细分析老化不会自动触发重看，也不会把这次回忆算成新的爱好证据。主人在B站私信明确说“重看”，或管理员在 QQ 明确要求“重新看”并调用观看工具时，才重新分析。只靠标题/简介生成的旧 QQ 预览会与真实观看记录区分；资料不足会说明尚未确认内容，不补造评分。
 
@@ -168,7 +168,7 @@ git clone https://github.com/chenluQwQ/astrbot_plugin_bilibili_ai_bot
 - 文本 LLM：`LLM_PROVIDER_ID`，留空时会退回 AstrBot 默认聊天模型
 - 视频视觉模型：`VIDEO_VISION_PROVIDER_ID` 或 `VIDEO_VISION_API_KEY + VIDEO_VISION_MODEL`
 - 图片识别模型：`IMAGE_VISION_PROVIDER_ID` 或 `IMAGE_VISION_API_KEY + IMAGE_VISION_MODEL`
-- 动态配图模型：`IMAGE_GEN_BACKEND + IMAGE_GEN_API_KEY`；模型名留空时按后端选择默认值
+- 动态配图模型：`IMAGE_GEN_BACKEND + IMAGE_GEN_API_KEY`；NovelAI 留空模型名时用它自己的默认模型，OpenAI 兼容后端必须填写模型名，否则跳过配图
 - 联网查询后端：`WEB_SEARCH_API_KEY`（按 `WEB_SEARCH_BACKEND` 选择 Tavily / Firecrawl / Grok / Perplexity / 博查 / 自定义）
 
 ### 5. 缺失依赖时的退化行为
@@ -259,8 +259,8 @@ git clone https://github.com/chenluQwQ/astrbot_plugin_bilibili_ai_bot
 |`ENABLE_WEB_PANEL`           |可选|启用 Web 管理面板                                                          |
 |`WEB_PANEL_PORT`             |可选|Web 面板端口，默认 5001                                                     |
 |`WEB_PANEL_PASSWORD`         |可选|Web 面板密码，默认 `admin123` ⚠️ **部署在公网务必修改**                               |
-|`VIDEO_VISION_FORMAT`        |可选|视频直读接口格式：`gemini` / `qwen` / `none`（默认 `none`，截帧分析）                  |
-|`VIDEO_VISION_FPS`           |可选|Qwen 格式视频抽帧率，默认 2                                                    |
+|`VIDEO_VISION_FORMAT`        |可选|视频直读接口格式：`auto` / `openai` / `file` / `qwen` / `gemini` / `none`（默认 `none`=截帧分析；`auto` 会自动探测） |
+|`VIDEO_VISION_FPS`           |可选|Qwen 格式视频抽帧率，默认 2（仅 `qwen` 生效）                                     |
 |`ABUSE_ALERT_MODE`           |可选|恶意告警模式：`off` / `score` / `model`（默认 `off`）                           |
 |`ABUSE_ALERT_QQ_UMO`         |可选|接收告警的 QQ 私聊 UMO                                                      |
 |`ABUSE_ALERT_SCORE_THRESHOLD`|可选|触发告警的 score_delta 阈值，默认 -3                                           |

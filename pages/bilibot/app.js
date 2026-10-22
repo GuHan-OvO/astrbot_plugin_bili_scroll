@@ -51,6 +51,8 @@ const state = {
   toolSearch: "",
   toolPickerSelection: new Set(),
   settingsSearch: "",
+  allConfigSearch: "",
+  allConfigExpanded: false,
   selectedScheduleIndex: -1,
   autonomyDrawer: null,
   qrPollTimer: null,
@@ -73,6 +75,7 @@ const NAV_ITEMS = [
   ["security", "shield", "安全与工具", "权限隔离、脱敏与风控"],
   ["account", "user", "账号连接", "扫码登录与主人身份"],
   ["basics", "settings", "基础设置", "人设、模型与长期配置"],
+  ["allconfig", "menu", "全部配置", "全部配置按大类折叠浏览"],
 ];
 
 const PAGE_KEYS = {
@@ -1328,6 +1331,7 @@ function renderPage(page) {
     security: renderSecurity,
     account: renderAccount,
     basics: renderBasics,
+    allconfig: renderAllConfig,
   }[page]?.() || renderOverview();
 }
 
@@ -1993,6 +1997,63 @@ function renderBasics() {
     }).join("") || `<div class="card empty-search">${icon("search")}<strong>没有匹配的配置</strong><span>换一个关键词试试。</span></div>`}</div>`;
 }
 
+const ALL_CONFIG_GROUPS = ["账号与连接", "人设与模型", "回复与互动", "私信", "直播", "分享解析", "好感度与心情", "番剧与动态", "视频与看片", "推荐与主动行为", "总结", "自主安排与作息", "行为调度", "性格演化", "安全与记忆隔离", "联网搜索", "高级能力", "兼容与系统"];
+
+const ALL_CONFIG_GROUP_ICONS = {
+  "账号与连接": "user", "人设与模型": "heart", "回复与互动": "message", "私信": "message",
+  "直播": "video", "分享解析": "arrow-right", "好感度与心情": "heart", "番剧与动态": "star",
+  "视频与看片": "video", "推荐与主动行为": "lightning", "总结": "calendar", "自主安排与作息": "clock",
+  "行为调度": "clock", "性格演化": "star", "安全与记忆隔离": "shield", "联网搜索": "search",
+  "高级能力": "controller", "兼容与系统": "settings",
+};
+
+const ALL_CONFIG_TAG_GROUP = {
+  "账号": "账号与连接", "网络代理": "兼容与系统", "兼容": "兼容与系统",
+  "人设": "人设与模型", "模型可靠性": "人设与模型", "总结模型": "人设与模型", "生成模型": "人设与模型",
+  "回复": "回复与互动", "回复筛选": "回复与互动", "自主查询": "回复与互动",
+  "私信": "私信", "直播": "直播", "直播互动": "直播", "分享解析": "分享解析",
+  "好感度": "好感度与心情", "心情": "好感度与心情", "好感度提示词": "好感度与心情",
+  "番剧": "番剧与动态", "动态": "番剧与动态", "动态发布": "番剧与动态", "关注动态巡视": "番剧与动态", "动态巡视": "番剧与动态",
+  "视频": "视频与看片", "主动看片": "视频与看片",
+  "主动行为": "推荐与主动行为", "给主人推荐": "推荐与主动行为", "跨端活动与分享": "推荐与主动行为", "特别关注": "推荐与主动行为",
+  "总结": "总结", "日总结": "总结", "周总结": "总结",
+  "演化": "性格演化", "性格演化": "性格演化",
+  "自主安排": "自主安排与作息", "作息": "自主安排与作息", "固定计划": "自主安排与作息",
+  "行为调度": "行为调度",
+  "安全与工具": "安全与记忆隔离", "记忆隔离": "安全与记忆隔离", "恶意告警": "安全与记忆隔离", "拉黑": "安全与记忆隔离",
+  "联网搜索": "联网搜索", "高级": "高级能力",
+};
+
+function allConfigGroupOf(field = {}) {
+  const tag = descriptionMeta(field).group;
+  if (ALL_CONFIG_TAG_GROUP[tag]) return ALL_CONFIG_TAG_GROUP[tag];
+  const base = String(tag).split("·")[0].trim();
+  return ALL_CONFIG_TAG_GROUP[base] || "兼容与系统";
+}
+
+function renderAllConfig() {
+  const query = state.allConfigSearch.trim().toLowerCase();
+  const entries = Object.entries(state.schema).filter(([, field]) => !field.deprecated);
+  const matched = query
+    ? entries.filter(([key, field]) => `${key} ${field.description || ""} ${field.hint || ""}`.toLowerCase().includes(query))
+    : entries;
+  const buckets = new Map(ALL_CONFIG_GROUPS.map((name) => [name, []]));
+  matched.forEach(([key, field]) => {
+    const group = allConfigGroupOf(field);
+    (buckets.get(group) || buckets.get("兼容与系统")).push(key);
+  });
+  const body = ALL_CONFIG_GROUPS.map((name) => {
+    const keys = buckets.get(name);
+    if (!keys.length) return "";
+    const dirty = keys.filter((key) => state.dirtyKeys.has(key)).length;
+    return `<details class="settings-group card" ${query || state.allConfigExpanded ? "open" : ""}><summary><span class="section-icon">${icon(ALL_CONFIG_GROUP_ICONS[name] || "settings")}</span><div><strong>${esc(name)}</strong><small>${keys.length} 项配置${dirty ? ` · ${dirty} 项待保存` : ""}</small></div>${icon("arrow-right")}</summary><div class="settings-group-body"><div class="settings-group-inner">${renderFields(keys)}</div></div></details>`;
+  }).join("");
+  return `${pageHead("FULL CONFIG", "全部配置", `插件当前共 ${entries.length} 项配置，按大类折叠在一起；改完统一保存，不用来回切页面。`, state.allConfigExpanded ? button("全部收起", "allconfig-collapse", "arrow-right") : button("全部展开", "allconfig-expand", "menu"))}
+    <section class="settings-search card"><span>${icon("search")}</span><input id="allconfig-search" type="search" value="${esc(state.allConfigSearch)}" placeholder="搜索配置名称、说明或 KEY" aria-label="搜索全部配置" />${state.allConfigSearch ? `<button data-action="clear-allconfig-search" type="button">清除</button>` : ""}</section>
+    <div class="settings-summary"><span>共 ${entries.length} 项配置</span><span>当前显示 ${matched.length} 项</span><span>${state.dirtyKeys.size} 项待保存</span></div>
+    <div class="accordion-list">${body || `<div class="card empty-search">${icon("search")}<strong>没有匹配的配置</strong><span>换一个关键词试试。</span></div>`}</div>`;
+}
+
 function bindConfigControls(root = content) {
   root.querySelectorAll("[data-config-key]").forEach((control) => {
     const key = control.dataset.configKey;
@@ -2163,6 +2224,16 @@ function bindContent() {
     next?.focus();
     next?.setSelectionRange(position, position);
   });
+  const allConfigSearch = content.querySelector("#allconfig-search");
+  if (allConfigSearch) allConfigSearch.addEventListener("input", () => {
+    state.allConfigSearch = allConfigSearch.value;
+    const position = allConfigSearch.selectionStart;
+    content.innerHTML = renderAllConfig();
+    bindContent();
+    const next = content.querySelector("#allconfig-search");
+    next?.focus();
+    next?.setSelectionRange(position, position);
+  });
   if (state.currentPage === "account" && !state.account?.logged_in) generateQr();
 }
 
@@ -2198,6 +2269,9 @@ async function handleAction(action, source = null) {
   if (action === "open-tool-picker") return openToolPicker();
   if (action === "refresh-account") return refreshAndRender("account", state.account?.logged_in ? "账号连接正常" : "账号仍未连接");
   if (action === "clear-settings-search") { state.settingsSearch = ""; renderCurrentPage(); return; }
+  if (action === "allconfig-expand") { state.allConfigExpanded = true; renderCurrentPage(); return; }
+  if (action === "allconfig-collapse") { state.allConfigExpanded = false; renderCurrentPage(); return; }
+  if (action === "clear-allconfig-search") { state.allConfigSearch = ""; renderCurrentPage(); return; }
   if (action === "toggle-secret") {
     const input = source?.closest(".input-with-action")?.querySelector("[data-config-key]");
     if (input) input.type = input.type === "password" ? "text" : "password";

@@ -608,7 +608,7 @@ class BilibiliAPIMixin:
             if result.get("code") == 0:
                 img_info = result["data"]
                 logger.info("[BiliBot] 📤 图片上传成功")
-                return {"img_src": img_info["image_url"], "img_width": img_info["image_width"], "img_height": img_info["image_height"], "img_size": os.path.getsize(image_path) / 1024}
+                return {"img_src": img_info["image_url"], "img_width": img_info["image_width"], "img_height": img_info["image_height"], "img_size": int(os.path.getsize(image_path))}
             else:
                 logger.warning(f"[BiliBot] 图片上传失败: {result}")
                 return None
@@ -637,7 +637,7 @@ class BilibiliAPIMixin:
             logger.error(f"[BiliBot] 动态发送异常: {e}")
             return False
 
-    async def _post_dynamic_with_image(self, text, img_info):
+    async def _post_dynamic_with_image(self, text, img_info, image_state=None):
         params = {"csrf": self.config.get("BILI_JCT", "")}
         payload = {"dyn_req": {"content": {"contents": [{"raw_text": text, "type": 1, "biz_id": ""}]}, "pics": [img_info], "scene": 2}}
         try:
@@ -646,6 +646,8 @@ class BilibiliAPIMixin:
                 async with s.post(BILI_DYNAMIC_IMAGE_URL, params=params, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as r:
                     result = await r.json()
             if result.get("code") == 0:
+                if isinstance(image_state, dict):
+                    image_state["sent"] = True
                 logger.info("[BiliBot] ✅ 带图动态发送成功")
                 return True
             else:

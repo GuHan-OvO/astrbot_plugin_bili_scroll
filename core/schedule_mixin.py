@@ -597,9 +597,27 @@ JSON 格式：{{"proactive_windows":["HH:MM-HH:MM"],"dynamic_times":["HH:MM"],"d
         if fixed:
             times = fixed
         else:
-            n_times = self.config.get("DYNAMIC_TIMES_COUNT", 1)
-            times = sorted(random.sample(range(10, 23), min(n_times, 12)))
-            times = [(h, random.randint(0, 59)) for h in times]
+            raw_times = self.config.get("DYNAMIC_TIMES_COUNT", None)
+            if raw_times is None:
+                raw_times = self.config.get("DYNAMIC_DAILY_COUNT", 1)
+            try:
+                n_times = max(0, int(1 if raw_times is None else raw_times))
+            except (TypeError, ValueError):
+                n_times = 1
+            # 发布侧把 DYNAMIC_DAILY_COUNT=0 定义为“不额外限条数”；若只是回退读到了 0，
+            # 这里按默认 1 次排期，避免“0=不限”被解读成“0=不自动发”。
+            if n_times == 0 and self.config.get("DYNAMIC_TIMES_COUNT", None) is None:
+                n_times = 1
+            daily_cap = self._autonomous_limit_max("dynamic")
+            if daily_cap > 0:  # 0 表示该项不设限，与动态发布侧一致
+                n_times = min(n_times, daily_cap)
+            # 与固定时段一致：睡眠时间不发；候选为空时保留旧行为，避免功能被睡眠配置完全关掉。
+            hours = [hour for hour in range(10, 23) if self._is_awake_minute(hour * 60 + 30)]
+            if not hours:
+                hours = list(range(10, 23))
+            n_times = min(n_times, len(hours))
+            picked = sorted(random.sample(hours, n_times)) if n_times else []
+            times = [(hour, random.randint(0, 59)) for hour in picked]
         schedule = {"date": datetime.now().strftime("%Y-%m-%d"), "dynamic_times": [f"{h}:{m:02d}" for h, m in times], "dynamic_triggered": []}
         self._save_json(DYNAMIC_SCHEDULE_FILE, schedule)
         return times, set()

@@ -12,6 +12,11 @@ from .video_inspection import VideoInspectionMixin
 from .config import VIDEO_MEMORY_FILE, TEMP_VIDEO_DIR, EXTERNAL_MEMORY_FILE
 
 
+# 视频直读的报文形状。auto 会按 _AUTO_PROBE_ORDER 逐个探测，首个成功即锁定。
+_VIDEO_DIRECT_FORMATS = ("openai", "file", "qwen", "gemini")
+_AUTO_PROBE_ORDER = ("openai", "file", "qwen", "gemini")
+
+
 class VideoMixin(VideoInspectionMixin):
     """视频分析、下载、截帧、上下文。"""
 
@@ -561,6 +566,11 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
             media_failure(video_info, "video_id", "视频 BV 号为空", self.config)
             return None
         fmt = self._detect_video_format(model)
+        vision_key = self._video_direct_key(provider_id, model, fmt)
+        dead_reason = self._video_vision_dead_reason(vision_key)
+        if dead_reason:
+            media_failure(video_info, "vision_config", f"视觉模型此前已判定不可用，跳过整段分析: {dead_reason}", self.config)
+            return None
         video_path = await self._download_video(bvid)
         if not video_path:
             media_failure(video_info, "download", get_call_diagnostic().get("reason") or "未取得视频文件", self.config)
@@ -583,6 +593,9 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
 
             segment_analyses = []
             for idx, seg_path in enumerate(segments):
+                if self._video_vision_dead_reason(vision_key):
+                    logger.warning(f"[BiliBot] 📹 视觉模型不可用，跳过剩余 {len(segments) - idx} 段")
+                    break
                 label = f"第{idx+1}/{len(segments)}段" if len(segments) > 1 else ""
                 result = await self._analyze_single_segment(
                     seg_path, video_info, fmt, provider_id, client, model, label,
@@ -613,6 +626,73 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
             for seg in segments:
                 self._cleanup_video_artifacts(seg)
 
+    async def _try_video_direct(self, seg_path, text_prompt, fmt, provider_id, client, model, video_info, label=""):
+        """尝试视频直读，返回文本；不可用时返回 None 交由调用方回退截帧。
+
+        auto 模式按 openai → file → qwen → gemini 逐个探测，首个成功即锁定，后续片段直接复用，
+        不会每段都从零试错。服务端明确拒绝报文形状时停止重试该阶段；仅网络抖动不拉黑。
+        """
+        key = self._video_direct_key(provider_id, model, fmt)
+        cache = self._video_format_probe_cache()
+        skip = self._video_direct_skip_set()
+        if key in skip:
+            logger.info(f"[BiliBot] 📹 视频直读此前已判定不可用，直接跳过{label}")
+            return None
+        if key in cache:
+            candidates = [cache[key]]
+        elif fmt == "auto":
+            candidates = list(_AUTO_PROBE_ORDER)
+        else:
+            candidates = [fmt]
+        try:
+            with open(seg_path, "rb") as f:
+                video_b64 = base64.b64encode(f.read()).decode()
+        except OSError as e:
+            media_failure(video_info, "video_model", f"片段读取失败: {e}", self.config)
+            return None
+
+        saw_unsupported = False
+        last_reason = ""
+        for candidate in candidates:
+            content = self._build_video_content(video_b64, text_prompt, candidate)
+            result = await self._astrbot_multimodal_generate(provider_id, content, max_tokens=450)
+            if not result and client and model:
+                result = await self._vision_call(client, model, content, max_tokens=450)
+            if result:
+                if cache.get(key) != candidate:
+                    cache[key] = candidate
+                    logger.info(f"[BiliBot] 📹 视频直读报文锁定为 {candidate}")
+                return self._clip_media_text(result, 600)
+            detail = get_call_diagnostic()
+            rejection = detail.get("rejection") or "other"
+            last_reason = detail.get("reason") or "视频直读返回空内容"
+            if rejection == "unavailable":
+                # 鉴权失败 / 模型不存在：连截帧也过不去，整段视觉分析都没有意义。
+                skip.add(key)
+                self._mark_video_vision_dead(key, last_reason)
+                media_failure(video_info, "vision_config", last_reason, self.config)
+                return None
+            if rejection == "too_large":
+                # 已经切过片还是超限，换报文形状救不回来，保留截帧即可。
+                skip.add(key)
+                media_failure(video_info, "video_model", f"视频片段超出接口体积上限: {last_reason}", self.config)
+                logger.warning(f"[BiliBot] 📹 视频片段体积超限，跳过直读改用截帧{label}")
+                return None
+            if rejection == "unsupported":
+                saw_unsupported = True
+                logger.info(f"[BiliBot] 📹 模型不接受 {candidate} 报文，换下一种")
+            if candidate != candidates[-1]:
+                media_failure(video_info, "video_model", last_reason, self.config)
+
+        if saw_unsupported:
+            # 报文形状全被拒 = 这个模型看不了视频，后续片段不必再撞。
+            skip.add(key)
+            logger.warning(f"[BiliBot] 📹 模型不支持视频直读（{fmt}），跳过该阶段，改用截帧{label}")
+        else:
+            logger.warning(f"[BiliBot] 📹 视频直读本段失败，回退截帧{label}")
+        media_failure(video_info, "video_model", last_reason or "视频直读返回空内容", self.config)
+        return None
+
     async def _analyze_single_segment(self, seg_path, video_info, fmt, provider_id, client, model, label=""):
         """分析单个视频片段，返回文本结果。"""
         frames = []
@@ -629,18 +709,13 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
                 f"按实际内容顺序保留2～4个具体事实或观点与一个关键细节；不描述未观察到的声音、对白或结局。"
                 f"这一段只写本段内容，不要替整条视频下结论；200～300字以内。"
             )
-            # 尝试视频直读
+            # 尝试视频直读；不支持或报文报错会在这里被判掉，直接落到截帧
             if fmt != "none":
-                with open(seg_path, "rb") as f:
-                    video_b64 = base64.b64encode(f.read()).decode()
-                content = self._build_video_content(video_b64, text_prompt, fmt)
-                result = await self._astrbot_multimodal_generate(provider_id, content, max_tokens=450)
-                if not result and client and model:
-                    result = await self._vision_call(client, model, content, max_tokens=450)
-                if result:
-                    return self._clip_media_text(result, 600)
-                media_failure(video_info, "video_model", get_call_diagnostic().get("reason") or "视频直读返回空内容", self.config)
-                logger.warning(f"[BiliBot] 视频直读失败（{fmt}），回退截帧{label}")
+                direct = await self._try_video_direct(
+                    seg_path, text_prompt, fmt, provider_id, client, model, video_info, label,
+                )
+                if direct:
+                    return direct
             # 回退：截帧分析
             if not os.path.exists(seg_path):
                 media_failure(video_info, "frames", "片段文件不存在，无法截帧", self.config)
@@ -660,7 +735,14 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
             if not result and client and model:
                 result = await self._vision_call(client, model, frame_content, max_tokens=450)
             if not result:
-                media_failure(video_info, "frame_model", get_call_diagnostic().get("reason") or "截帧模型返回空内容", self.config)
+                detail = get_call_diagnostic()
+                if (detail.get("rejection") or "") == "unavailable":
+                    # 连图都不让看，剩下的片段也没必要逐段重试。
+                    self._mark_video_vision_dead(
+                        self._video_direct_key(provider_id, model, fmt),
+                        detail.get("reason") or "视觉模型不可用",
+                    )
+                media_failure(video_info, "frame_model", detail.get("reason") or "截帧模型返回空内容", self.config)
             return self._clip_media_text(result, 600) if result else None
         except Exception as e:
             media_failure(video_info, "segment", exception_detail(e, self.config), self.config)
@@ -694,30 +776,77 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
         return self._clip_media_text(" | ".join(segment_analyses), 1600)
 
     def _detect_video_format(self, model: str) -> str:
-        """读取用户配置的视频直读格式。"""
-        fmt = self.config.get("VIDEO_VISION_FORMAT", "none").lower().strip()
-        if fmt in ("gemini", "qwen"):
+        """读取用户配置的视频直读格式；auto 交给逐段探测。"""
+        raw = self.config.get("VIDEO_VISION_FORMAT", "none")
+        fmt = str(raw or "none").lower().strip()
+        if fmt == "auto":
+            return "auto"
+        if fmt in _VIDEO_DIRECT_FORMATS:
             return fmt
         return "none"
 
+    def _video_fps(self):
+        try:
+            return max(1, int(self.config.get("VIDEO_VISION_FPS", 2)))
+        except (ValueError, TypeError):
+            return 2
+
     def _build_video_content(self, video_b64: str, text_prompt: str, fmt: str) -> list:
-        """根据格式构造视频直读的 content 列表。"""
-        if fmt == "qwen":
-            fps = self.config.get("VIDEO_VISION_FPS", 2)
-            try:
-                fps = max(1, int(fps))
-            except (ValueError, TypeError):
-                fps = 2
-            return [
-                {"type": "video_url", "video_url": {"url": f"data:video/mp4;base64,{video_b64}"}, "fps": fps},
-                {"type": "text", "text": text_prompt},
-            ]
+        """根据格式构造视频直读的 content 列表。
+
+        不同网关对「视频 part」的写法并不统一，这里覆盖四种常见形状：
+        openai = 纯 video_url；file = 官方 file part；qwen = video_url + fps；gemini = 塞进 image_url。
+        """
+        if fmt == "gemini":
+            # Gemini 兼容层把 mp4 当 image_url 收。
+            parts = [{"type": "image_url", "image_url": {"url": f"data:video/mp4;base64,{video_b64}"}}]
+        elif fmt == "file":
+            # OpenAI 官方 / 多数新版网关：file_data 直接吃 data URI。
+            parts = [{"type": "file", "file": {"filename": "segment.mp4", "file_data": f"data:video/mp4;base64,{video_b64}"}}]
+        elif fmt == "qwen":
+            # 通义千问 / 硅基流动 / vLLM：video_url 加 fps 扩展字段。
+            parts = [{"type": "video_url", "video_url": {"url": f"data:video/mp4;base64,{video_b64}"}, "fps": self._video_fps()}]
         else:
-            # gemini 格式（也是默认）
-            return [
-                {"type": "image_url", "image_url": {"url": f"data:video/mp4;base64,{video_b64}"}},
-                {"type": "text", "text": text_prompt},
-            ]
+            # openai：最朴素的 video_url，不带任何厂商扩展字段。
+            parts = [{"type": "video_url", "video_url": {"url": f"data:video/mp4;base64,{video_b64}"}}]
+        parts.append({"type": "text", "text": text_prompt})
+        return parts
+
+    def _video_direct_key(self, provider_id, model, fmt):
+        """能力探测缓存键：配置一变就自然失效。"""
+        return (
+            str(provider_id or ""),
+            str(model or ""),
+            str(self.config.get("VIDEO_VISION_API_BASE", "") or ""),
+            str(fmt or ""),
+        )
+
+    def _video_format_probe_cache(self):
+        cache = getattr(self, "_video_format_probe", None)
+        if cache is None:
+            cache = self._video_format_probe = {}
+        return cache
+
+    def _video_direct_skip_set(self):
+        skip = getattr(self, "_video_direct_skip", None)
+        if skip is None:
+            skip = self._video_direct_skip = set()
+        return skip
+
+    def _video_vision_dead_map(self):
+        dead = getattr(self, "_video_vision_dead", None)
+        if dead is None:
+            dead = self._video_vision_dead = {}
+        return dead
+
+    def _video_vision_dead_reason(self, key):
+        return self._video_vision_dead_map().get(key)
+
+    def _mark_video_vision_dead(self, key, reason):
+        dead = self._video_vision_dead_map()
+        if key not in dead:
+            dead[key] = reason
+            logger.warning(f"[BiliBot] 📹 视觉模型判定不可用，本次不再尝试：{reason}")
 
     # ── 视频下载 / 压缩 / 截帧 ──
 

@@ -2,32 +2,41 @@
   "SESSDATA": {
     "description": "【账号】B站 Cookie SESSDATA（/bili登录 扫码自动填入）",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "扫码登录时自动写入，一般是长串字母数字；手填容易因多空格失败。"
   },
   "BILI_JCT": {
     "description": "【账号】B站 Cookie bili_jct（扫码自动填入）",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "扫码登录时自动写入；缺失会导致点赞、投币、评论全部失效。"
   },
   "DEDE_USER_ID": {
     "description": "【账号】Bot的B站UID（扫码自动填入）",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "Bot 自己的 B站 UID，扫码登录时自动写入。"
   },
   "REFRESH_TOKEN": {
     "description": "【账号】B站 refresh_token（扫码自动填入）",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "Cookie 过期时用它续期；丢失后需要重新扫码登录。"
   },
   "COOKIE_AUTO_REFRESH": {
-    "description": "【系统】Cookie过期自动刷新",
+    "description": "【账号】Cookie 过期自动刷新",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "Cookie 过期时用 refresh_token 自动续期；关闭后需要手动 /bili登录。"
   },
   "COOKIE_CHECK_INTERVAL": {
-    "description": "【系统】Cookie检查间隔（小时）",
+    "description": "【账号】Cookie 检查间隔（小时）",
     "type": "int",
-    "default": 6
+    "default": 6,
+    "condition": {
+      "COOKIE_AUTO_REFRESH": true
+    },
+    "hint": "多久检查一次 Cookie 是否快过期；调太勤会多打接口。"
   },
   "OWNER_MID": {
     "description": "【账号】主人的B站UID（好感度与私信推荐）",
@@ -38,15 +47,17 @@
   "OWNER_NAME": {
     "description": "【账号】主人名称（用于提示词）",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "提示词里对主人的称呼，可填昵称或代号。"
   },
   "OWNER_BILI_NAME": {
     "description": "【账号】主人的B站昵称（用于评论区@推荐）",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "主人 B站昵称，用于评论区 @ 提醒；留空则用 OWNER_NAME。"
   },
   "OWNER_QQ_UMO": {
-    "description": "【跨端活动与分享】主人 QQ 私聊 UMO",
+    "description": "【账号】主人 QQ 私聊 UMO（跨端推送用）",
     "type": "string",
     "default": "",
     "hint": "用于当前活动同步和 QQ 推荐分享；在主人 QQ 私聊中执行 /biliUMO 可取得该值。"
@@ -58,21 +69,26 @@
     "hint": "留空保持原有网络行为。示例 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080，支持账号密码；只能填代理服务地址，不是订阅链接。作用于本插件的 B站请求、视频下载和独立搜索/生图/视觉/Embedding API；AstrBot 模型供应商仍使用自身代理设置。保存后重载插件使所有连接生效。Docker 的 127.0.0.1 是容器本身，代理在宿主机时需填写容器可达地址。"
   },
   "LLM_PROVIDER_ID": {
-    "description": "【人设】选择用于回复/记忆压缩的LLM（留空用AstrBot默认）",
+    "description": "【人设】回复与记忆压缩使用的 LLM（留空用 AstrBot 默认）",
     "type": "string",
     "default": "",
-    "_special": "select_provider"
+    "_special": "select_provider",
+    "hint": "选 AstrBot 里已配好的提供商；判断、写评语、记忆压缩都走它。"
   },
   "USE_ASTRBOT_PERSONA": {
-    "description": "【人设】使用AstrBot自带人设",
+    "description": "【人设】使用 AstrBot 自带人设",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "开启后使用 AstrBot 全局人设；关闭则只依赖下面的附加提示词。"
   },
   "CUSTOM_SYSTEM_PROMPT": {
     "description": "【人设】B站活动附加系统提示词",
     "type": "text",
     "default": "你是一个活跃在B站的角色，会回复评论、看视频、发动态。用自然的口语化风格交流。",
-    "hint": "无论是否启用 AstrBot 自带人设，都会作为 B站场景的附加设定追加；留空则不追加。"
+    "hint": "无论是否启用 AstrBot 自带人设，都会作为 B站场景的附加设定追加；留空则不追加。",
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "LLM_CIRCUIT_FAILURE_THRESHOLD": {
     "description": "【模型可靠性】连续失败多少次后暂停调用",
@@ -137,59 +153,61 @@
     "hint": "使用独立 API 时必须填写模型名。总结用于视频内容、记忆整理和日/周总结；生成用于评分感想、推荐文案与动态。"
   },
   "ENABLE_REPLY": {
-    "description": "【功能开关】启用评论自动回复",
+    "description": "【回复·总开关】启用评论自动回复",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "评论区轮询新评论并自动回复的主开关；关闭后间隔、概率、白名单都不生效。"
   },
   "POLL_INTERVAL": {
     "description": "【回复】评论轮询间隔（秒）",
     "type": "int",
     "default": 20,
-    "hint": "建议 15-60 秒"
+    "hint": "建议 15-60 秒",
+    "condition": {
+      "ENABLE_REPLY": true
+    },
+    "slider": {
+      "min": 5,
+      "max": 600,
+      "step": 5
+    }
   },
   "REPLY_COOLDOWN": {
     "description": "【回复】回复冷却时间（秒，回复一条后等待多久再处理下一条，最低5秒）",
     "type": "int",
-    "default": 15
+    "default": 15,
+    "condition": {
+      "ENABLE_REPLY": true
+    },
+    "slider": {
+      "min": 5,
+      "max": 300,
+      "step": 5
+    },
+    "hint": "回完一条后至少等多久再处理下一条，防止连续刷屏。"
   },
   "REPLY_PROBABILITY_PERCENT": {
     "description": "【回复】回复概率（%）",
     "type": "int",
     "default": 100,
-    "hint": "普通评论按此概率随机回复，100=每条都回。主人/被@/高好感(熟人以上)/必回白名单 不受影响，永远回"
+    "hint": "普通评论按此概率随机回复，100=每条都回。主人/被@/高好感(熟人以上)/必回白名单 不受影响，永远回",
+    "condition": {
+      "ENABLE_REPLY": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 100,
+      "step": 1
+    }
   },
   "REPLY_ALWAYS_UIDS": {
     "description": "【回复】必回UID白名单",
     "type": "list",
     "default": [],
-    "hint": "这些UID不受回复概率和语义去重影响，一定会回复"
-  },
-  "ENABLE_INTEREST_BASED_REPLY": {
-    "description": "【回复筛选】让 Bot 只挑选自己感兴趣且值得回应的内容",
-    "type": "bool",
-    "default": true,
-    "hint": "先执行广告、低价值和重复内容过滤，再用轻量模型判断是否值得回复；主人、@和必回白名单仍优先。"
-  },
-  "INTEREST_SELECTION_PROMPT": {
-    "description": "【回复筛选】兴趣选择提示词",
-    "type": "text",
-    "default": "优先回应有明确问题、真诚交流、有趣观点、与角色兴趣或近期经历相关的内容。忽略无意义灌水、机械复读、引流广告、单纯求关注和无法形成自然交流的内容。",
-    "hint": "模型只输出是否值得回复的判断，不会直接生成评论回复。"
-  },
-  "FILTER_LOW_VALUE_MESSAGES": {
-    "description": "【回复筛选】过滤无意义或信息量过低的消息",
-    "type": "bool",
-    "default": true
-  },
-  "FILTER_DUPLICATE_MESSAGES": {
-    "description": "【回复筛选】过滤近期完全重复的消息",
-    "type": "bool",
-    "default": true
-  },
-  "FILTER_AD_MESSAGES": {
-    "description": "【回复筛选】过滤广告、引流和联系方式轰炸",
-    "type": "bool",
-    "default": true
+    "hint": "这些UID不受回复概率和语义去重影响，一定会回复",
+    "condition": {
+      "ENABLE_REPLY": true
+    }
   },
   "ENABLE_SIMILAR_SKIP": {
     "description": "【回复】启用语义相似去重（相似评论不重复回复）",
@@ -201,34 +219,87 @@
     "description": "【回复】语义相似度阈值（%）",
     "type": "int",
     "default": 90,
-    "hint": "相似度≥此值视为重复评论、跳过不回。越高越严格(只拦几乎一样的)，建议 85-95"
+    "hint": "相似度≥此值视为重复评论、跳过不回。越高越严格(只拦几乎一样的)，建议 85-95",
+    "condition": {
+      "ENABLE_SIMILAR_SKIP": true
+    },
+    "slider": {
+      "min": 50,
+      "max": 100,
+      "step": 1
+    }
   },
   "CUSTOM_REPLY_INSTRUCTION": {
     "description": "【回复】回复评论的补充提示词（追加到回复提示词末尾，留空用默认）",
     "type": "text",
     "default": "",
-    "hint": "例如：回复要带一点傲娇感，偶尔用颜文字。"
+    "hint": "例如：回复要带一点傲娇感，偶尔用颜文字。",
+    "condition": {
+      "ENABLE_REPLY": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
+  },
+  "ENABLE_INTEREST_BASED_REPLY": {
+    "description": "【回复筛选】让 Bot 只挑选自己感兴趣且值得回应的内容",
+    "type": "bool",
+    "default": true,
+    "hint": "先执行广告、低价值和重复内容过滤，再用轻量模型判断是否值得回复；主人、@和必回白名单仍优先。"
+  },
+  "INTEREST_SELECTION_PROMPT": {
+    "description": "【回复筛选】兴趣选择提示词",
+    "type": "text",
+    "default": "优先回应有明确问题、真诚交流、有趣观点、与角色兴趣或近期经历相关的内容。忽略无意义灌水、机械复读、引流广告、单纯求关注和无法形成自然交流的内容。",
+    "hint": "模型只输出是否值得回复的判断，不会直接生成评论回复。",
+    "condition": {
+      "ENABLE_INTEREST_BASED_REPLY": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
+  },
+  "FILTER_LOW_VALUE_MESSAGES": {
+    "description": "【回复筛选】过滤无意义或信息量过低的消息",
+    "type": "bool",
+    "default": true,
+    "hint": "丢掉「来了」「哈哈」这类没有信息量的评论，避免把话聊死。"
+  },
+  "FILTER_DUPLICATE_MESSAGES": {
+    "description": "【回复筛选】过滤近期完全重复的消息",
+    "type": "bool",
+    "default": true,
+    "hint": "同一句话短时间重复出现时只回一次。"
+  },
+  "FILTER_AD_MESSAGES": {
+    "description": "【回复筛选】过滤广告、引流和联系方式轰炸",
+    "type": "bool",
+    "default": true,
+    "hint": "识别「+vx」「加群」等引流内容并跳过，不给广告当免费扩音器。"
   },
   "COMMENT_CONTEXT_ENABLED": {
-    "description": "【回复】自主查询总开关",
+    "description": "【自主查询】自主查询总开关",
     "type": "bool",
     "default": true,
     "hint": "一个开关控制评论回复前的搜索、简介、字幕、热评和带问题检查视频。关闭后只用已有上下文；开启后按已配置能力查询。联网需配置搜索服务，视频核查需配置视觉模型。用 /bili日志 查询 看结果，/bili测试查询 BV号 做不发评论的实测。"
   },
   "COMMENT_CONTEXT_MAX_CALLS": {
-    "description": "【回复】每条评论最多查询次数",
+    "description": "【自主查询】每条评论最多查询次数",
     "type": "int",
     "default": 4,
-    "hint": "范围0～6，查询完最多再生成一次最终决定；相同请求不重复执行，视频检查最多2次。"
+    "hint": "范围0～6，查询完最多再生成一次最终决定；相同请求不重复执行，视频检查最多2次。",
+    "condition": {
+      "COMMENT_CONTEXT_ENABLED": true
+    }
   },
   "ENABLE_PRIVATE_MESSAGES": {
-    "description": "【B站私信·总开关】监听新私信",
+    "description": "【私信·总开关】监听新私信",
     "type": "bool",
     "default": false,
     "hint": "首次开启只建立当前位置并跳过历史私信；之后仅处理纯文字和B站视频分享卡片。"
   },
   "PRIVATE_MESSAGE_REPLY_SCOPE": {
-    "description": "【B站私信·回复】允许自动回复哪些人",
+    "description": "【私信·回复】允许自动回复哪些人",
     "type": "string",
     "default": "owner",
     "options": [
@@ -236,115 +307,174 @@
       "whitelist",
       "all"
     ],
-    "hint": "owner=只回复主人；whitelist=主人和回复白名单；all=回复所有通过安全检查的新私信。"
+    "hint": "owner=只回复主人；whitelist=主人和回复白名单；all=回复所有通过安全检查的新私信。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_REPLY_WHITELIST_UIDS": {
-    "description": "【B站私信·回复】允许回复的额外UID白名单",
+    "description": "【私信·回复】允许回复的额外UID白名单",
     "type": "list",
     "default": [],
-    "hint": "仅在回复范围为 whitelist 时生效；主人无需重复填写。"
+    "hint": "仅在回复范围为 whitelist 时生效；主人无需重复填写。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_AUTO_REPLY": {
-    "description": "【B站私信·回复】自动回复安全私信",
+    "description": "【私信·回复】自动回复安全私信",
     "type": "bool",
     "default": true,
-    "hint": "使用当前 AstrBot 人设、BiliBot 记忆、用户画像和好感度回复；私信精确发送 new 可清空当前对话上下文。"
+    "hint": "使用当前 AstrBot 人设、BiliBot 记忆、用户画像和好感度回复；私信精确发送 new 可清空当前对话上下文。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_POLL_INTERVAL": {
-    "description": "【B站私信·监听】活跃期检查间隔（秒）",
+    "description": "【私信·监听】活跃期检查间隔（秒）",
     "type": "int",
     "default": 60,
-    "hint": "收到新私信后的活跃期使用此间隔；默认60秒，也是允许的最短间隔。"
+    "hint": "收到新私信后的活跃期使用此间隔；默认60秒，也是允许的最短间隔。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_IDLE_POLL_INTERVAL": {
-    "description": "【B站私信·监听】空闲期检查间隔（秒）",
+    "description": "【私信·监听】空闲期检查间隔（秒）",
     "type": "int",
     "default": 180,
-    "hint": "长时间没有新私信时使用此间隔，默认180秒，且不会短于活跃期；可降低B站 -509 频控概率。"
+    "hint": "长时间没有新私信时使用此间隔，默认180秒，且不会短于活跃期；可降低B站 -509 频控概率。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_ACTIVE_WINDOW": {
-    "description": "【B站私信·监听】收到消息后保持活跃多久（秒）",
+    "description": "【私信·监听】收到消息后保持活跃多久（秒）",
     "type": "int",
     "default": 600,
-    "hint": "收到新私信后在这段时间内使用活跃期检查间隔，默认600秒。遇到 -509 时仍会从10分钟开始倍增退避，最长60分钟，并在恢复后逐级缩短。"
+    "hint": "收到新私信后在这段时间内使用活跃期检查间隔，默认600秒。遇到 -509 时仍会从10分钟开始倍增退避，最长60分钟，并在恢复后逐级缩短。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_MAX_PER_POLL": {
-    "description": "【B站私信·回复】每轮最多处理几条",
+    "description": "【私信·回复】每轮最多处理几条",
     "type": "int",
     "default": 3,
-    "hint": "范围1-20，避免短时间大量调用LLM或拉黑接口。"
+    "hint": "范围1-20，避免短时间大量调用LLM或拉黑接口。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_MAX_MESSAGE_AGE": {
-    "description": "【B站私信·回复】只处理多少秒内的新消息",
+    "description": "【私信·回复】只处理多少秒内的新消息",
     "type": "int",
     "default": 3600,
-    "hint": "最低60秒；用于避免网络或游标异常时处理很久以前的消息。"
+    "hint": "最低60秒；用于避免网络或游标异常时处理很久以前的消息。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "INTEREST_APPLY_TO_PRIVATE": {
     "description": "【回复筛选】私信也使用兴趣选择",
     "type": "bool",
     "default": true,
-    "hint": "主人私信和上下文重置指令不受兴趣选择影响，但仍受安全规则和每日硬上限保护。"
+    "hint": "主人私信和上下文重置指令不受兴趣选择影响，但仍受安全规则和每日硬上限保护。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_AUTO_WATCH_VIDEO": {
-    "description": "【B站私信·视频】收到视频分享后先看完再回复",
+    "description": "【私信·视频】收到视频分享后先看完再回复",
     "type": "bool",
     "default": true,
-    "hint": "仅对回复范围内且通过安全检查的用户生效；先完成视频分析和记忆写入，再让人设根据真实观看结果回复。已看过的视频直接读取视频记忆。"
+    "hint": "仅对回复范围内且通过安全检查的用户生效；先完成视频分析和记忆写入，再让人设根据真实观看结果回复。已看过的视频直接读取视频记忆。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_BILI_SEARCH_ENABLED": {
-    "description": "【B站私信·查询】允许按私信要求搜索视频和UP主",
+    "description": "【私信·查询】允许按私信要求搜索视频和UP主",
     "type": "bool",
     "default": true,
-    "hint": "回复模型可在后台选择搜索/推荐视频、查询UP主资料与最近投稿；需要查询时先短回复一次，查完整合结果再回复，最多两条。"
+    "hint": "回复模型可在后台选择搜索/推荐视频、查询UP主资料与最近投稿；需要查询时先短回复一次，查完整合结果再回复，最多两条。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_BILI_SEARCH_LIMIT": {
-    "description": "【B站私信·查询】每次最多返回几个搜索结果",
+    "description": "【私信·查询】每次最多返回几个搜索结果",
     "type": "int",
     "default": 5,
-    "hint": "范围1-5；结果会交给当前人设组织成自然的私信回复。"
+    "hint": "范围1-5；结果会交给当前人设组织成自然的私信回复。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true,
+      "PRIVATE_MESSAGE_BILI_SEARCH_ENABLED": true
+    }
   },
   "BILI_PRIVATE_SHARE_TOOL_ENABLED": {
-    "description": "【B站私信·分享】允许 Bot 看完视频后私信给主人",
+    "description": "【私信·分享】允许 Bot 看完视频后私信给主人",
     "type": "bool",
     "default": false,
-    "hint": "开启后模型可调用 watch_and_share_video_private：先分析视频并写入记忆，再向 OWNER_MID 发送B站原生视频卡片。"
+    "hint": "开启后模型可调用 watch_and_share_video_private：先分析视频并写入记忆，再向 OWNER_MID 发送B站原生视频卡片。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "BILI_PRIVATE_SHARE_COOLDOWN": {
-    "description": "【B站私信·分享】同一视频重复分享冷却秒数",
+    "description": "【私信·分享】同一视频重复分享冷却秒数",
     "type": "int",
     "default": 60,
-    "hint": "成功发送后，同一视频在冷却期间不会再次私信给主人。"
+    "hint": "成功发送后，同一视频在冷却期间不会再次私信给主人。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true,
+      "BILI_PRIVATE_SHARE_TOOL_ENABLED": true
+    }
   },
   "CUSTOM_PRIVATE_MESSAGE_INSTRUCTION": {
-    "description": "【B站私信·回复】私信回复补充提示词",
+    "description": "【私信·回复】私信回复补充提示词",
     "type": "text",
     "default": "",
-    "hint": "只追加到B站私信回复，不影响公开评论区提示词。"
+    "hint": "只追加到B站私信回复，不影响公开评论区提示词。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "PRIVATE_MESSAGE_AUTO_BLOCK": {
-    "description": "【B站私信·安全】危险私信自动拉黑",
+    "description": "【私信·安全】危险私信自动拉黑",
     "type": "bool",
     "default": true,
-    "hint": "不明外链、IP链接、疑似色情域名或成人引流会先隔离且不进入LLM；开启时再调用B站拉黑。"
+    "hint": "不明外链、IP链接、疑似色情域名或成人引流会先隔离且不进入LLM；开启时再调用B站拉黑。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_BLOCK_WHITELIST_UIDS": {
-    "description": "【B站私信·安全】永不因私信自动拉黑的UID",
+    "description": "【私信·安全】永不因私信自动拉黑的UID",
     "type": "list",
     "default": [],
-    "hint": "主人、Bot自己及全局拉黑白名单已自动受保护。"
+    "hint": "主人、Bot自己及全局拉黑白名单已自动受保护。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "PRIVATE_MESSAGE_TRUSTED_DOMAINS": {
-    "description": "【B站私信·安全】允许出现的链接域名",
+    "description": "【私信·安全】允许出现的链接域名",
     "type": "list",
     "default": [
       "bilibili.com",
       "b23.tv"
     ],
-    "hint": "允许该域名及其子域名；其他可识别外链默认视为不明链接并隔离。安全检查不会打开网址。"
+    "hint": "允许该域名及其子域名；其他可识别外链默认视为不明链接并隔离。安全检查不会打开网址。",
+    "condition": {
+      "ENABLE_PRIVATE_MESSAGES": true
+    }
   },
   "ENABLE_LIVE_DANMAKU_REPLY": {
-    "description": "【直播互动·总开关】进入指定直播间参与弹幕互动",
+    "description": "【直播·总开关】进入指定直播间参与弹幕互动",
     "type": "bool",
     "default": false,
     "hint": "可填写自己或其他 UP 主的直播间。BiliBot 会读取新弹幕，使用当前 AstrBot 人设、BiliBot 记忆、用户画像和好感度生成短回应，再由 Bot 的B站账号发回同一直播间；既能和主播互动，也能接直播间观众的话。首次启动只建立当前位置，不回复历史弹幕。"
@@ -353,40 +483,66 @@
     "description": "【直播互动】参与互动的B站直播间号",
     "type": "int",
     "default": 0,
-    "hint": "填写目标 UP 主直播页面链接末尾的房间号；可以是任意公开且当前账号有权发送弹幕的直播间，也可使用 /bili直播 房间 <房间号> 设置。"
+    "hint": "填写目标 UP 主直播页面链接末尾的房间号；可以是任意公开且当前账号有权发送弹幕的直播间，也可使用 /bili直播 房间 <房间号> 设置。",
+    "condition": {
+      "ENABLE_LIVE_DANMAKU_REPLY": true
+    }
   },
   "LIVE_DANMAKU_POLL_INTERVAL": {
     "description": "【直播互动】检查新弹幕间隔（秒）",
     "type": "float",
     "default": 5,
-    "hint": "使用历史弹幕接口低频轮询，默认5秒；最低2秒。"
+    "hint": "使用历史弹幕接口低频轮询，默认5秒；最低2秒。",
+    "condition": {
+      "ENABLE_LIVE_DANMAKU_REPLY": true
+    }
   },
   "LIVE_DANMAKU_REPLY_COOLDOWN": {
     "description": "【直播互动】两次发送弹幕最短间隔（秒）",
     "type": "float",
     "default": 12,
-    "hint": "冷却期间的新弹幕会合并等待，并优先回复最新一条，避免刷屏。"
+    "hint": "冷却期间的新弹幕会合并等待，并优先回复最新一条，避免刷屏。",
+    "condition": {
+      "ENABLE_LIVE_DANMAKU_REPLY": true
+    }
   },
   "LIVE_DANMAKU_MAX_PER_MINUTE": {
     "description": "【直播互动】每分钟最多发送弹幕次数",
     "type": "int",
     "default": 4,
-    "hint": "0表示不限制；建议保持3-6次，避免过密回复和接口风控。"
+    "hint": "0表示不限制；建议保持3-6次，避免过密回复和接口风控。",
+    "condition": {
+      "ENABLE_LIVE_DANMAKU_REPLY": true
+    },
+    "slider": {
+      "min": 1,
+      "max": 20,
+      "step": 1
+    }
   },
   "LIVE_DANMAKU_REPLY_MAX_LENGTH": {
     "description": "【直播互动】单次回应最大总字数",
     "type": "int",
     "default": 60,
-    "hint": "回复会自动按约20字拆成最多3条B站弹幕，超出部分截断。"
+    "hint": "回复会自动按约20字拆成最多3条B站弹幕，超出部分截断。",
+    "condition": {
+      "ENABLE_LIVE_DANMAKU_REPLY": true
+    }
   },
   "CUSTOM_LIVE_DANMAKU_INSTRUCTION": {
     "description": "【直播互动】弹幕互动补充提示词",
     "type": "text",
     "default": "",
-    "hint": "仅追加到直播间弹幕互动，不影响评论和私信。可补充希望如何与主播或观众相处；默认提示词已要求短、口语化并避免频繁欢迎。"
+    "hint": "仅追加到直播间弹幕互动，不影响评论和私信。可补充希望如何与主播或观众相处；默认提示词已要求短、口语化并避免频繁欢迎。",
+    "condition": {
+      "ENABLE_LIVE_DANMAKU_REPLY": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "ENABLE_BILI_SHARE_PARSE": {
-    "description": "【分享解析·总开关】识别群聊和私聊里的B站视频分享",
+    "description": "【分享解析·总开关】识别群聊和私聊里的 B站视频分享",
     "type": "bool",
     "default": false,
     "hint": "视频解析总开关；关闭后自动识别、/bili解析 手动命令和 LLM 工具都不能触发。可用 /bili开关 解析 切换。"
@@ -395,104 +551,182 @@
     "description": "【分享解析·触发】自动识别聊天中的B站视频",
     "type": "bool",
     "default": true,
-    "hint": "群聊或私聊收到B站链接、b23短链、BV号或QQ小程序时自动解析。可用 /bili开关 自动解析 切换。"
+    "hint": "群聊或私聊收到B站链接、b23短链、BV号或QQ小程序时自动解析。可用 /bili开关 自动解析 切换。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true
+    }
   },
   "BILI_SHARE_PARSE_MANUAL_TRIGGER_ENABLED": {
     "description": "【分享解析·触发】允许 /bili解析 手动触发",
     "type": "bool",
     "default": true,
-    "hint": "允许使用 /bili解析 [链接或BV号]；省略参数时解析回复引用或本会话最近的视频。不影响自动识别和 LLM 工具。可用 /bili开关 手动解析 切换。"
+    "hint": "允许使用 /bili解析 [链接或BV号]；省略参数时解析回复引用或本会话最近的视频。不影响自动识别和 LLM 工具。可用 /bili开关 手动解析 切换。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true
+    }
   },
   "BILI_SHARE_PARSE_LLM_TRIGGER_ENABLED": {
     "description": "【分享解析·触发】允许 LLM 工具触发",
     "type": "bool",
     "default": true,
-    "hint": "允许模型调用 bili_parse_video，将解析卡和视频直接发送到当前会话；还受 LLM 工具总开关控制。可用 /bili开关 LLM解析 切换。"
+    "hint": "允许模型调用 bili_parse_video，将解析卡和视频直接发送到当前会话；还受 LLM 工具总开关控制。可用 /bili开关 LLM解析 切换。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true
+    }
   },
   "BILI_SHARE_PENDING_MAX_AGE": {
     "description": "【分享解析】上一个待解析视频保留秒数",
     "type": "int",
     "default": 1800,
-    "hint": "自动解析关闭时仍会按会话记住最近出现的B站视频，供回复后发送 /bili解析 或让 LLM 解析“上面那个”；默认保留30分钟。"
+    "hint": "自动解析关闭时仍会按会话记住最近出现的B站视频，供回复后发送 /bili解析 或让 LLM 解析“上面那个”；默认保留30分钟。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true
+    }
   },
   "BILI_SHARE_PARSE_SEND_VIDEO": {
     "description": "【分享解析】解析后发送原视频/切片",
     "type": "bool",
     "default": true,
-    "hint": "开启后会尝试用 yt-dlp 下载原视频，并按配置切成群聊可发送的回放切片；失败时只发解析卡和链接。"
+    "hint": "开启后会尝试用 yt-dlp 下载原视频，并按配置切成群聊可发送的回放切片；失败时只发解析卡和链接。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true
+    }
   },
   "BILI_SHARE_PARSE_SEGMENT_SECONDS": {
     "description": "【分享解析】原视频切片秒数",
     "type": "int",
     "default": 180,
-    "hint": "原视频过长或过大时，每段切多少秒；建议 120-300。填 0 表示不分段，直接尝试发送整段视频。"
+    "hint": "原视频过长或过大时，每段切多少秒；建议 120-300。填 0 表示不分段，直接尝试发送整段视频。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true,
+      "BILI_SHARE_PARSE_SEND_VIDEO": true
+    }
   },
   "BILI_SHARE_PARSE_MAX_SEGMENTS": {
     "description": "【分享解析】每次最多发送几个切片",
     "type": "int",
     "default": 5,
-    "hint": "避免群聊刷屏；仅在启用分段时生效。后续内容会提示用户可调大此值。"
+    "hint": "避免群聊刷屏；仅在启用分段时生效。后续内容会提示用户可调大此值。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true,
+      "BILI_SHARE_PARSE_SEND_VIDEO": true
+    }
   },
   "BILI_SHARE_PARSE_MAX_VIDEO_MB": {
     "description": "【分享解析】单个视频文件大小阈值MB",
     "type": "int",
     "default": 80,
-    "hint": "超过此大小会尝试切片；不同 QQ 适配器可能还有自己的上传大小限制。"
+    "hint": "超过此大小会尝试切片；不同 QQ 适配器可能还有自己的上传大小限制。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true,
+      "BILI_SHARE_PARSE_SEND_VIDEO": true
+    }
   },
   "BILI_SHARE_PARSE_VIDEO_MAX_HEIGHT": {
     "description": "【分享解析】原视频下载最高分辨率",
     "type": "int",
     "default": 720,
-    "hint": "下载原视频时优先尝试低清格式，例如 360p、480p、720p；默认 720p。实际可用清晰度由 B站返回决定。"
+    "hint": "下载原视频时优先尝试低清格式，例如 360p、480p、720p；默认 720p。实际可用清晰度由 B站返回决定。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true,
+      "BILI_SHARE_PARSE_SEND_VIDEO": true
+    }
   },
   "BILI_SHARE_PARSE_COOLDOWN": {
     "description": "【分享解析】同一视频重复解析冷却秒数",
     "type": "int",
     "default": 600,
-    "hint": "同一会话解析过的同一视频至少10分钟内不会重复解析；可设置更长时间，但低于600秒仍按600秒执行。"
+    "hint": "同一会话解析过的同一视频至少10分钟内不会重复解析；可设置更长时间，但低于600秒仍按600秒执行。",
+    "condition": {
+      "ENABLE_BILI_SHARE_PARSE": true
+    }
   },
   "ENABLE_AFFECTION": {
-    "description": "【功能开关】启用好感度系统",
+    "description": "【好感度·总开关】启用好感度系统",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "按互动历史给每个用户累计好感度并影响语气；关闭后所有人一视同仁。"
   },
   "ENABLE_MOOD": {
-    "description": "【功能开关】启用心情系统",
+    "description": "【心情】启用心情系统",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "让它有自己的情绪起伏，回复语气会随时间与事件变化。"
   },
   "AFFECTION_PROMPT_SPECIAL": {
     "description": "【好感度提示词】主人（固定100分）",
     "type": "text",
-    "default": "这是你的主人。内心：深深的喜爱和依恋。外在：随意、自然、可以撒娇。语气：宠溺、温柔、像亲人。"
+    "default": "这是你的主人。内心：深深的喜爱和依恋。外在：随意、自然、可以撒娇。语气：宠溺、温柔、像亲人。",
+    "condition": {
+      "ENABLE_AFFECTION": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark",
+    "hint": "主人固定满分，写清内心依赖与表面态度的落差。"
   },
   "AFFECTION_PROMPT_CLOSE": {
     "description": "【好感度提示词】亲密（80-99分）",
     "type": "text",
-    "default": "这是你的好友（好感度高）。内心：真诚关心。外在：温柔亲近。语气：温暖、真实、可以调皮。"
+    "default": "这是你的好友（好感度高）。内心：真诚关心。外在：温柔亲近。语气：温暖、真实、可以调皮。",
+    "condition": {
+      "ENABLE_AFFECTION": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark",
+    "hint": "关系亲近时的内心与外在表现，可写具体相处方式。"
   },
   "AFFECTION_PROMPT_FRIEND": {
     "description": "【好感度提示词】熟悉（50-79分）",
     "type": "text",
-    "default": "这是熟悉的粉丝（好感度中）。内心：放松和信任。外在：自然，话变多。语气：友好、轻松、偶尔调侃。"
+    "default": "这是熟悉的粉丝（好感度中）。内心：放松和信任。外在：自然，话变多。语气：友好、轻松、偶尔调侃。",
+    "condition": {
+      "ENABLE_AFFECTION": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark",
+    "hint": "熟悉粉丝，放松但仍有边界。"
   },
   "AFFECTION_PROMPT_NORMAL": {
     "description": "【好感度提示词】普通（10-49分）",
     "type": "text",
-    "default": "这是普通粉丝（好感度低）。保持善意，温和有礼但保持距离。语气：简洁、客气。"
+    "default": "这是普通粉丝（好感度低）。保持善意，温和有礼但保持距离。语气：简洁、客气。",
+    "condition": {
+      "ENABLE_AFFECTION": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark",
+    "hint": "普通粉丝，礼貌温和，不过度热络。"
   },
   "AFFECTION_PROMPT_STRANGER": {
     "description": "【好感度提示词】陌生（0-9分）",
     "type": "text",
-    "default": "这是陌生人。保持礼貌和善意，简洁客气。"
+    "default": "这是陌生人。保持礼貌和善意，简洁客气。",
+    "condition": {
+      "ENABLE_AFFECTION": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark",
+    "hint": "陌生人，简洁客气，先观察。"
   },
   "AFFECTION_PROMPT_COLD": {
     "description": "【好感度提示词】冷淡（负分）",
     "type": "text",
-    "default": "这个人多次恶意攻击你。平静坚定划清界限，回复极简短，不恶语相向。"
+    "default": "这个人多次恶意攻击你。平静坚定划清界限，回复极简短，不恶语相向。",
+    "condition": {
+      "ENABLE_AFFECTION": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark",
+    "hint": "被反复冒犯后的冷淡态度，冷静划界限而不是对骂。"
   },
   "VIDEO_VISUAL_ANALYSIS_POLICY": {
-    "description": "【视频分析】视觉分析策略",
+    "description": "【视频】视觉分析策略",
     "type": "string",
     "default": "when_text_insufficient",
     "options": [
@@ -502,35 +736,41 @@
     "hint": "when_text_insufficient=优先标题、简介、字幕、标签和热评；信息不足时才下载截帧/直读。always=每次都尝试视觉分析，成本较高。"
   },
   "ENABLE_VIDEO_LONG_TERM_MEMORY": {
-    "description": "【视频记忆】启用分层长期记忆",
+    "description": "【视频】启用分层长期记忆",
     "type": "bool",
     "default": true,
     "hint": "开启后写入可语义调取的视频记忆：15天内保留完整印象，之后降低召回权重，约3个月后只留看过与大概内容。关闭时仍保留视频分析缓存索引。"
   },
   "VIDEO_MEMORY_DETAIL_DAYS": {
-    "description": "【视频记忆】完整内容保留天数",
+    "description": "【视频】完整内容保留天数",
     "type": "int",
     "default": 15,
     "min": 1,
     "max": 60,
-    "hint": "默认15天。期间保留较完整的内容概括与感想；之后转为低权重长期记忆，减少检索和推荐干扰。"
+    "hint": "默认15天。期间保留较完整的内容概括与感想；之后转为低权重长期记忆，减少检索和推荐干扰。",
+    "condition": {
+      "ENABLE_VIDEO_LONG_TERM_MEMORY": true
+    }
   },
   "VIDEO_MEMORY_FADE_DAYS": {
-    "description": "【视频记忆】淡忘天数",
+    "description": "【视频】淡忘天数",
     "type": "int",
     "default": 90,
     "min": 30,
     "max": 730,
-    "hint": "默认90天。到期后压缩为“看过哪个视频、UP主及大概内容”的短摘要，并以极低权重保留语义向量，只在高度相关时偶尔想起。永久BV去重记录不会被删除。该值不会小于完整内容保留天数。"
+    "hint": "默认90天。到期后压缩为“看过哪个视频、UP主及大概内容”的短摘要，并以极低权重保留语义向量，只在高度相关时偶尔想起。永久BV去重记录不会被删除。该值不会小于完整内容保留天数。",
+    "condition": {
+      "ENABLE_VIDEO_LONG_TERM_MEMORY": true
+    }
   },
   "VIDEO_SEGMENT_MINUTES": {
-    "description": "【视频分析】长视频自动切片长度（分钟/段）",
+    "description": "【视频】长视频自动切片长度（分钟/段）",
     "type": "int",
     "default": 5,
     "hint": "超过此时长的视频会按段分析再整合。默认 5 分钟较稳，建议 3~8 分钟；越短越细但 token 消耗越大。"
   },
   "VIDEO_SEGMENT_MAX_COUNT": {
-    "description": "【视频分析】长视频最多分析多少段",
+    "description": "【视频】长视频最多分析多少段",
     "type": "int",
     "default": 10,
     "hint": "超长视频最多分析几段，超出部分跳过。建议不要超过 10 段，避免 token 和耗时过高。"
@@ -547,7 +787,15 @@
     "default": 2,
     "hint": "这是浏览轮次上限，不是必须完成的次数；每轮视频数和全天视频总数分别由相邻配置控制。",
     "min": 0,
-    "max": 12
+    "max": 12,
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    },
+    "slider": {
+      "min": 1,
+      "max": 10,
+      "step": 1
+    }
   },
   "PROACTIVE_VIDEO_COUNT": {
     "description": "【主动看片·数量】每次计划观看几个视频",
@@ -555,48 +803,56 @@
     "default": 3,
     "hint": "来源按当天累计观看数在关注→搜索→视频池之间均分：当天第1个取关注，第2个取搜索，第3个取视频池，第4个再回关注；分多次触发也会承接当天进度，来源不足时自动补位。",
     "min": 0,
-    "max": 30
+    "max": 30,
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    },
+    "slider": {
+      "min": 1,
+      "max": 10,
+      "step": 1
+    }
   },
   "PROACTIVE_DAILY_LIMIT": {
     "description": "【主动看片·数量】每天最多看几个视频（所有来源合计，0=不限制）",
     "type": "int",
     "default": 0,
     "min": 0,
-    "max": 100
-  },
-  "PROACTIVE_COMMENT_COUNT": {
-    "description": "【主动看片·数量】每个视频最多主动评论几条",
-    "type": "int",
-    "default": 1,
-    "min": 0,
-    "max": 1,
-    "hint": "每个视频至多发布一条主动评论，0=不主动评论；评论区回复不计入此项。"
-  },
-  "PROACTIVE_COMMENT_DAILY_LIMIT": {
-    "description": "【主动看片·数量】每天最多主动评论几条",
-    "type": "int",
-    "default": 2,
-    "min": 0,
-    "max": 30,
-    "hint": "所有主动看片来源合计的硬上限；0=不主动评论。它不会要求 Bot 为了凑数发表评论。"
+    "max": 100,
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    },
+    "hint": "所有来源合计的每日看片上限；填 0 表示只受每轮数量限制。"
   },
   "PROACTIVE_FOLLOW_UIDS": {
-    "description": "【主动看片·来源1】特别关注的UP主UID列表",
+    "description": "【主动看片·来源】特别关注的UP主UID列表",
     "type": "list",
     "default": [],
-    "hint": "特别关注优先进入“关注”来源，其后才检查普通关注列表的今日更新；也与独立特关巡视共用。"
+    "hint": "特别关注优先进入“关注”来源，其后才检查普通关注列表的今日更新；也与独立特关巡视共用。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "PROACTIVE_SEARCH_QUERY_PROMPT": {
-    "description": "【主动看片·来源2】Bot 决定B站搜索词的提示词",
+    "description": "【主动看片·来源】Bot 决定B站搜索词的提示词",
     "type": "text",
     "default": "为这一次B站浏览选择1至3个具体搜索词，覆盖不同题材。可以延续有实际观看依据的兴趣，也要尝试近期少看的内容。反复看的主题可以继续保留，也留意别的有趣内容，不要只换一个同义词重复搜。",
-    "hint": "根据近期观看与评分选词，不直接套完整人设。保留真实喜欢的主题，各搜索方向轮流取候选；连续两次未探索后，有 35% 机会把新方向放前面。只温和调整优先级，不禁掉原有题材、不删除兴趣，也不强制换口味。"
+    "hint": "根据近期观看与评分选词，不直接套完整人设。保留真实喜欢的主题，各搜索方向轮流取候选；连续两次未探索后，有 35% 机会把新方向放前面。只温和调整优先级，不禁掉原有题材、不删除兴趣，也不强制换口味。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "PROACTIVE_TASTE_WINDOW_DAYS": {
-    "description": "【主动看片·来源2】分区评分口味统计天数",
+    "description": "【主动看片·来源】分区评分口味统计天数",
     "type": "int",
     "default": 7,
-    "hint": "默认汇总最近7天各分区的平均评分；同时用于搜索词决策和高分分区标题筛选。"
+    "hint": "默认汇总最近7天各分区的平均评分；同时用于搜索词决策和高分分区标题筛选。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "PROACTIVE_PREFERENCE_HALF_LIFE_DAYS": {
     "description": "【主动行为】近期爱好证据半衰期（天）",
@@ -604,7 +860,10 @@
     "default": 7,
     "min": 1,
     "max": 90,
-    "hint": "新感受权重更高；7天前的信号只保留一半权重，近期厌倦可抵消旧喜好。"
+    "hint": "新感受权重更高；7天前的信号只保留一半权重，近期厌倦可抵消旧喜好。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "PROACTIVE_EXPLORATION_RATIO": {
     "description": "【主动行为】新题材探索比例",
@@ -612,34 +871,54 @@
     "default": 0.3,
     "min": 0,
     "max": 1,
-    "hint": "默认约三成搜索/视频池候选保留探索机会；不因为题材陌生就自动拒绝。"
+    "hint": "默认约三成搜索/视频池候选保留探索机会；不因为题材陌生就自动拒绝。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    }
   },
   "PROACTIVE_VIDEO_POOLS": {
-    "description": "【主动看片·来源3】视频池/地址池（可填中文，不用记 rid/tid）",
+    "description": "【主动看片·来源】视频池/地址池（可填中文，不用记 rid/tid）",
     "type": "list",
     "default": [
       "popular",
       "rcmd"
     ],
-    "hint": "可填：热门 / 推荐 / 每周必看 / 入站必刷 / 排行榜:游戏 / 最新:单机游戏；也可直接填主分区名如 游戏（等同排行榜:游戏）或子分区名如 单机游戏（等同最新:单机游戏）。旧写法 ranking:4、newlist:17 仍兼容。用 /bili分区 查看完整中文名称。"
+    "hint": "可填：热门 / 推荐 / 每周必看 / 入站必刷 / 排行榜:游戏 / 最新:单机游戏；也可直接填主分区名如 游戏（等同排行榜:游戏）或子分区名如 单机游戏（等同最新:单机游戏）。旧写法 ranking:4、newlist:17 仍兼容。用 /bili分区 查看完整中文名称。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "ENABLE_PROACTIVE_LLM_PREFILTER": {
     "description": "【主动看片·筛选】观看前让 LLM 按标题筛选搜索/视频池候选",
     "type": "bool",
     "default": false,
-    "hint": "开启后，根据标题、UP、分区和简介判断想不想看。关注、历史口味及保留的探索候选直接放行，避免新题材因不熟悉被筛掉。可用 /bili开关 筛选 切换。"
+    "hint": "开启后，根据标题、UP、分区和简介判断想不想看。关注、历史口味及保留的探索候选直接放行，避免新题材因不熟悉被筛掉。可用 /bili开关 筛选 切换。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "PROACTIVE_LLM_PREFILTER_MAX_REJECTS": {
     "description": "【主动看片·筛选】每轮最多拒绝几个候选",
     "type": "int",
     "default": 3,
-    "hint": "避免 Bot 挑太久。达到上限后，本轮后续搜索/视频池候选默认放行。"
+    "hint": "避免 Bot 挑太久。达到上限后，本轮后续搜索/视频池候选默认放行。",
+    "condition": {
+      "ENABLE_PROACTIVE_LLM_PREFILTER": true
+    }
   },
   "PROACTIVE_LIKE": {
     "description": "【主动行为】主动点赞",
     "type": "bool",
     "default": true,
-    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。"
+    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "PROACTIVE_LIKE_MIN_SCORE": {
     "description": "【主动行为】点赞最低评分",
@@ -647,13 +926,24 @@
     "default": 6,
     "min": 0,
     "max": 10,
-    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。"
+    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。",
+    "condition": {
+      "PROACTIVE_LIKE": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 10,
+      "step": 1
+    }
   },
   "PROACTIVE_COIN": {
     "description": "【主动行为】主动投币",
     "type": "bool",
     "default": false,
-    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。"
+    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "PROACTIVE_COIN_MIN_SCORE": {
     "description": "【主动行为】投币最低评分",
@@ -661,13 +951,24 @@
     "default": 8,
     "min": 0,
     "max": 10,
-    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。"
+    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。",
+    "condition": {
+      "PROACTIVE_COIN": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 10,
+      "step": 1
+    }
   },
   "PROACTIVE_FAV": {
     "description": "【主动行为】主动收藏",
     "type": "bool",
     "default": true,
-    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。"
+    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "PROACTIVE_FAV_MIN_SCORE": {
     "description": "【主动行为】收藏最低评分",
@@ -675,13 +976,58 @@
     "default": 8,
     "min": 0,
     "max": 10,
-    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。"
+    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。",
+    "condition": {
+      "PROACTIVE_FAV": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 10,
+      "step": 1
+    }
   },
   "PROACTIVE_COMMENT": {
     "description": "【主动行为】主动评论",
     "type": "bool",
     "default": true,
-    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。"
+    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
+  },
+  "PROACTIVE_COMMENT_COUNT": {
+    "description": "【主动看片·数量】每个视频最多主动评论几条",
+    "type": "int",
+    "default": 1,
+    "min": 0,
+    "max": 1,
+    "hint": "每个视频至多发布一条主动评论，0=不主动评论；评论区回复不计入此项。",
+    "condition": {
+      "ENABLE_PROACTIVE": true,
+      "PROACTIVE_COMMENT": true
+    },
+    "slider": {
+      "min": 1,
+      "max": 5,
+      "step": 1
+    }
+  },
+  "PROACTIVE_COMMENT_DAILY_LIMIT": {
+    "description": "【主动看片·数量】每天最多主动评论几条",
+    "type": "int",
+    "default": 2,
+    "min": 0,
+    "max": 30,
+    "hint": "所有主动看片来源合计的硬上限；0=不主动评论。它不会要求 Bot 为了凑数发表评论。",
+    "condition": {
+      "ENABLE_PROACTIVE": true,
+      "PROACTIVE_COMMENT": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 20,
+      "step": 1
+    }
   },
   "PROACTIVE_COMMENT_MIN_SCORE": {
     "description": "【主动行为】评论最低评分",
@@ -689,13 +1035,24 @@
     "default": 7,
     "min": 0,
     "max": 10,
-    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。"
+    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。",
+    "condition": {
+      "PROACTIVE_COMMENT": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 10,
+      "step": 1
+    }
   },
   "PROACTIVE_FOLLOW": {
     "description": "【主动行为】主动关注UP主",
     "type": "bool",
     "default": true,
-    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。"
+    "hint": "是否允许执行该行为；实际执行还需达到右侧管理员评分阈值。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "PROACTIVE_FOLLOW_MIN_SCORE": {
     "description": "【主动行为】关注UP主最低评分",
@@ -703,22 +1060,39 @@
     "default": 9,
     "min": 0,
     "max": 10,
-    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。"
+    "hint": "视频评价达到此分数才允许执行；管理员阈值不会被模型意愿绕过。",
+    "condition": {
+      "PROACTIVE_FOLLOW": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 10,
+      "step": 1
+    }
   },
   "CUSTOM_PROACTIVE_INSTRUCTION": {
     "description": "【主动行为】主动评论的补充提示词",
     "type": "text",
     "default": "",
-    "hint": "例如：评论风格偏毒舌但不恶意。"
+    "hint": "例如：评论风格偏毒舌但不恶意。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "ENABLE_OWNER_RECOMMEND": {
-    "description": "【主动行为·给主人推荐】启用给主人分享",
+    "description": "【给主人推荐】启用给主人分享",
     "type": "bool",
     "default": true,
-    "hint": "关闭后不会向主人发送私信或评论区推荐；分享方式由下方选项决定。"
+    "hint": "关闭后不会向主人发送私信或评论区推荐；分享方式由下方选项决定。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "RECOMMEND_OWNER_DELIVERY": {
-    "description": "【主动行为·给主人推荐】发送方式（B站 / QQ）",
+    "description": "【给主人推荐】发送方式（B站 / QQ）",
     "type": "string",
     "default": "private_message",
     "options": [
@@ -729,37 +1103,65 @@
       "bili_private_and_qq",
       "all"
     ],
-    "hint": "private_message=B站私信；comment=评论区@主人；both=B站两种都发；qq_private=QQ私信；bili_private_and_qq=B站私信+QQ；all=全部通道。QQ 使用 OWNER_QQ_UMO。"
+    "hint": "private_message=B站私信；comment=评论区@主人；both=B站两种都发；qq_private=QQ私信；bili_private_and_qq=B站私信+QQ；all=全部通道。QQ 使用 OWNER_QQ_UMO。",
+    "condition": {
+      "ENABLE_PROACTIVE": true,
+      "ENABLE_OWNER_RECOMMEND": true
+    }
   },
   "RECOMMEND_OWNER_MIN_SCORE": {
-    "description": "【主动行为·给主人推荐】最低个人喜好评分",
+    "description": "【给主人推荐】最低个人喜好评分",
     "type": "int",
     "default": 7,
     "hint": "默认7分；有具体看点且想交流就可分享，不必等到惊艳或符合主人固定爱好。",
     "min": 0,
-    "max": 10
+    "max": 10,
+    "condition": {
+      "ENABLE_PROACTIVE": true,
+      "ENABLE_OWNER_RECOMMEND": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 10,
+      "step": 1
+    }
   },
   "RECOMMEND_OWNER_DAILY_LIMIT": {
-    "description": "【主动行为·给主人推荐】每天最多发送几次",
+    "description": "【给主人推荐】每天最多发送几次",
     "type": "int",
     "default": 3,
     "hint": "默认每天最多3个，实际有价值才发；0不限制，仍遵守推荐间隔。",
     "min": 0,
-    "max": 20
+    "max": 20,
+    "condition": {
+      "ENABLE_PROACTIVE": true,
+      "ENABLE_OWNER_RECOMMEND": true
+    }
   },
   "RECOMMEND_OWNER_MIN_GAP_MINUTES": {
-    "description": "【主动行为·给主人推荐】两次推荐至少间隔（分钟）",
+    "description": "【给主人推荐】两次推荐至少间隔（分钟）",
     "type": "int",
     "default": 120,
     "min": 0,
     "max": 1440,
-    "hint": "默认间隔2小时；0关闭间隔。跨轮次读取实际成功发送记录，同一视频不重复推荐。"
+    "hint": "默认间隔2小时；0关闭间隔。跨轮次读取实际成功发送记录，同一视频不重复推荐。",
+    "condition": {
+      "ENABLE_PROACTIVE": true,
+      "ENABLE_OWNER_RECOMMEND": true
+    }
   },
   "CUSTOM_RECOMMEND_INSTRUCTION": {
-    "description": "【主动行为·给主人推荐】推荐语补充提示词",
+    "description": "【给主人推荐】推荐语补充提示词",
     "type": "text",
     "default": "",
-    "hint": "例如：推荐语要简短可爱，带点撒娇。会影响B站私信分享或评论区@主人时的文案风格。"
+    "hint": "例如：推荐语要简短可爱，带点撒娇。会影响B站私信分享或评论区@主人时的文案风格。",
+    "condition": {
+      "ENABLE_PROACTIVE": true,
+      "ENABLE_OWNER_RECOMMEND": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "ENABLE_CROSS_PLATFORM_ACTIVITY_STATUS": {
     "description": "【跨端活动与分享】向已绑定主人同步当前活动",
@@ -781,7 +1183,10 @@
     "options": [
       "random",
       "fixed"
-    ]
+    ],
+    "condition": {
+      "SPECIAL_FOLLOW_ENABLED": true
+    }
   },
   "SPECIAL_FOLLOW_TIMES_COUNT": {
     "description": "【特别关注】每天巡视几次（random模式生效）",
@@ -789,7 +1194,16 @@
     "default": 1,
     "hint": "随机模式下每天触发的次数",
     "min": 0,
-    "max": 12
+    "max": 12,
+    "condition": {
+      "SPECIAL_FOLLOW_ENABLED": true,
+      "SPECIAL_FOLLOW_MODE": "random"
+    },
+    "slider": {
+      "min": 1,
+      "max": 10,
+      "step": 1
+    }
   },
   "SPECIAL_FOLLOW_FIXED_TIMES": {
     "description": "【特别关注】固定触发时间（fixed模式生效）",
@@ -798,17 +1212,26 @@
       "12:00",
       "20:00"
     ],
-    "hint": "格式 HH:MM，如 [\"12:00\", \"20:00\"]"
+    "hint": "格式 HH:MM，如 [\"12:00\", \"20:00\"]",
+    "condition": {
+      "SPECIAL_FOLLOW_ENABLED": true,
+      "SPECIAL_FOLLOW_MODE": "fixed"
+    }
   },
   "ENABLE_BANGUMI": {
-    "description": "【番剧】启用番剧功能（看番、搜番、番剧记忆）",
+    "description": "【番剧·总开关】启用番剧功能（看番、搜番、番剧记忆）",
     "type": "bool",
-    "default": false
+    "default": false,
+    "hint": "开启看番、搜番与番剧进度记忆；需要视觉模型才能理解画面。"
   },
   "BANGUMI_PROACTIVE": {
     "description": "【番剧】启用主动看番（定时自动随机看番）",
     "type": "bool",
-    "default": false
+    "default": false,
+    "condition": {
+      "ENABLE_BANGUMI": true
+    },
+    "hint": "按计划自己挑番剧追更，需先开启上面的番剧总开关。"
   },
   "BANGUMI_POOLS": {
     "description": "【番剧】番剧来源池",
@@ -817,7 +1240,10 @@
       "trending",
       "timeline"
     ],
-    "hint": "可选: trending(热度排行) / timeline(当季新番)"
+    "hint": "可选: trending(热度排行) / timeline(当季新番)",
+    "condition": {
+      "ENABLE_BANGUMI": true
+    }
   },
   "BANGUMI_EPISODE_COUNT": {
     "description": "【番剧】每次看番最多追更几集",
@@ -825,34 +1251,68 @@
     "default": 3,
     "hint": "评分高会继续追，但不超过此上限",
     "min": 0,
-    "max": 20
+    "max": 20,
+    "condition": {
+      "ENABLE_BANGUMI": true
+    },
+    "slider": {
+      "min": 1,
+      "max": 12,
+      "step": 1
+    }
   },
   "BANGUMI_CONTINUE_SCORE": {
     "description": "【番剧】追更阈值（评分≥此值才继续看下一集）",
     "type": "int",
     "default": 7,
     "min": 0,
-    "max": 10
+    "max": 10,
+    "condition": {
+      "ENABLE_BANGUMI": true
+    },
+    "hint": "看完一集打的分达到此值才会继续看下一集。",
+    "slider": {
+      "min": 0,
+      "max": 10,
+      "step": 1
+    }
   },
   "BANGUMI_DAILY_LIMIT": {
     "description": "【番剧】每天主动看番的次数上限",
     "type": "int",
     "default": 1,
     "min": 0,
-    "max": 12
+    "max": 12,
+    "condition": {
+      "BANGUMI_PROACTIVE": true
+    },
+    "hint": "每天主动看番最多几轮，防止一天追完一整季。",
+    "slider": {
+      "min": 1,
+      "max": 10,
+      "step": 1
+    }
   },
   "BANGUMI_COMMENT": {
     "description": "【番剧】看番时评论（≥6分）",
     "type": "bool",
-    "default": true
+    "default": true,
+    "condition": {
+      "ENABLE_BANGUMI": true
+    },
+    "hint": "看番后在评论区留下感想，需要账号有评论权限。"
   },
   "BANGUMI_AUTO_FOLLOW": {
     "description": "【番剧】评分≥7时自动追番",
     "type": "bool",
-    "default": true
+    "default": true,
+    "condition": {
+      "ENABLE_BANGUMI": true
+    },
+    "hint": "评分达标后自动追番，后续更新会纳入巡视。"
   },
   "ENABLE_DYNAMIC_WATCH": {
-    "description": "【关注动态巡视·总开关】查看关注者的新动态图文",
+    "description": "【动态巡视·总开关】查看关注者的新动态图文",
     "type": "bool",
     "default": false,
     "hint": "只读取公开动态；每条新动态使用独立模型调用，长期记忆仅保存压缩文字摘要，不保存图片、URL 或 base64。"
@@ -862,34 +1322,63 @@
     "type": "int",
     "default": 2,
     "min": 0,
-    "max": 12
+    "max": 12,
+    "condition": {
+      "ENABLE_DYNAMIC_WATCH": true
+    },
+    "hint": "每日自主计划里安排几次刷关注动态。",
+    "slider": {
+      "min": 1,
+      "max": 10,
+      "step": 1
+    }
   },
   "DYNAMIC_WATCH_DAILY_LIMIT": {
     "description": "【关注动态巡视】每天最多查看新动态数",
     "type": "int",
     "default": 12,
     "min": 0,
-    "max": 100
+    "max": 100,
+    "condition": {
+      "ENABLE_DYNAMIC_WATCH": true
+    },
+    "hint": "每天最多打开多少条新动态，含看完后不互动的。"
   },
   "DYNAMIC_WATCH_SPECIAL_ONLY": {
     "description": "【关注动态巡视】只查看特别关注用户",
     "type": "bool",
-    "default": false
+    "default": false,
+    "condition": {
+      "ENABLE_DYNAMIC_WATCH": true
+    },
+    "hint": "只刷特别关注 UP 的动态，忽略其它关注。"
   },
   "DYNAMIC_WATCH_INCLUDE_VIDEO_POSTS": {
     "description": "【关注动态巡视】同时查看视频投稿动态",
     "type": "bool",
-    "default": true
+    "default": true,
+    "condition": {
+      "ENABLE_DYNAMIC_WATCH": true
+    },
+    "hint": "把 UP 的投稿视频动态也算作巡视目标。"
   },
   "DYNAMIC_WATCH_INTEREST_PROMPT": {
     "description": "【关注动态巡视】兴趣判断补充提示词",
     "type": "text",
-    "default": "挑选真正值得留意、适合之后与主人分享或形成个人记忆的动态；忽略广告、抽奖、复读与无实质内容的转发。"
+    "default": "挑选真正值得留意、适合之后与主人分享或形成个人记忆的动态；忽略广告、抽奖、复读与无实质内容的转发。",
+    "condition": {
+      "ENABLE_DYNAMIC_WATCH": true
+    },
+    "hint": "告诉它什么样的动态值得看、值得之后跟主人提。",
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "ENABLE_DYNAMIC": {
-    "description": "【功能开关】启用自动发动态",
+    "description": "【动态·总开关】启用自动发动态",
     "type": "bool",
-    "default": false
+    "default": false,
+    "hint": "按计划自己发 B站 动态；建议先用固定时刻观察几天再放开。"
   },
   "DYNAMIC_TIMES_COUNT": {
     "description": "【动态发布】每天触发几次动态发布",
@@ -897,15 +1386,26 @@
     "default": 1,
     "hint": "建议 1-3 次",
     "min": 0,
-    "max": 12
+    "max": 12,
+    "condition": {
+      "ENABLE_DYNAMIC": true
+    },
+    "slider": {
+      "min": 1,
+      "max": 10,
+      "step": 1
+    }
   },
   "DYNAMIC_DAILY_COUNT": {
     "description": "【动态发布】每天最多发几条动态",
     "type": "int",
     "default": 1,
-    "hint": "防止刷屏",
+    "hint": "防止刷屏；0 表示不额外限制（仍受自主上限与行为预算约束）",
     "min": 0,
-    "max": 20
+    "max": 20,
+    "condition": {
+      "ENABLE_DYNAMIC": true
+    }
   },
   "DYNAMIC_MIN_INTERVAL_DAYS": {
     "description": "【动态】自动动态最短间隔（天）",
@@ -913,35 +1413,56 @@
     "default": 1,
     "min": 1,
     "max": 30,
-    "hint": "1表示每天最多一次，2或3表示至少隔2或3天。只在有真实素材时发布；手动请求不受此间隔限制。"
+    "hint": "1表示每天最多一次，2或3表示至少隔2或3天。只在有真实素材时发布；手动请求不受此间隔限制。",
+    "condition": {
+      "ENABLE_DYNAMIC": true
+    }
   },
   "DYNAMIC_TOPICS": {
     "description": "【动态发布】动态主题池（每行一个）",
     "type": "list",
     "default": [],
-    "hint": "留空使用默认主题池"
+    "hint": "留空使用默认主题池",
+    "condition": {
+      "ENABLE_DYNAMIC": true
+    }
   },
   "CUSTOM_DYNAMIC_INSTRUCTION": {
     "description": "【动态发布】发动态的补充提示词",
     "type": "text",
     "default": "",
-    "hint": "例如：动态风格偏文艺，多用比喻。"
+    "hint": "例如：动态风格偏文艺，多用比喻。",
+    "condition": {
+      "ENABLE_DYNAMIC": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "ENABLE_DAILY_SUMMARY": {
-    "description": "【总结·日总结】启用每日总结",
+    "description": "【日总结·总开关】启用每日总结",
     "type": "bool",
     "default": false,
     "hint": "在休眠时段、日终清算后生成当天B站生活总结。"
   },
   "DAILY_SUMMARY_HOUR": {
-    "description": "【总结·日总结】生成时间（0-23点）",
+    "description": "【日总结】生成时间（0-23点）",
     "type": "int",
     "default": 3,
     "min": 0,
-    "max": 23
+    "max": 23,
+    "condition": {
+      "ENABLE_DAILY_SUMMARY": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 23,
+      "step": 1
+    },
+    "hint": "每天几点生成并投递，按本机时区。"
   },
   "DAILY_SUMMARY_MODE": {
-    "description": "【总结·日总结】投递方式",
+    "description": "【日总结】投递方式",
     "type": "string",
     "default": "archive",
     "options": [
@@ -949,25 +1470,45 @@
       "qq",
       "dynamic",
       "both"
-    ]
+    ],
+    "condition": {
+      "ENABLE_DAILY_SUMMARY": true
+    },
+    "hint": "archive 只写进记忆；qq 私聊发给主人；dynamic 发成B站动态；both 两处都发。"
   },
   "DAILY_SUMMARY_QQ_UMO": {
-    "description": "【总结·日总结】QQ投递目标 UMO",
+    "description": "【日总结】QQ投递目标 UMO",
     "type": "string",
-    "default": ""
+    "default": "",
+    "condition": {
+      "ENABLE_DAILY_SUMMARY": true,
+      "DAILY_SUMMARY_MODE": "qq"
+    },
+    "hint": "投递方式选 qq 或 both 时必填，格式 platform:FriendMessage:QQ号。"
   },
   "DAILY_SUMMARY_RENDER_IMAGE": {
-    "description": "【总结·日总结】渲染为图片",
+    "description": "【日总结】渲染为图片",
     "type": "bool",
-    "default": true
+    "default": true,
+    "condition": {
+      "ENABLE_DAILY_SUMMARY": true
+    },
+    "hint": "把总结渲染成图片卡片；关闭则发纯文本。"
   },
   "CUSTOM_DAILY_INSTRUCTION": {
-    "description": "【总结·日总结】补充提示词",
+    "description": "【日总结】补充提示词",
     "type": "text",
-    "default": "用自然、简短的口吻回顾今天在B站真正发生的事情，不虚构经历，也不泄露用户隐私。"
+    "default": "用自然、简短的口吻回顾今天在B站真正发生的事情，不虚构经历，也不泄露用户隐私。",
+    "condition": {
+      "ENABLE_DAILY_SUMMARY": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark",
+    "hint": "想让它用什么口吻回顾今天，留空用内置写法。"
   },
   "ENABLE_WEEKLY_SUMMARY": {
-    "description": "【周总结】启用每周总结（回顾一周的B站生活）",
+    "description": "【周总结·总开关】启用每周总结（回顾一周的 B站生活）",
     "type": "bool",
     "default": false,
     "hint": "每周固定一天，在睡眠时段自动生成本周总结（看了什么视频/番、发了什么动态、和谁聊得多）"
@@ -981,37 +1522,64 @@
       "dynamic",
       "both"
     ],
-    "hint": "qq=私信发给主人；dynamic=发成B站动态；both=两者都发。也可用 /bili周总结 手动触发"
+    "hint": "qq=私信发给主人；dynamic=发成B站动态；both=两者都发。也可用 /bili周总结 手动触发",
+    "condition": {
+      "ENABLE_WEEKLY_SUMMARY": true
+    }
   },
   "WEEKLY_SUMMARY_DAY": {
     "description": "【周总结】每周生成日（0=周一 ... 6=周日）",
     "type": "int",
-    "default": 6
+    "default": 6,
+    "condition": {
+      "ENABLE_WEEKLY_SUMMARY": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 6,
+      "step": 1
+    },
+    "hint": "0=周一，6=周日；配合下面的时刻生效。"
   },
   "WEEKLY_SUMMARY_QQ_UMO": {
     "description": "【周总结】接收总结的 QQ 私聊 UMO（留空则复用恶意告警的 UMO）",
     "type": "string",
-    "default": ""
+    "default": "",
+    "condition": {
+      "ENABLE_WEEKLY_SUMMARY": true,
+      "WEEKLY_SUMMARY_MODE": "qq"
+    },
+    "hint": "投递方式选 qq 或 both 时填；留空则复用恶意告警的 UMO。"
   },
   "WEEKLY_SUMMARY_RENDER_IMAGE": {
     "description": "【周总结】生成周总结图片卡片",
     "type": "bool",
     "default": true,
-    "hint": "开启后周总结会额外渲染为 PNG 图片；QQ私信和B站动态会优先发送图片，失败时自动退回纯文本。"
-  },
-  "SUMMARY_CJK_FONT_PATH": {
-    "description": "【总结·图片渲染】自定义中文字体路径（可选）",
-    "type": "string",
-    "default": "",
-    "hint": "通常无需填写：插件会优先使用系统中文字体，并自带 Noto Sans SC 作为 Linux 兜底。只有想替换字体样式时，才需要填写 .ttf/.otf/.ttc 的绝对路径。"
+    "hint": "开启后周总结会额外渲染为 PNG 图片；QQ私信和B站动态会优先发送图片，失败时自动退回纯文本。",
+    "condition": {
+      "ENABLE_WEEKLY_SUMMARY": true
+    }
   },
   "CUSTOM_WEEKLY_INSTRUCTION": {
     "description": "【周总结】周总结的补充提示词",
     "type": "text",
-    "default": ""
+    "default": "",
+    "condition": {
+      "ENABLE_WEEKLY_SUMMARY": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark",
+    "hint": "周总结的口吻与侧重，留空用内置写法。"
+  },
+  "SUMMARY_CJK_FONT_PATH": {
+    "description": "【总结·图片】自定义中文字体路径（可选）",
+    "type": "string",
+    "default": "",
+    "hint": "通常无需填写：插件会优先使用系统中文字体，并自带 Noto Sans SC 作为 Linux 兜底。只有想替换字体样式时，才需要填写 .ttf/.otf/.ttc 的绝对路径。"
   },
   "ENABLE_PERSONALITY_EVOLUTION": {
-    "description": "【实验性】启用每周近期状态演化",
+    "description": "【演化】启用每周近期状态演化",
     "type": "bool",
     "default": false,
     "hint": "默认关闭。至少积累3天真实活动后才可能运行；优先读取归档日报，也可从活动日志派生隐私过滤后的日结构。只替换有限长度的近期动态区块，不改核心人设，并保留回滚快照。"
@@ -1022,7 +1590,10 @@
     "default": 3,
     "min": 3,
     "max": 7,
-    "hint": "统计最近8天内的归档日报，或从活动日志派生的隐私过滤日结构；不足时即使打开演化开关也不会调用模型。"
+    "hint": "统计最近8天内的归档日报，或从活动日志派生的隐私过滤日结构；不足时即使打开演化开关也不会调用模型。",
+    "condition": {
+      "ENABLE_PERSONALITY_EVOLUTION": true
+    }
   },
   "EVOLVE_WEEKDAY": {
     "description": "【性格演化】每周执行日",
@@ -1030,7 +1601,15 @@
     "default": 6,
     "min": 0,
     "max": 6,
-    "hint": "0=周一，6=周日；每个ISO周最多尝试一次。"
+    "hint": "0=周一，6=周日；每个ISO周最多尝试一次。",
+    "condition": {
+      "ENABLE_PERSONALITY_EVOLUTION": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 6,
+      "step": 1
+    }
   },
   "EVOLVE_HOUR": {
     "description": "【性格演化】每周触发时刻（0-23点）",
@@ -1038,28 +1617,36 @@
     "default": 1,
     "min": 0,
     "max": 23,
-    "hint": "建议设在休眠时段，如凌晨1点。只在设定星期和小时内检查。"
-  },
-  "EVOLVE_MAX_RETRIES": {
-    "description": "【兼容字段】旧版演化重试次数（不再使用）",
-    "type": "int",
-    "default": 1,
-    "hint": "新版每周流程失败后本周不重复请求，避免后台反复调用模型。该字段仅保留旧配置兼容。"
+    "hint": "建议设在休眠时段，如凌晨1点。只在设定星期和小时内检查。",
+    "condition": {
+      "ENABLE_PERSONALITY_EVOLUTION": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 23,
+      "step": 1
+    }
   },
   "EVOLVE_PROMPT": {
     "description": "【性格演化】每周整理补充提示词",
     "type": "text",
     "default": "",
-    "hint": "作为补充要求附加到内置提示词；不能覆盖证据门槛、核心人设保护、长度和严格JSON结构。"
+    "hint": "作为补充要求附加到内置提示词；不能覆盖证据门槛、核心人设保护、长度和严格JSON结构。",
+    "condition": {
+      "ENABLE_PERSONALITY_EVOLUTION": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "ENABLE_MEME_LEARNING": {
-    "description": "【实验性】允许每周学习少量近期梗",
+    "description": "【演化】允许每周学习少量近期梗",
     "type": "bool",
     "default": false,
     "hint": "只有在演化开启、候选有至少2条可核验证据且联网查询成功时才会保留；总数最多2个，7到30天过期，只低频用于合适语境。"
   },
   "ENABLE_AUTONOMOUS_DAILY_PLAN": {
-    "description": "【自主安排】允许 Bot 根据人设与活跃度生成每日计划",
+    "description": "【自主安排·总开关】允许根据人设与活跃度生成每日计划",
     "type": "bool",
     "default": false,
     "hint": "计划只会在管理员设定的回复、私信、动态和主动行为安全上限内调整次数与时间；没有合适事件时可以不安排。"
@@ -1070,13 +1657,15 @@
     "default": 55,
     "hint": "0-24=低迷，25-49=平稳，50-74=活跃，75-100=高能；Bot 可在此基础上结合人设生成今日计划。",
     "min": 0,
-    "max": 100
-  },
-  "AUTONOMOUS_PLAN_PROMPT": {
-    "description": "【自主安排】每日计划补充提示词",
-    "type": "text",
-    "default": "结合角色人设、当前心情和活跃度，安排自然、不机械、不刷屏的一天。优先保证作息合理，避免连续发布或短时间密集互动；低价值内容可以不回复。",
-    "hint": "模型生成的次数和时刻会被程序校验、去重并钳制到安全上限；模型失败时当天不会自动补造事件。"
+    "max": 100,
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 100,
+      "step": 1
+    }
   },
   "AUTONOMOUS_PLAN_GENERATION_MODE": {
     "description": "【自主安排】每日计划生成时机",
@@ -1086,7 +1675,10 @@
       "after_sleep",
       "fixed_time"
     ],
-    "hint": "after_sleep=休眠结束后按偏移生成；fixed_time=每天在指定时刻生成。"
+    "hint": "after_sleep=休眠结束后按偏移生成；fixed_time=每天在指定时刻生成。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    }
   },
   "AUTONOMOUS_PLAN_AFTER_SLEEP_MINUTES": {
     "description": "【自主安排】休眠结束后多少分钟生成计划",
@@ -1094,13 +1686,33 @@
     "default": 5,
     "min": 0,
     "max": 180,
-    "hint": "仅在“休眠结束后”模式生效，默认 5 分钟；生成窗口为计划时刻后的 15 分钟，错过后当天不再自动补生成。"
+    "hint": "仅在“休眠结束后”模式生效，默认 5 分钟；生成窗口为计划时刻后的 15 分钟，错过后当天不再自动补生成。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true,
+      "AUTONOMOUS_PLAN_GENERATION_MODE": "after_sleep"
+    }
   },
   "AUTONOMOUS_PLAN_GENERATION_TIME": {
     "description": "【自主安排】每日计划固定生成时刻",
     "type": "string",
     "default": "08:05",
-    "hint": "仅在“固定时刻”模式生效，格式 HH:MM；生成窗口为计划时刻后的 15 分钟，错过后当天不再自动补生成。"
+    "hint": "仅在“固定时刻”模式生效，格式 HH:MM；生成窗口为计划时刻后的 15 分钟，错过后当天不再自动补生成。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true,
+      "AUTONOMOUS_PLAN_GENERATION_MODE": "fixed_time"
+    }
+  },
+  "AUTONOMOUS_PLAN_PROMPT": {
+    "description": "【自主安排】每日计划补充提示词",
+    "type": "text",
+    "default": "结合角色人设、当前心情和活跃度，安排自然、不机械、不刷屏的一天。优先保证作息合理，避免连续发布或短时间密集互动；低价值内容可以不回复。",
+    "hint": "模型生成的次数和时刻会被程序校验、去重并钳制到安全上限；模型失败时当天不会自动补造事件。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "AUTONOMOUS_PLAN_RETRY_MINUTES": {
     "description": "【自主安排】计划生成失败后的重试等待（分钟）",
@@ -1108,14 +1720,10 @@
     "default": 15,
     "min": 5,
     "max": 360,
-    "hint": "每次失败后等待这么久再重试；重试次数由 AUTONOMOUS_PLAN_MAX_RETRIES 控制，全部失败或错过窗口，当天不再自动请求。手动重新生成不受影响。"
-  },
-  "SCHEDULE_PLAN_PROVIDER_ID": {
-    "description": "【自主安排】今日计划生成模型",
-    "type": "string",
-    "default": "",
-    "hint": "从 AstrBot 已配置的模型提供商中选择；留空跟随 LLM_PROVIDER_ID / AstrBot 默认聊天模型。",
-    "_special": "select_provider"
+    "hint": "每次失败后等待这么久再重试；重试次数由 AUTONOMOUS_PLAN_MAX_RETRIES 控制，全部失败或错过窗口，当天不再自动请求。手动重新生成不受影响。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    }
   },
   "AUTONOMOUS_PLAN_MAX_RETRIES": {
     "description": "【自主安排】计划生成失败后自动重试次数",
@@ -1123,7 +1731,25 @@
     "default": 2,
     "min": 0,
     "max": 5,
-    "hint": "首次失败后按 AUTONOMOUS_PLAN_RETRY_MINUTES 间隔重试，最多重试这么多次；全部失败或错过窗口，当天不再自动请求。手动重新生成不受影响。"
+    "hint": "首次失败后按 AUTONOMOUS_PLAN_RETRY_MINUTES 间隔重试，最多重试这么多次；全部失败或错过窗口，当天不再自动请求。手动重新生成不受影响。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    },
+    "slider": {
+      "min": 0,
+      "max": 5,
+      "step": 1
+    }
+  },
+  "SCHEDULE_PLAN_PROVIDER_ID": {
+    "description": "【自主安排】今日计划生成模型",
+    "type": "string",
+    "default": "",
+    "hint": "从 AstrBot 已配置的模型提供商中选择；留空跟随 LLM_PROVIDER_ID / AstrBot 默认聊天模型。",
+    "_special": "select_provider",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    }
   },
   "AUTONOMOUS_PROACTIVE_WINDOW_MINUTES": {
     "description": "【自主安排】主动浏览默认时间段长度（分钟）",
@@ -1131,30 +1757,10 @@
     "default": 90,
     "min": 30,
     "max": 360,
-    "hint": "自主计划会把主动浏览生成为时间段，并在段内确定一次实际触发时刻。"
-  },
-  "SLEEP_START": {
-    "description": "【系统】休眠开始时间（0-23）",
-    "type": "int",
-    "default": 2,
-    "min": 0,
-    "max": 23
-  },
-  "SLEEP_END": {
-    "description": "【系统】休眠结束时间（0-23）",
-    "type": "int",
-    "default": 8,
-    "min": 0,
-    "max": 23
-  },
-  "AUTONOMOUS_REPLY_DAILY_MIN": {
-    "description": "【兼容旧配置】每日评论回复旧版下限（已停用）",
-    "type": "int",
-    "default": 0,
-    "min": 0,
-    "max": 500,
-    "hint": "保留旧配置兼容；评论只按真实消息回复，不会为了凑数执行。",
-    "deprecated": true
+    "hint": "自主计划会把主动浏览生成为时间段，并在段内确定一次实际触发时刻。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    }
   },
   "AUTONOMOUS_REPLY_DAILY_MAX": {
     "description": "【自主安排·上限】每日评论回复最多几条",
@@ -1162,16 +1768,10 @@
     "default": 80,
     "min": 0,
     "max": 500,
-    "hint": "只限制真实收到评论后最多回复多少，不会要求 Bot 凑满。"
-  },
-  "AUTONOMOUS_PRIVATE_DAILY_MIN": {
-    "description": "【兼容旧配置】每日私信回复旧版下限（已停用）",
-    "type": "int",
-    "default": 0,
-    "min": 0,
-    "max": 200,
-    "hint": "保留旧配置兼容；私信只按真实消息回复，不会为了凑数执行。",
-    "deprecated": true
+    "hint": "只限制真实收到评论后最多回复多少，不会要求 Bot 凑满。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    }
   },
   "AUTONOMOUS_PRIVATE_DAILY_MAX": {
     "description": "【自主安排·上限】每日私信回复最多几条",
@@ -1179,16 +1779,10 @@
     "default": 30,
     "min": 0,
     "max": 200,
-    "hint": "只限制真实收到私信后最多回复多少，不会要求 Bot 凑满。"
-  },
-  "AUTONOMOUS_DYNAMIC_DAILY_MIN": {
-    "description": "【兼容旧配置】每日发布动态旧版下限（已停用）",
-    "type": "int",
-    "default": 0,
-    "min": 0,
-    "max": 20,
-    "hint": "保留旧配置兼容；动态没有真实动机时可以不发。",
-    "deprecated": true
+    "hint": "只限制真实收到私信后最多回复多少，不会要求 Bot 凑满。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    }
   },
   "AUTONOMOUS_DYNAMIC_DAILY_MAX": {
     "description": "【自主安排·上限】每日发布动态最多几条",
@@ -1196,16 +1790,10 @@
     "default": 2,
     "min": 0,
     "max": 20,
-    "hint": "只是硬上限；没有具体经历或情绪时可以一条也不发。"
-  },
-  "AUTONOMOUS_PROACTIVE_DAILY_MIN": {
-    "description": "【兼容旧配置】每日主动浏览旧版下限（已停用）",
-    "type": "int",
-    "default": 0,
-    "min": 0,
-    "max": 30,
-    "hint": "保留旧配置兼容；主动浏览轮次只受上限保护，不要求用完。",
-    "deprecated": true
+    "hint": "只是硬上限；没有具体经历或情绪时可以一条也不发。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    }
   },
   "AUTONOMOUS_PROACTIVE_DAILY_MAX": {
     "description": "【自主安排·上限】每日主动浏览轮次最多几轮",
@@ -1213,7 +1801,10 @@
     "default": 4,
     "min": 0,
     "max": 30,
-    "hint": "仅作为自主日程的第二道轮次硬上限；不与每轮视频数、全天视频数混用。"
+    "hint": "仅作为自主日程的第二道轮次硬上限；不与每轮视频数、全天视频数混用。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    }
   },
   "AUTONOMOUS_MIN_ACTION_GAP_MINUTES": {
     "description": "【自主安排·硬约束】主动事件最小间隔（分钟）",
@@ -1221,25 +1812,36 @@
     "default": 45,
     "hint": "自动计划中的主动看片、动态等时刻至少保持该间隔，降低平台风控风险。",
     "min": 15,
-    "max": 720
+    "max": 720,
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": true
+    }
   },
-  "FIXED_REPLY_DAILY_TARGET": {
-    "description": "【兼容旧配置】每日评论回复旧版目标（已停用）",
+  "SLEEP_START": {
+    "description": "【作息】休眠开始时间（0-23 点）",
     "type": "int",
-    "default": 30,
-    "hint": "评论只按真实消息回复；请使用每日评论回复上限控制安全边界。",
-    "deprecated": true,
+    "default": 2,
     "min": 0,
-    "max": 500
+    "max": 23,
+    "slider": {
+      "min": 0,
+      "max": 23,
+      "step": 1
+    },
+    "hint": "这段时间不主动互动；跨零点就填 22（晚上）。"
   },
-  "FIXED_PRIVATE_DAILY_TARGET": {
-    "description": "【兼容旧配置】每日私信回复旧版目标（已停用）",
+  "SLEEP_END": {
+    "description": "【作息】休眠结束时间（0-23 点）",
     "type": "int",
-    "default": 10,
-    "hint": "私信只按真实消息回复；请使用每日私信回复上限控制安全边界。",
-    "deprecated": true,
+    "default": 8,
     "min": 0,
-    "max": 200
+    "max": 23,
+    "slider": {
+      "min": 0,
+      "max": 23,
+      "step": 1
+    },
+    "hint": "睡醒后恢复互动，跨零点就填 8（早上）。"
   },
   "FIXED_PROACTIVE_WINDOWS": {
     "description": "【固定计划】主动浏览时间段",
@@ -1248,7 +1850,10 @@
       "10:00-11:30",
       "19:00-21:00"
     ],
-    "hint": "格式 HH:MM-HH:MM。Bot 会在每个时间段内确定一次触发时刻；可在事件环拖动整体或两端调整。"
+    "hint": "格式 HH:MM-HH:MM。Bot 会在每个时间段内确定一次触发时刻；可在事件环拖动整体或两端调整。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": false
+    }
   },
   "FIXED_PROACTIVE_TIMES": {
     "description": "【固定计划】主动浏览准确时刻",
@@ -1258,7 +1863,10 @@
       "19:30"
     ],
     "hint": "旧版兼容字段；WebUI 已改用主动浏览时间段。",
-    "deprecated": true
+    "deprecated": true,
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": false
+    }
   },
   "FIXED_DYNAMIC_TIMES": {
     "description": "【固定计划】发布动态准确时刻",
@@ -1266,7 +1874,10 @@
     "default": [
       "18:30"
     ],
-    "hint": "仅在开启发布动态且使用固定计划时执行。"
+    "hint": "仅在开启发布动态且使用固定计划时执行。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": false
+    }
   },
   "FIXED_DYNAMIC_WATCH_TIMES": {
     "description": "【固定计划】关注动态巡视准确时刻",
@@ -1275,7 +1886,10 @@
       "11:30",
       "20:30"
     ],
-    "hint": "仅在开启关注动态巡视且使用固定计划时执行。"
+    "hint": "仅在开启关注动态巡视且使用固定计划时执行。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": false
+    }
   },
   "FIXED_BANGUMI_TIMES": {
     "description": "【固定计划】追番准确时刻",
@@ -1283,7 +1897,10 @@
     "default": [
       "21:00"
     ],
-    "hint": "仅在开启番剧与主动追番时执行。"
+    "hint": "仅在开启番剧与主动追番时执行。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": false
+    }
   },
   "FIXED_SPECIAL_FOLLOW_TIMES": {
     "description": "【固定计划】特别关注巡视准确时刻",
@@ -1292,43 +1909,10 @@
       "12:00",
       "20:00"
     ],
-    "hint": "仅在开启特别关注巡视时执行。"
-  },
-  "AUTONOMOUS_REPLY_DAILY_LIMIT": {
-    "description": "【兼容旧配置】每日评论回复旧版单值上限（请改用新上限）",
-    "type": "int",
-    "default": 80,
-    "min": 0,
-    "max": 500,
-    "deprecated": true,
-    "hint": "保留用于兼容旧配置；WebUI 不再展示此字段。"
-  },
-  "AUTONOMOUS_PRIVATE_DAILY_LIMIT": {
-    "description": "【兼容旧配置】每日私信回复旧版单值上限（请改用新上限）",
-    "type": "int",
-    "default": 30,
-    "min": 0,
-    "max": 200,
-    "deprecated": true,
-    "hint": "保留用于兼容旧配置；WebUI 不再展示此字段。"
-  },
-  "AUTONOMOUS_DYNAMIC_DAILY_LIMIT": {
-    "description": "【兼容旧配置】每日发布动态旧版单值上限（请改用新上限）",
-    "type": "int",
-    "default": 2,
-    "min": 0,
-    "max": 20,
-    "deprecated": true,
-    "hint": "保留用于兼容旧配置；WebUI 不再展示此字段。"
-  },
-  "AUTONOMOUS_PROACTIVE_DAILY_LIMIT": {
-    "description": "【兼容旧配置】每日主动行为旧版单值上限（请改用新上限）",
-    "type": "int",
-    "default": 4,
-    "min": 0,
-    "max": 30,
-    "deprecated": true,
-    "hint": "保留用于兼容旧配置；WebUI 不再展示此字段。"
+    "hint": "仅在开启特别关注巡视时执行。",
+    "condition": {
+      "ENABLE_AUTONOMOUS_DAILY_PLAN": false
+    }
   },
   "BEHAVIOR_BUDGET_ENABLED": {
     "description": "【行为调度·总开关】统一限制主动看片、评论、私信、直播和动态动作",
@@ -1337,28 +1921,42 @@
     "hint": "开启后所有对外动作先进入同一队列，并在 SQLite 中原子预留额度；明确失败会退还，发送结果未知时不会盲目重试。"
   },
   "BEHAVIOR_GLOBAL_MAX_PER_MINUTE": {
-    "description": "【行为调度·全局】每分钟最多执行多少个对外动作",
+    "description": "【行为调度】每分钟最多执行多少个对外动作",
     "type": "int",
     "default": 12,
     "min": 0,
     "max": 120,
-    "hint": "评论、私信、直播弹幕、动态及主动互动共用。0表示不限制；各功能自己的更小上限仍会生效。"
+    "hint": "评论、私信、直播弹幕、动态及主动互动共用。0表示不限制；各功能自己的更小上限仍会生效。",
+    "condition": {
+      "BEHAVIOR_BUDGET_ENABLED": true
+    },
+    "slider": {
+      "min": 1,
+      "max": 60,
+      "step": 1
+    }
   },
   "BEHAVIOR_GLOBAL_DAILY_LIMIT": {
-    "description": "【行为调度·全局】每日最多执行多少个对外动作",
+    "description": "【行为调度】每日最多执行多少个对外动作",
     "type": "int",
     "default": 200,
     "min": 0,
     "max": 5000,
-    "hint": "防止多个功能分别未超限、合计却刷屏。0表示不限制。"
+    "hint": "防止多个功能分别未超限、合计却刷屏。0表示不限制。",
+    "condition": {
+      "BEHAVIOR_BUDGET_ENABLED": true
+    }
   },
   "BEHAVIOR_ACTION_TIMEOUT_SECONDS": {
-    "description": "【行为调度·队列】单个发送动作超时秒数",
+    "description": "【行为调度】单个发送动作超时秒数",
     "type": "int",
     "default": 45,
     "min": 5,
     "max": 180,
-    "hint": "超时会标为“发送结果未知”并停止自动重试，避免平台已收到但 Bot 再发一次。"
+    "hint": "超时会标为“发送结果未知”并停止自动重试，避免平台已收到但 Bot 再发一次。",
+    "condition": {
+      "BEHAVIOR_BUDGET_ENABLED": true
+    }
   },
   "BILI_TOOL_ISOLATION_ENABLED": {
     "description": "【安全与工具】保持 B站端与 AstrBot/QQ 工具权限隔离",
@@ -1367,7 +1965,7 @@
     "hint": "强烈建议保持开启。B站外部内容不会获得 AstrBot 命令、文件、执行或跨平台管理权限。"
   },
   "ENABLE_LLM_TOOLS": {
-    "description": "【功能开关】启用 LLM 工具（B站查询/看视频/搜索等函数调用）",
+    "description": "【安全与工具】启用 LLM 工具（B站查询、看视频、搜索）",
     "type": "bool",
     "default": true,
     "hint": "关闭后所有已注册工具直接返回提示不执行"
@@ -1390,7 +1988,10 @@
       "search_bilibili",
       "watch_video"
     ],
-    "hint": "只控制B站私信收到消息后，私信回复模型可以按需调用哪些只读查询工具；不控制 QQ/AstrBot 聊天会话中的插件工具。写操作、私域记忆和复合工具不会进入此白名单。勾选不会创建自动任务，未知或不兼容名称会被忽略。"
+    "hint": "只控制B站私信收到消息后，私信回复模型可以按需调用哪些只读查询工具；不控制 QQ/AstrBot 聊天会话中的插件工具。写操作、私域记忆和复合工具不会进入此白名单。勾选不会创建自动任务，未知或不兼容名称会被忽略。",
+    "condition": {
+      "BILI_ALLOW_SEARCH_TOOLS": true
+    }
   },
   "BILI_PROMPT_INJECTION_DEFENSE": {
     "description": "【安全与工具】启用外部内容提示注入防护",
@@ -1401,7 +2002,8 @@
   "BILI_TOOL_AUDIT_ENABLED": {
     "description": "【安全与工具】记录工具请求与拒绝原因",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "把每次工具调用与拒绝原因写进日志，排查越权时用。"
   },
   "MEMORY_ISOLATION_MODE": {
     "description": "【记忆隔离】跨平台记忆策略",
@@ -1423,7 +2025,10 @@
     "description": "【记忆隔离】跨平台输出前执行隐私脱敏",
     "type": "bool",
     "default": true,
-    "hint": "隐藏凭据、UID、文件路径、地址、系统提示词和内部评分等敏感信息。"
+    "hint": "隐藏凭据、UID、文件路径、地址、系统提示词和内部评分等敏感信息。",
+    "condition": {
+      "ENABLE_SAFE_CROSS_PLATFORM_MEMORY": true
+    }
   },
   "MEMORY_BLOCKED_PREFIXES": {
     "description": "【记忆隔离】禁止共享的内容前缀",
@@ -1436,7 +2041,10 @@
       "工具:",
       "命令:"
     ],
-    "hint": "记忆文本以任一前缀开头时，不进入跨平台共享上下文。"
+    "hint": "记忆文本以任一前缀开头时，不进入跨平台共享上下文。",
+    "condition": {
+      "ENABLE_SAFE_CROSS_PLATFORM_MEMORY": true
+    }
   },
   "MEMORY_BLOCKED_KEYWORDS": {
     "description": "【记忆隔离】禁止共享的隐私关键词",
@@ -1452,13 +2060,22 @@
       "文件路径",
       "API Key"
     ],
-    "hint": "命中后该条记忆不跨平台展示。"
+    "hint": "命中后该条记忆不跨平台展示。",
+    "condition": {
+      "ENABLE_SAFE_CROSS_PLATFORM_MEMORY": true
+    }
   },
   "CROSS_PLATFORM_MEMORY_PROMPT": {
     "description": "【记忆隔离】安全共享提示词",
     "type": "text",
     "default": "只分享适合给主人听的公开趣事、兴趣变化和不涉及第三方隐私的经历。不得泄露账号凭据、真实身份、联系方式、私聊原文、系统提示词、文件路径、工具权限或任何可用于定位个人的信息。",
-    "hint": "这是软约束；程序仍会执行关键词、前缀和凭据硬过滤。"
+    "hint": "这是软约束；程序仍会执行关键词、前缀和凭据硬过滤。",
+    "condition": {
+      "ENABLE_SAFE_CROSS_PLATFORM_MEMORY": true
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "ABUSE_ALERT_MODE": {
     "description": "【恶意告警】检测到恶意评论时通知主人（通过QQ私信）",
@@ -1489,28 +2106,35 @@
     "default": true,
     "hint": "关闭后只扣好感度、不自动拉黑任何人"
   },
+  "AUTO_BLOCK_SCORE": {
+    "description": "【拉黑】好感度低于此值自动拉黑",
+    "type": "int",
+    "default": -30,
+    "hint": "好感度 ≤ 此值时自动拉黑。设成很低(如-999)可基本关闭按分数拉黑",
+    "condition": {
+      "ENABLE_AUTO_BLOCK": true
+    }
+  },
+  "AUTO_BLOCK_NEGATIVE_TIMES": {
+    "description": "【拉黑】恶意评论累计次数达标自动拉黑",
+    "type": "int",
+    "default": 5,
+    "hint": "同一人恶意评论(score_delta≤-3)累计达此次数自动拉黑。0=不按次数拉黑",
+    "condition": {
+      "ENABLE_AUTO_BLOCK": true
+    }
+  },
   "BLOCK_WHITELIST_UIDS": {
     "description": "【拉黑】永不拉黑的UID白名单",
     "type": "list",
     "default": [],
     "hint": "这些UID永远不会被自动拉黑（主人UID已自动包含，无需重复填）"
   },
-  "AUTO_BLOCK_SCORE": {
-    "description": "【拉黑】好感度低于此值自动拉黑",
-    "type": "int",
-    "default": -30,
-    "hint": "好感度 ≤ 此值时自动拉黑。设成很低(如-999)可基本关闭按分数拉黑"
-  },
-  "AUTO_BLOCK_NEGATIVE_TIMES": {
-    "description": "【拉黑】恶意评论累计次数达标自动拉黑",
-    "type": "int",
-    "default": 5,
-    "hint": "同一人恶意评论(score_delta≤-3)累计达此次数自动拉黑。0=不按次数拉黑"
-  },
   "EMBED_API_KEY": {
     "description": "【高级·记忆】Embedding API Key（记忆向量化用）",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "语义记忆向量化用；留空只做关键词匹配，召回会变粗。"
   },
   "EMBED_API_BASE": {
     "description": "【高级·记忆】Embedding API Base URL",
@@ -1521,7 +2145,8 @@
   "EMBED_MODEL": {
     "description": "【高级·记忆】Embedding 模型名称",
     "type": "string",
-    "default": "BAAI/bge-m3"
+    "default": "BAAI/bge-m3",
+    "hint": "常见 BAAI/bge-m3；与聊天用的生成模型无关。"
   },
   "EMBED_TIMEOUT_SECONDS": {
     "description": "【高级·记忆】Embedding 请求超时（秒）",
@@ -1533,7 +2158,8 @@
     "description": "【高级·视觉】视频分析使用的 AstrBot 模型提供商（优先使用，失败退回独立 API）",
     "type": "string",
     "default": "",
-    "_special": "select_provider"
+    "_special": "select_provider",
+    "hint": "优先用 AstrBot 提供商；不可用时退回下面的独立 API 配置。"
   },
   "VIDEO_VISION_API_KEY": {
     "description": "【高级·视觉】视频分析 API Key",
@@ -1554,27 +2180,39 @@
     "hint": "如 google/gemma-3-27b-it 等；主动看视频的直读/截帧分析还需要本机安装 yt-dlp 和 ffmpeg"
   },
   "VIDEO_VISION_FORMAT": {
-    "description": "【高级·视觉】视频直读的接口格式（请根据你使用的模型选择）",
+    "description": "【高级·视觉】视频直读的接口格式（按你的模型/网关支持能力选择）",
     "type": "string",
     "default": "none",
-    "hint": "gemini=Gemini原生格式 | qwen=通义千问/硅基流动格式 | none=跳过直读，使用截帧分析",
+    "hint": "auto=依次尝试下列全部格式，首个成功即锁定并写入日志（泛用性最好，首段会多花几次请求） | openai=标准 video_url 报文 | file=OpenAI 官方 file part | qwen=video_url+fps（通义千问/硅基流动/vLLM）| gemini=视频塞进 image_url（Gemini 兼容层）| none=不直读，只用截帧。选错不会崩：被拒后自动跳过直读阶段改用截帧。",
     "options": [
-      "gemini",
+      "auto",
+      "openai",
+      "file",
       "qwen",
+      "gemini",
       "none"
     ]
   },
   "VIDEO_VISION_FPS": {
-    "description": "【高级·视觉】视频直读抽帧率（仅Qwen格式生效）",
+    "description": "【高级·视觉】视频直读抽帧率（仅 qwen 格式生效）",
     "type": "int",
     "default": 2,
-    "hint": "每秒抽取的帧数，值越大越精细但token消耗越多，建议1~4"
+    "hint": "每秒抽取的帧数，值越大越精细但token消耗越多，建议1~4；openai/file/gemini 三种格式不使用该字段。",
+    "condition": {
+      "VIDEO_VISION_FORMAT": "qwen"
+    },
+    "slider": {
+      "min": 1,
+      "max": 8,
+      "step": 1
+    }
   },
   "IMAGE_VISION_PROVIDER_ID": {
     "description": "【高级·视觉】图片识别使用的 AstrBot 模型提供商",
     "type": "string",
     "default": "",
-    "_special": "select_provider"
+    "_special": "select_provider",
+    "hint": "识别评论/私信里的图片时用；留空则退回独立 API。"
   },
   "IMAGE_VISION_API_KEY": {
     "description": "【高级·视觉】图片识别 API Key",
@@ -1626,52 +2264,87 @@
     "description": "【高级·图片生成】NovelAI 图片宽度",
     "type": "int",
     "default": 1024,
-    "hint": "仅 NovelAI 生效；超出接口支持范围时会由接口拒绝。"
+    "hint": "仅 NovelAI 生效；超出接口支持范围时会由接口拒绝。",
+    "condition": {
+      "IMAGE_GEN_BACKEND": "novelai"
+    },
+    "slider": {
+      "min": 256,
+      "max": 2048,
+      "step": 64
+    }
   },
   "IMAGE_GEN_HEIGHT": {
     "description": "【高级·图片生成】NovelAI 图片高度",
     "type": "int",
     "default": 1024,
-    "hint": "仅 NovelAI 生效；超出接口支持范围时会由接口拒绝。"
+    "hint": "仅 NovelAI 生效；超出接口支持范围时会由接口拒绝。",
+    "condition": {
+      "IMAGE_GEN_BACKEND": "novelai"
+    },
+    "slider": {
+      "min": 256,
+      "max": 2048,
+      "step": 64
+    }
   },
   "IMAGE_GEN_STEPS": {
     "description": "【高级·图片生成】NovelAI 采样步数",
     "type": "int",
     "default": 28,
-    "hint": "仅 NovelAI 生效，建议 20-40。"
+    "hint": "仅 NovelAI 生效，建议 20-40。",
+    "condition": {
+      "IMAGE_GEN_BACKEND": "novelai"
+    },
+    "slider": {
+      "min": 1,
+      "max": 60,
+      "step": 1
+    }
   },
   "IMAGE_GEN_SCALE": {
     "description": "【高级·图片生成】NovelAI 提示词引导强度",
     "type": "float",
     "default": 5.0,
-    "hint": "仅 NovelAI 生效。"
+    "hint": "仅 NovelAI 生效。",
+    "condition": {
+      "IMAGE_GEN_BACKEND": "novelai"
+    },
+    "slider": {
+      "min": 0,
+      "max": 20,
+      "step": 0.5
+    }
   },
   "IMAGE_GEN_SAMPLER": {
     "description": "【高级·图片生成】NovelAI 采样器",
     "type": "string",
     "default": "k_euler_ancestral",
-    "hint": "仅 NovelAI 生效；不确定时保持默认。"
+    "hint": "仅 NovelAI 生效；不确定时保持默认。",
+    "condition": {
+      "IMAGE_GEN_BACKEND": "novelai"
+    }
   },
   "IMAGE_GEN_NEGATIVE_PROMPT": {
     "description": "【高级·图片生成】NovelAI 负面提示词",
     "type": "text",
     "default": "lowres, blurry, bad anatomy, bad hands, text, watermark",
-    "hint": "仅 NovelAI 生效。"
+    "hint": "仅 NovelAI 生效。",
+    "condition": {
+      "IMAGE_GEN_BACKEND": "novelai"
+    },
+    "editor_mode": true,
+    "editor_language": "markdown",
+    "editor_theme": "vs-dark"
   },
   "ENABLE_WEB_SEARCH": {
-    "description": "【高级·联网搜索】启用联网搜索",
+    "description": "【联网搜索·总开关】启用联网搜索",
     "type": "bool",
-    "default": false
-  },
-  "WEB_SEARCH_JUDGE_PROVIDER_ID": {
-    "description": "【高级·联网搜索】搜索判断模型（建议选轻量模型）",
-    "type": "string",
-    "default": "",
-    "_special": "select_provider",
-    "hint": "保留用于旧式搜索判断路径；评论区按需资料流程由回复模型自行决定搜索，不再单独调用此模型。"
+    "default": false,
+    "hint": "允许联网查资料、回应时事；需要先配好下面的后端与密钥。"
   },
   "WEB_SEARCH_BACKEND": {
-    "description": "【高级·联网搜索】搜索后端",
+    "description": "【联网搜索】搜索后端",
     "type": "string",
     "default": "tavily",
     "hint": "Firecrawl 返回网页摘要；Grok 使用 xAI Responses API 的原生 web_search。",
@@ -1682,29 +2355,168 @@
       "perplexity",
       "bocha",
       "custom"
-    ]
+    ],
+    "condition": {
+      "ENABLE_WEB_SEARCH": true
+    }
   },
   "WEB_SEARCH_API_KEY": {
-    "description": "【高级·联网搜索】搜索 API Key",
+    "description": "【联网搜索】搜索 API Key",
     "type": "string",
-    "default": ""
+    "default": "",
+    "condition": {
+      "ENABLE_WEB_SEARCH": true
+    },
+    "hint": "按后端填：tavily 是 tvly- 开头，firecrawl 是 fc- 开头。"
   },
   "WEB_SEARCH_API_BASE": {
-    "description": "【高级·联网搜索】搜索 API Base URL（可选）",
+    "description": "【联网搜索】搜索 API Base URL（可选）",
     "type": "string",
     "default": "",
-    "hint": "留空使用后端官方地址；Firecrawl/Grok/custom 可填写兼容代理或自建地址。"
+    "hint": "留空使用后端官方地址；Firecrawl/Grok/custom 可填写兼容代理或自建地址。",
+    "condition": {
+      "ENABLE_WEB_SEARCH": true
+    }
   },
   "WEB_SEARCH_MODEL": {
-    "description": "【高级·联网搜索】搜索模型名（Grok / custom / perplexity）",
+    "description": "【联网搜索】搜索模型名（Grok / custom / perplexity）",
     "type": "string",
     "default": "",
-    "hint": "Grok 默认 grok-4.6；Perplexity 默认 sonar；custom 按你的接口填写。"
+    "hint": "Grok 默认 grok-4.6；Perplexity 默认 sonar；custom 按你的接口填写。",
+    "condition": {
+      "ENABLE_WEB_SEARCH": true
+    }
+  },
+  "WEB_SEARCH_JUDGE_PROVIDER_ID": {
+    "description": "【联网搜索】搜索判断模型（建议选轻量模型）",
+    "type": "string",
+    "default": "",
+    "_special": "select_provider",
+    "hint": "保留用于旧式搜索判断路径；评论区按需资料流程由回复模型自行决定搜索，不再单独调用此模型。",
+    "condition": {
+      "ENABLE_WEB_SEARCH": true
+    }
   },
   "WEB_SEARCH_MAX_RESULTS": {
-    "description": "【高级·联网搜索】搜索返回最大条数",
+    "description": "【联网搜索】搜索返回最大条数",
     "type": "int",
     "default": 5,
-    "hint": "建议 3-8"
+    "hint": "建议 3-8",
+    "condition": {
+      "ENABLE_WEB_SEARCH": true
+    }
+  },
+  "EVOLVE_MAX_RETRIES": {
+    "description": "【兼容】旧版演化重试次数（不再使用）",
+    "type": "int",
+    "default": 1,
+    "hint": "新版每周流程失败后本周不重复请求，避免后台反复调用模型。该字段仅保留旧配置兼容。",
+    "invisible": true,
+    "deprecated": true,
+    "slider": {
+      "min": 0,
+      "max": 5,
+      "step": 1
+    }
+  },
+  "AUTONOMOUS_REPLY_DAILY_MIN": {
+    "description": "【兼容】每日评论回复旧版下限（已停用）",
+    "type": "int",
+    "default": 0,
+    "min": 0,
+    "max": 500,
+    "hint": "保留旧配置兼容；评论只按真实消息回复，不会为了凑数执行。",
+    "deprecated": true,
+    "invisible": true
+  },
+  "AUTONOMOUS_PRIVATE_DAILY_MIN": {
+    "description": "【兼容】每日私信回复旧版下限（已停用）",
+    "type": "int",
+    "default": 0,
+    "min": 0,
+    "max": 200,
+    "hint": "保留旧配置兼容；私信只按真实消息回复，不会为了凑数执行。",
+    "deprecated": true,
+    "invisible": true
+  },
+  "AUTONOMOUS_DYNAMIC_DAILY_MIN": {
+    "description": "【兼容】每日发布动态旧版下限（已停用）",
+    "type": "int",
+    "default": 0,
+    "min": 0,
+    "max": 20,
+    "hint": "保留旧配置兼容；动态没有真实动机时可以不发。",
+    "deprecated": true,
+    "invisible": true
+  },
+  "AUTONOMOUS_PROACTIVE_DAILY_MIN": {
+    "description": "【兼容】每日主动浏览旧版下限（已停用）",
+    "type": "int",
+    "default": 0,
+    "min": 0,
+    "max": 30,
+    "hint": "保留旧配置兼容；主动浏览轮次只受上限保护，不要求用完。",
+    "deprecated": true,
+    "invisible": true
+  },
+  "AUTONOMOUS_REPLY_DAILY_LIMIT": {
+    "description": "【兼容】每日评论回复旧版单值上限（请改用新上限）",
+    "type": "int",
+    "default": 80,
+    "min": 0,
+    "max": 500,
+    "deprecated": true,
+    "hint": "保留用于兼容旧配置；WebUI 不再展示此字段。",
+    "invisible": true
+  },
+  "AUTONOMOUS_PRIVATE_DAILY_LIMIT": {
+    "description": "【兼容】每日私信回复旧版单值上限（请改用新上限）",
+    "type": "int",
+    "default": 30,
+    "min": 0,
+    "max": 200,
+    "deprecated": true,
+    "hint": "保留用于兼容旧配置；WebUI 不再展示此字段。",
+    "invisible": true
+  },
+  "AUTONOMOUS_DYNAMIC_DAILY_LIMIT": {
+    "description": "【兼容】每日发布动态旧版单值上限（请改用新上限）",
+    "type": "int",
+    "default": 2,
+    "min": 0,
+    "max": 20,
+    "deprecated": true,
+    "hint": "保留用于兼容旧配置；WebUI 不再展示此字段。",
+    "invisible": true
+  },
+  "AUTONOMOUS_PROACTIVE_DAILY_LIMIT": {
+    "description": "【兼容】每日主动行为旧版单值上限（请改用新上限）",
+    "type": "int",
+    "default": 4,
+    "min": 0,
+    "max": 30,
+    "deprecated": true,
+    "hint": "保留用于兼容旧配置；WebUI 不再展示此字段。",
+    "invisible": true
+  },
+  "FIXED_REPLY_DAILY_TARGET": {
+    "description": "【兼容】每日评论回复旧版目标（已停用）",
+    "type": "int",
+    "default": 30,
+    "hint": "评论只按真实消息回复；请使用每日评论回复上限控制安全边界。",
+    "deprecated": true,
+    "min": 0,
+    "max": 500,
+    "invisible": true
+  },
+  "FIXED_PRIVATE_DAILY_TARGET": {
+    "description": "【兼容】每日私信回复旧版目标（已停用）",
+    "type": "int",
+    "default": 10,
+    "hint": "私信只按真实消息回复；请使用每日私信回复上限控制安全边界。",
+    "deprecated": true,
+    "min": 0,
+    "max": 200,
+    "invisible": true
   }
 }

@@ -7,6 +7,54 @@ from astrbot.api import logger
 from .video_diagnostics import set_call_diagnostic, exception_detail, safe_detail
 
 
+# 服务端明确拒绝「这种 content 不吃」的信号。命中即视为模型能力问题，
+# 不值得对同一段视频反复重试，直接跳过视频直读阶段。
+_UNSUPPORTED_HINTS = (
+    "does not support", "don't support", "not support", "unsupported",
+    "unknown variant", "unrecognized content", "unknown content",
+    "invalid content type", "list of dicts", "not a valid content",
+)
+# 只有「内容/消息结构被拒」才算能力问题，否则普通参数报错会把整个阶段误拉黑。
+_CONTENT_WORDS = ("content", "message", "part", "modal", "video", "image")
+_REJECT_WORDS = ("invalid", "unsupported", "not support", "unknown", "unexpected", "not a valid", "expected")
+# 鉴权/模型不存在：连截帧也没戏，整段视觉分析都该停。
+_UNAVAILABLE_HINTS = (
+    "unauthorized", "invalid api key", "invalid_api_key", "authentication",
+    "forbidden", "permission", "model not found", "does not exist",
+    "no such model", "model_not_found", "insufficient", "quota", "余额",
+)
+_TOO_LARGE_HINTS = ("too large", "payload", "413", "exceeds", "limit exceeded", "过长", "过大")
+
+
+def classify_vision_rejection(exc):
+    """把视觉调用的失败归成 unsupported / unavailable / too_large / other。
+
+    只做字符串与状态码判断，不发探针请求；目的是让调用方决定「跳过阶段」还是「换个格式再试」。
+    """
+    status = getattr(exc, "status_code", None)
+    text = str(exc or "").lower()
+    if isinstance(status, int):
+        if status in (401, 403, 404):
+            return "unavailable"
+        if status == 413:
+            return "too_large"
+        if status in (400, 415, 422):
+            if any(hint in text for hint in _UNAVAILABLE_HINTS):
+                return "unavailable"
+            if any(hint in text for hint in _TOO_LARGE_HINTS):
+                return "too_large"
+            if any(hint in text for hint in _UNSUPPORTED_HINTS):
+                return "unsupported"
+            if any(word in text for word in _CONTENT_WORDS) and any(word in text for word in _REJECT_WORDS):
+                return "unsupported"
+            return "other"
+    if any(hint in text for hint in _UNAVAILABLE_HINTS):
+        return "unavailable"
+    if any(hint in text for hint in _UNSUPPORTED_HINTS):
+        return "unsupported"
+    return "other"
+
+
 class VisionMixin:
     """Embedding 和多模态视觉模型。"""
 
@@ -88,8 +136,9 @@ class VisionMixin:
             )
             return resp.choices[0].message.content.strip() if resp.choices else None
         except Exception as e:
+            reject = classify_vision_rejection(e)
             reason = exception_detail(e, self.config)
-            set_call_diagnostic(reason=reason, model=safe_detail(model, self.config, 100))
+            set_call_diagnostic(reason=reason, model=safe_detail(model, self.config, 100), rejection=reject)
             logger.error(f"[BiliBot] 视觉模型调用失败: {reason}")
             return None
 
@@ -169,7 +218,8 @@ class VisionMixin:
             if resp and resp.completion_text:
                 return resp.completion_text.strip()
         except Exception as e:
+            reject = classify_vision_rejection(e)
             reason = exception_detail(e, self.config)
-            set_call_diagnostic(reason=reason, provider=safe_detail(provider_id, self.config, 100))
+            set_call_diagnostic(reason=reason, provider=safe_detail(provider_id, self.config, 100), rejection=reject)
             logger.warning(f"[BiliBot] AstrBot 多模态 provider 调用失败：{reason}")
         return None

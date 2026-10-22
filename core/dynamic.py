@@ -28,7 +28,7 @@ from .content_protocol import (
 class DynamicMixin:
     """B站动态发布。"""
 
-    async def _queue_dynamic_post(self, text, handler):
+    async def _queue_dynamic_post(self, text, handler, *, with_outcome=False):
         digest = hashlib.sha256(str(text).encode("utf-8")).hexdigest()[:20]
         date_key = datetime.now().strftime("%Y-%m-%d")
         outcome = await self.event_runtime.execute(
@@ -46,7 +46,7 @@ class DynamicMixin:
             logger.info(f"[BiliBot] 📢 统一行为预算已满，跳过动态：{outcome.reason}")
         elif not outcome.success and outcome.state == "unknown":
             logger.warning("[BiliBot] 动态发布结果未知，不会自动重发")
-        return outcome.success
+        return outcome if with_outcome else outcome.success
 
     def _get_image_gen_config(self):
         backend = str(self.config.get("IMAGE_GEN_BACKEND", "") or "openai").lower().strip()
@@ -227,11 +227,16 @@ class DynamicMixin:
         for item in reversed(history):
             if not isinstance(item, dict):
                 continue
+            # 周报/日报是固定投递，不占用普通动态的最短间隔。
+            if item.get("weekly") or item.get("daily_summary"):
+                continue
             try:
                 posted = datetime.strptime(str(item.get("time", ""))[:10], "%Y-%m-%d").date()
             except ValueError:
                 continue
-            if (today - posted).days < days:
+            elapsed = (today - posted).days
+            # 未来日期（改时区或手改日志）不能让动态永久停摆。
+            if 0 <= elapsed < days:
                 return False
         return True
 
@@ -257,7 +262,12 @@ class DynamicMixin:
                 continue
             if str(item.get("source", "")).lower() in {"qq", "private", "private_message", "bilibili_private"} or item.get("privacy"):
                 continue
-            if str(item.get("time", "")) < cutoff or item.get("rpid") == "dynamic":
+            if str(item.get("time", "")) < cutoff:
+                continue
+            # 动态记忆的 rpid 是 dynamic_<ts>，thread_id 才是 "dynamic"；
+            # 只比较 rpid == "dynamic" 会让刚发过的动态重新变成素材。
+            if (str(item.get("thread_id") or "").strip() == "dynamic"
+                    or str(item.get("rpid") or "").startswith("dynamic_")):
                 continue
             text = str(item.get("text") or "").strip()[:220]
             if text:
@@ -348,27 +358,51 @@ B站动态的感觉：
             return None
 
     async def _run_dynamic(self, human_initiated=False):
-        try:
-            await self._run_dynamic_inner(human_initiated=human_initiated)
-        except asyncio.CancelledError:
-            logger.info("[BiliBot] 动态发布任务被取消")
-        except Exception as e:
-            logger.error(f"[BiliBot] 动态发布任务异常退出: {e}\n{traceback.format_exc()}")
+        lock = getattr(self, "_dynamic_run_lock", None)
+        if lock is None:
+            lock = self._dynamic_run_lock = asyncio.Lock()
+        if lock.locked():
+            logger.info("[BiliBot] 📢 已有动态发布流程在进行，本次跳过")
+            return False
+        async with lock:
+            try:
+                await self._run_dynamic_inner(human_initiated=human_initiated)
+            except asyncio.CancelledError:
+                logger.info("[BiliBot] 动态发布任务被取消")
+            except Exception as e:
+                logger.error(f"[BiliBot] 动态发布任务异常退出: {e}\n{traceback.format_exc()}")
+        return True
 
     async def _run_dynamic_inner(self, human_initiated=False):
         logger.info("[BiliBot] 📢 开始发布动态...")
         log = self._load_json(DYNAMIC_LOG_FILE, [])
         today = datetime.now().strftime("%Y-%m-%d")
-        today_posts = [l for l in log if l.get("time", "").startswith(today)]
-        max_daily = max(0, int(self.config.get("DYNAMIC_DAILY_COUNT", 1)))
-        autonomous_limit = self._autonomous_limit_max("dynamic") if hasattr(self, "_autonomous_limit_max") else max(0, int(self.config.get("AUTONOMOUS_DYNAMIC_DAILY_LIMIT", max_daily) or 0))
-        if autonomous_limit:
-            max_daily = min(max_daily, autonomous_limit) if max_daily else autonomous_limit
+        # 与 _dynamic_post_due 口径一致：周报/日报是固定投递，既不占最短间隔，也不占每日条数。
+        today_posts = [item for item in log if isinstance(item, dict)
+                       and str(item.get("time", "")).startswith(today)
+                       and not item.get("weekly") and not item.get("daily_summary")]
+
+        def _limit(key, default):
+            try:
+                return max(0, int(self.config.get(key, default) or 0))
+            except (TypeError, ValueError):
+                return max(0, int(default))
+
+        # 0 与空值表示该项不设限，与 behavior_budget 的规则保持一致；
+        # 真正的硬上限由其他非零项和统一行为预算共同约束。
+        limits = [
+            value for value in (
+                _limit("DYNAMIC_DAILY_COUNT", 1),
+                self._autonomous_limit_max("dynamic") if hasattr(self, "_autonomous_limit_max") else _limit("AUTONOMOUS_DYNAMIC_DAILY_LIMIT", 2),
+            ) if value > 0
+        ]
         plan = self._autonomous_plan_for_today() if hasattr(self, "_autonomous_plan_for_today") else {}
         if plan and not human_initiated:
-            max_daily = min(max_daily, len(plan.get("dynamic_times", [])))
-        if len(today_posts) >= max_daily:
-            logger.info(f"[BiliBot] 今天已发 {len(today_posts)} 条动态，跳过")
+            plan_limit = len(plan.get("dynamic_times", []))
+            if plan_limit:
+                limits.append(plan_limit)
+        if limits and len(today_posts) >= min(limits):
+            logger.info(f"[BiliBot] 今天已发 {len(today_posts)} 条动态（上限 {min(limits)}），跳过")
             return
         if not human_initiated and not self._dynamic_post_due(log):
             logger.info("[BiliBot] 尚未到自动动态发布间隔，跳过")
@@ -390,15 +424,22 @@ B站动态的感觉：
         logger.info(f"[BiliBot] 📝 文案：{text[:50]}...")
         logger.info(f"[BiliBot] 🖼️ 需要图片：{need_image}")
         success = False
+        image_sent = False
         if need_image and image_prompt:
             logger.info(f"[BiliBot] 🎨 生图提示：{image_prompt[:50]}...")
             local_path = await self._generate_image(image_prompt, human_initiated=human_initiated)
             if local_path:
                 img_info = await self._upload_image_to_bilibili(local_path)
                 if img_info:
-                    success = await self._queue_dynamic_post(
-                        text, lambda: self._post_dynamic_with_image(text, img_info)
+                    # 带图接口失败时会在内部降级为纯文字，这里记录真实结果。
+                    image_state = {"sent": False}
+                    outcome = await self._queue_dynamic_post(
+                        text,
+                        lambda: self._post_dynamic_with_image(text, img_info, image_state),
+                        with_outcome=True,
                     )
+                    success = outcome.success
+                    image_sent = bool(outcome.success and image_state.get("sent"))
                 else:
                     success = await self._queue_dynamic_post(
                         text, lambda: self._post_dynamic_text(text)
@@ -416,7 +457,8 @@ B站动态的感觉：
                 text, lambda: self._post_dynamic_text(text)
             )
         if success:
-            log.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "text": text, "has_image": need_image and bool(image_prompt), "image_prompt": image_prompt if need_image else ""})
+            log.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "text": text,
+                        "has_image": image_sent, "image_prompt": image_prompt if image_sent else ""})
             self._save_json(DYNAMIC_LOG_FILE, log[-100:])
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
             short_text = text[:60] if len(text) > 60 else text
