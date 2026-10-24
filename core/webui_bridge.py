@@ -159,6 +159,7 @@ def register_webui(plugin_instance: Any, context: Context):
         ("history/detail", "GET", handle_get_history_detail, "BiliBot watch history detail"),
         ("selftest", "GET", handle_selftest, "BiliBot self check"),
         ("trial", "POST", handle_run_trial, "BiliBot dry run (no writes)"),
+        ("usage/stats", "GET", handle_usage_stats, "BiliBot token usage ledger"),
     ]
     for endpoint, method, handler, description in routes:
         route = f"/{PLUGIN_NAME}/{endpoint}"
@@ -1247,3 +1248,22 @@ async def handle_run_trial(plugin: Any):
     except Exception as exc:
         logger.warning(f"[BiliBot WebUI] trial failed: {exc}")
         return _failure(f"试运行失败: {exc}", 500)
+
+
+# ── 用量台账 ──
+
+
+async def handle_usage_stats(plugin: Any):
+    """按天/按用途/按模型聚合的 token 用量；顺带暴露今日预算使用率。"""
+    try:
+        from .usage import collect
+
+        days = _query_int("days", 1)
+        try:
+            budget = int(plugin.config.get("MEDIA_TOKEN_BUDGET_DAILY", 50000) or 0)
+        except Exception:
+            budget = 0
+        return _response(collect(plugin, days=max(1, min(30, days)), budget=budget))
+    except Exception as exc:
+        logger.warning(f"[BiliBot WebUI] usage stats failed: {exc}")
+        return _failure(f"读取用量失败: {exc}", 500)

@@ -35,10 +35,10 @@ class LLMMixin:
         model = str(self.config.get(f"{prefix}_MODEL", "") or "").strip()
         if provider and provider.lower() != "default":
             return await self._llm_call(prompt, system_prompt=system_prompt,
-                                        max_tokens=max_tokens, provider_id=provider, _circuit=self._task_llm_circuit(prefix))
+                                        max_tokens=max_tokens, provider_id=provider, _circuit=self._task_llm_circuit(prefix), _purpose=prefix)
         if not api_key:
             return await self._llm_call(prompt, system_prompt=system_prompt,
-                                        max_tokens=max_tokens)
+                                        max_tokens=max_tokens, _purpose=prefix)
         if not model:
             self._last_llm_error = f"{prefix} 独立 API 未填写模型名"
             set_call_diagnostic(reason=self._last_llm_error, route="independent_api", purpose=prefix)
@@ -71,6 +71,7 @@ class LLMMixin:
                 raise ValueError("模型返回空内容")
             self._last_llm_error = ""
             await circuit._record_llm_success(mode)
+            _record_openai_usage(self, prefix, model, response)
             return text
         except asyncio.CancelledError:
             if mode == "probe":
@@ -237,7 +238,7 @@ class LLMMixin:
         async with self._llm_circuit_lock_obj():
             self._llm_circuit_half_open = False
 
-    async def _llm_call(self, prompt, system_prompt="", max_tokens=300, provider_id=None, *, _circuit=None):
+    async def _llm_call(self, prompt, system_prompt="", max_tokens=300, provider_id=None, *, _circuit=None, _purpose="chat"):
         self._last_llm_error = ""
         set_call_diagnostic()
         circuit = _circuit if _circuit is not None else self
@@ -270,6 +271,7 @@ class LLMMixin:
                 await circuit._record_llm_failure(circuit_mode, reason)
                 return None
             await circuit._record_llm_success(circuit_mode)
+            _record_provider_usage(self, _purpose, pid, resp)
             return text
         except asyncio.CancelledError:
             # 被取消的探测既不算成功也不算失败；复位半开标志，
@@ -297,3 +299,45 @@ class LLMMixin:
         if base_prompt and addon:
             return f"{base_prompt}\n\n【B站活动附加设定】\n{addon}"
         return base_prompt or addon or "你是一个活跃在B站的角色，会回复评论、看视频、发动态。用自然的口语化风格交流。"
+
+
+def _record_provider_usage(plugin, purpose, model, resp):
+    """AstrBot provider 返回的 TokenUsage 有三段，分别记账。"""
+    usage = getattr(resp, "usage", None)
+    if usage is None:
+        return
+    try:
+        from .usage import record
+
+        record(
+            plugin,
+            purpose=purpose,
+            model=model,
+            input_other=getattr(usage, "input_other", 0),
+            input_cached=getattr(usage, "input_cached", 0),
+            output=getattr(usage, "output", 0),
+        )
+    except Exception:
+        pass
+
+
+def _record_openai_usage(plugin, purpose, model, response):
+    """独立 API 走 OpenAI SDK，usage 是 CompletionUsage（含 cached_tokens）。"""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    cached = getattr(getattr(usage, "prompt_tokens_details", None), "cached_tokens", 0) or 0
+    total_in = int(getattr(usage, "prompt_tokens", 0) or 0)
+    try:
+        from .usage import record
+
+        record(
+            plugin,
+            purpose=purpose,
+            model=model,
+            input_other=max(0, total_in - int(cached)),
+            input_cached=int(cached),
+            output=int(getattr(usage, "completion_tokens", 0) or 0),
+        )
+    except Exception:
+        pass

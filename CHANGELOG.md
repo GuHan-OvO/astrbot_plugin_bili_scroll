@@ -3,6 +3,30 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 已清空，不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v1.8.2 — 2026-10-25
+
+> 1.8.1 未单独发布，WebUI 整体重构与用量台账合并进本版。
+
+### 用量与成本台账（后端）
+
+- 新增 `core/usage.py`：把每次模型调用的 token 记进 `usage_log.jsonl`（按天裁剪 30 天），
+  可按天 / 按用途 / 按模型聚合，并给出今日预算使用率。
+- `core/llm.py` 三处埋点：AstrBot provider 走 `TokenUsage`（未缓存输入 / 缓存输入 / 输出三段，
+  缓存输入单独记，因为它单价低一个量级）；独立 OpenAI 兼容 API 走 `CompletionUsage`
+  （含 `prompt_tokens_details.cached_tokens`）。用途名随 `SUMMARY` / `GENERATION` 等分开记账。
+- 新增只读路由 `GET usage/stats?days=1`：窗口汇总、今日、按用途、按模型、每日明细、预算使用率。
+- 记账永不抛异常：盘满、只读、半行 JSON 都只跳过，绝不影响业务。
+
+### WebUI 整体重构（前端）
+
+样式层重建为 `pages/bilibot/design/`（tokens / base / shell / components / pages / studio / motion
+＋ 第二轮 motion-pro），外壳改为悬浮玻璃侧边栏 + 粘性顶栏 + 内容列；深浅色、页面分层转场、
+指针光照、滚动叙事、浮层景深。旧 `styles.css` / `creator.css` / `theme.css` 删除。
+
+### 已知限制
+
+- 媒体理解模块（`core/media/understanding.py`）**尚未接入主流程**（全仓无实例化点），
+  所以没有它的「缓存命中率」可讲；用量台账只覆盖真正在跑的模型调用。
 ## v1.8.0 — 2026-10-24
 
 ### 新增
