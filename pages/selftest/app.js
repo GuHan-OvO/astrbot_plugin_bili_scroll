@@ -15,6 +15,12 @@ const el = {
   dataList: document.getElementById("data-list"),
   routeList: document.getElementById("route-list"),
   pageList: document.getElementById("page-list"),
+  trial: document.getElementById("trial"),
+  trialCard: document.getElementById("card-trial"),
+  trialNote: document.getElementById("trial-note"),
+  trialCookie: document.getElementById("trial-cookie"),
+  trialCandidates: document.getElementById("trial-candidates"),
+  trialPlan: document.getElementById("trial-plan"),
 };
 
 function unwrap(result) {
@@ -23,6 +29,12 @@ function unwrap(result) {
   }
   if (result && result.status === "error") throw new Error(result.message || "请求失败");
   return result?.data ?? result ?? {};
+}
+
+async function apiPost(path, body = {}) {
+  if (!bridge) throw new Error("这个页面需要在 AstrBot 里打开（缺少插件页面桥）");
+  if (typeof bridge.apiPost !== "function") throw new Error("当前页面桥不支持 POST");
+  return unwrap(await bridge.apiPost(path, body));
 }
 
 async function apiGet(path, query = {}) {
@@ -123,6 +135,83 @@ function renderRoutes(routes, pages) {
   }
 }
 
+
+function renderTrial(data) {
+  el.trialCard.hidden = false;
+
+  const ms = data.elapsed_ms;
+  el.trialNote.textContent =
+    `耗时 ${ms} ms · 取到 ${data.candidate_total ?? 0} 个候选 · 没有发出任何写请求`;
+
+  clear(el.trialCookie);
+  const cookie = data.cookie || {};
+  addRow(
+    el.trialCookie,
+    "登录态",
+    cookie.detail || "—",
+    cookie.ok ? "ok-text" : "bad-text"
+  );
+
+  clear(el.trialCandidates);
+  const list = data.candidates || [];
+  if (!list.length) {
+    el.trialCandidates.appendChild(node("li", "hint", "没有取到候选（检查视频池配置或网络）"));
+  }
+  for (const item of list) {
+    const li = node("li");
+    li.appendChild(node("span", `dot ${item.source ? "ok" : ""}`));
+    const body = node("div");
+    body.appendChild(node("span", "name", item.title || item.bvid));
+    const meta = [item.up_name, item.tname, item.play && `${item.play} 播放`, item.source]
+      .filter(Boolean)
+      .join(" · ");
+    body.appendChild(node("span", "hint", `　${meta}`));
+    li.appendChild(body);
+    el.trialCandidates.appendChild(li);
+  }
+
+  clear(el.trialPlan);
+  const plan = data.plan || {};
+  const actions = plan.actions || [];
+  if (!plan.proactive_enabled) {
+    const li = node("li");
+    li.appendChild(node("span", "dot bad"));
+    li.appendChild(node("span", "hint", "ENABLE_PROACTIVE 关着，正式跑也不会启动"));
+    el.trialPlan.appendChild(li);
+  }
+  for (const action of actions) {
+    const li = node("li");
+    li.appendChild(node("span", `dot ${action.enabled ? "ok" : ""}`));
+    li.appendChild(
+      node(
+        "span",
+        "hint",
+        action.enabled
+          ? `${action.action}：评分 ≥ ${action.threshold}`
+          : `${action.action}：已关闭`
+      )
+    );
+    el.trialPlan.appendChild(li);
+  }
+  el.trialPlan.appendChild(node("li", "hint", plan.note || ""));
+}
+
+async function runTrial() {
+  el.trial.disabled = true;
+  el.error.hidden = true;
+  el.trialCard.hidden = false;
+  el.trialNote.textContent = "正在取片…（不会互动）";
+  try {
+    renderTrial(await apiPost("trial"));
+  } catch (err) {
+    el.trialCard.hidden = true;
+    el.error.hidden = false;
+    el.error.textContent = `试运行失败：${err?.message || err}`;
+  } finally {
+    el.trial.disabled = false;
+  }
+}
+
 async function load() {
   el.reload.disabled = true;
   el.error.hidden = true;
@@ -148,6 +237,7 @@ async function load() {
 }
 
 el.reload.addEventListener("click", load);
+el.trial.addEventListener("click", runTrial);
 
 if (bridge?.ready) {
   Promise.resolve(bridge.ready()).then(load).catch(() => load());

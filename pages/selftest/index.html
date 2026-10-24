@@ -12,6 +12,7 @@
     <p class="sub">看这个插件现在到底能不能跑。只读，不会发任何 B站 请求。</p>
     <div class="actions">
       <button id="reload" type="button">重新检查</button>
+      <button id="trial" type="button" class="primary">试运行</button>
       <span id="stamp" class="stamp"></span>
     </div>
   </header>
@@ -45,6 +46,16 @@
       <ul id="page-list" class="checks"></ul>
     </section>
   </main>
+
+  <section class="card wide" id="card-trial" hidden>
+    <h2>试运行</h2>
+    <p class="note" id="trial-note"></p>
+    <dl id="trial-cookie"></dl>
+    <h3>候选</h3>
+    <ul id="trial-candidates" class="checks"></ul>
+    <h3>正式跑会做什么</h3>
+    <ul id="trial-plan" class="checks"></ul>
+  </section>
 
   <script type="module" src="./app.js"></script>
 </body>

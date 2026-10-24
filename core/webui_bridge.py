@@ -149,6 +149,7 @@ def register_webui(plugin_instance: Any, context: Context):
         ("history", "GET", handle_get_history, "BiliBot watch history list"),
         ("history/detail", "GET", handle_get_history_detail, "BiliBot watch history detail"),
         ("selftest", "GET", handle_selftest, "BiliBot self check"),
+        ("trial", "POST", handle_run_trial, "BiliBot dry run (no writes)"),
     ]
     for endpoint, method, handler, description in routes:
         route = f"/{PLUGIN_NAME}/{endpoint}"
@@ -1226,3 +1227,14 @@ async def handle_selftest(plugin: Any):
     except Exception as exc:
         logger.warning(f"[BiliBot WebUI] selftest failed: {exc}")
         return _failure(f"自检失败: {exc}", 500)
+
+
+async def handle_run_trial(plugin: Any):
+    """试运行：取片 + 预演，不发任何写请求、不写历史。"""
+    try:
+        from .trial import run_trial
+
+        return _response(await run_trial(plugin))
+    except Exception as exc:
+        logger.warning(f"[BiliBot WebUI] trial failed: {exc}")
+        return _failure(f"试运行失败: {exc}", 500)

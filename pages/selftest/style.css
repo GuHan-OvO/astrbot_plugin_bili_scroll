@@ -58,6 +58,8 @@ button {
   cursor: pointer;
 }
 button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { filter: brightness(1.08); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
 .stamp { color: var(--muted); font-size: 12px; }
@@ -75,6 +77,8 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   border-radius: var(--radius);
 }
 .card h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
+.card h3 { margin: 14px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.card.wide { grid-column: 1 / -1; }
 
 dl {
   display: grid;
