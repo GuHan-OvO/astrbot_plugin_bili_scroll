@@ -8,3 +8,7 @@ data/
 # Local run reports are not publication artifacts.
 docs/*test-log*.md
 test-reports/
+
+# 本地备份文件
+*.bak
+*.bak-*

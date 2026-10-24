@@ -145,6 +145,14 @@ class UtilsMixin:
                         params=params,
                         timeout=aiohttp.ClientTimeout(total=timeout),
                     ) as r:
+                        if r.status == 412:
+                            # HTTP 412 是 B站 的风控页（返回 HTML 而非 JSON）。
+                            # 当成网络错误重试只会加重限流，所以这里不抛、直接给可识别的错误码。
+                            self._wbi_keys_cache = None
+                            logger.warning(
+                                "[BiliBot] 请求被风控（HTTP 412），已清 WBI 缓存；这类错误要等一会儿再试"
+                            )
+                            return {"code": -412, "message": "HTTP 412 风控"}, r
                         d = await r.json(content_type=None)
                         if isinstance(d, dict) and d.get("code") == -352 and getattr(self, "_wbi_keys_cache", None):
                             # -352 通常意味着 wbi key 已轮换或签名失效，清缓存让下次请求重新拉取
@@ -170,6 +178,11 @@ class UtilsMixin:
                         data=data,
                         timeout=aiohttp.ClientTimeout(total=timeout),
                     ) as r:
+                        if r.status == 412:
+                            # 写操作遇到风控更不该重试：可能已经产生副作用。
+                            self._wbi_keys_cache = None
+                            logger.warning("[BiliBot] 写入请求被风控（HTTP 412），未重试")
+                            return {"code": -412, "message": "HTTP 412 风控"}, r
                         return await r.json(content_type=None), r
             except (aiohttp.ClientError, asyncio.TimeoutError, ConnectionResetError) as e:
                 last_err = e

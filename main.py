@@ -113,6 +113,10 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
         from .core.webui_bridge import register_webui
         register_webui(self, self.context)
 
+        # 对外只读门面：private_companion 7.0.0 的 provider 机制靠它发现本插件
+        from .core.extension_api import BiliBotExtensionApi
+        self.extension_api = BiliBotExtensionApi(self)
+
     async def initialize(self):
         """Start background work only after AstrBot has formally activated the plugin."""
         try:

@@ -1,3 +1,35 @@
+# 刷B站（astrbot_plugin_bilibili_ai_bot · 魔改版 v1.8.0）
+
+> 本仓库是 [chenluQwQ/astrbot_plugin_bilibili_ai_bot](https://github.com/chenluQwQ/astrbot_plugin_bilibili_ai_bot)
+> 的**个人魔改分支**。原版的评论回复、私信、直播弹幕、好感度、语义记忆全部保留；
+> 下面「上游原文档」一节之后的说明仍然适用。
+
+## 这个分支加了什么
+
+| 能力 | 说明 |
+|---|---|
+| **真 @ 提及** | 评论请求带 `at_name_to_mid`（`{"昵称": uid}` 的 JSON），B站 才会把正文里的 `@昵称` 解析成真实提及；纯文本 @ 不会通知对方。读回 `content.members` 有值即为成功 |
+| **评论复核** | 带 @ 的评论发出 90 秒后读回一次，确认真的可见；被折叠或被吞都记进 `comment_verify_log.json` |
+| **看过的视频（历史页）** | 新增 `pages/history`：封面卡片墙 + 分数/心情/来源/是否推荐过筛选 + 分页 + 详情抽屉 |
+| **三档详细程度** | `ANALYSIS_DEPTH`：只看字幕 / 省 token / 标准（等于原版行为）/ 看更细 / 自定义 |
+| **候选去重** | 同一 BV 只留播放量最高那份；标题高度相似的可选合并（默认关） |
+| **风控 412** | HTTP 412 不再当网络错误重试，直接清 WBI 缓存并给出可识别错误码 |
+| **先落账后互动** | 评分一出就先写 `watch_log`，后续互动失败也不会丢「看过什么」 |
+| **陪伴联动** | 开关 `PC_BRIDGE_ENABLE`：可用 private_companion 7.0.0 的人格生成一句话，并走她的通道投递 |
+
+## 与原版的关系
+
+- **不跟踪上游更新**：`metadata.yaml` 的 `repo` 已清空，插件市场/检查更新不会覆盖本分支的改动。
+- 想吸收上游新功能时挑提交手动合，不要整目录替换。
+
+## 许可
+
+原版 MIT，本分支沿用，保留原作者署名。
+
+---
+
+# 上游原文档
+
 # astrbot_plugin_bilibili_ai_bot
 
 B站 AI Bot 插件 for [AstrBot](https://github.com/AstrBotDevs/AstrBot) — 让你的 AI 角色在 B 站评论区”活”起来。

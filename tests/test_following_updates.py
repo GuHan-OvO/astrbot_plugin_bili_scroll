@@ -35,6 +35,7 @@ def _load_bilibili_module():
     config.BILI_RSA_PUBLIC_KEY = ""
     config.MIXIN_KEY_ENC_TAB = []
     config.USER_AGENT = "test"
+    config.VERIFY_LOG_FILE = "verify_log.json"
     sys.modules[config.__name__] = config
 
     module_name = f"{package_name}.bilibili"

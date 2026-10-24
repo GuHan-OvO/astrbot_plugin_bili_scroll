@@ -1,13 +1,20 @@
 name: astrbot_plugin_bilibili_ai_bot
-display_name: B站 AI Bot
-desc: B站评论/私信/直播弹幕自动回复、好感度系统、语义记忆、主动看视频、动态发布、联网查询
-version: 1.7.2
-author: chenluQwQ,claude
-repo: https://github.com/chenluQwQ/astrbot_plugin_bilibili_ai_bot
+display_name: 刷B站
+short_desc: 刷B站 + 真 @ 主人 + 看过的视频 + 陪伴联动
+desc: >-
+  基于 chenluQwQ 的 B站 AI Bot 魔改（v1.8.0）。每天自动刷 B站、读字幕与画面挑选值得看的，
+  在评论区用**真实的 @ 提及**（at_name_to_mid）叫主人，并把挑片历史做成可视化页面；
+  可借用 private_companion 的人格与通道推送。原版的评论回复、私信、直播弹幕、好感度、
+  语义记忆、动态发布、联网查询全部保留。
+version: 1.8.0
+author: chenluQwQ, claude, GuHan-OvO（魔改）
+repo: ""
 tags:
   - bilibili
   - B站
+  - 刷视频
+  - 真@提及
+  - 看过的视频
+  - 陪伴联动
   - 评论回复
   - 主动交互
-  - 直播弹幕
-  - 语义记忆

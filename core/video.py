@@ -10,6 +10,7 @@ from astrbot.api import logger
 from .network import download_proxy_args, redact_proxy_error
 from .video_inspection import VideoInspectionMixin
 from .config import VIDEO_MEMORY_FILE, TEMP_VIDEO_DIR, EXTERNAL_MEMORY_FILE
+from .analysis_depth import resolve as resolve_analysis_depth
 
 
 # 视频直读的报文形状。auto 会按 _AUTO_PROBE_ORDER 逐个探测，首个成功即锁定。
@@ -347,7 +348,8 @@ class VideoMixin(VideoInspectionMixin):
         )
         subtitle_section = ""
         if subtitle_text:
-            subtitle_section = f"\n候选字幕内容：{subtitle_text[:1500]}"
+            subtitle_limit = resolve_analysis_depth(self.config)["subtitle_chars"]
+            subtitle_section = f"\n候选字幕内容：{subtitle_text[:subtitle_limit]}"
         has_comments = "热门评论" in extra
         joint_hint = ""
         if subtitle_text or has_comments:
@@ -475,7 +477,11 @@ class VideoMixin(VideoInspectionMixin):
         return changed
 
     def _should_use_visual_video_analysis(self, joint):
-        return str(self.config.get("VIDEO_VISUAL_ANALYSIS_POLICY", "when_text_insufficient")) == "always" or not joint.get("subtitle")
+        # 档位决定看多细；never 是「只看字幕」档用的策略 —— 连没有字幕也不看画面
+        policy = resolve_analysis_depth(self.config)["visual_policy"]
+        if policy == "never":
+            return False
+        return policy == "always" or not joint.get("subtitle")
 
     # ── 视频分析 ──
     async def _analyze_video_with_vision(self, video_info):
@@ -530,7 +536,10 @@ class VideoMixin(VideoInspectionMixin):
         if media_result:
             video_info["analysis_basis"] = "video_media"
             merged = await self._merge_visual_and_joint(video_info, media_result, joint)
-            content = self._clip_media_text(merged or media_result, 1600)
+            content = self._clip_media_text(
+                merged or media_result,
+                resolve_analysis_depth(self.config)["result_chars"],
+            )
             if media_result.startswith("【仅分析部分") and not content.startswith("【仅分析部分"):
                 content = "【仅分析部分视频片段，不能确认全部内容】" + content
             return content

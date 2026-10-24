@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>刷B站 · 看过的视频</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="head">
+    <h1>看过的视频</h1>
+    <div id="stats" class="stats" aria-live="polite"></div>
+  </header>
+
+  <section class="filters" aria-label="筛选">
+    <label>分数
+      <input id="min-score" type="number" min="0" max="10" step="0.5" placeholder="最低" />
+      <span class="dash">–</span>
+      <input id="max-score" type="number" min="0" max="10" step="0.5" placeholder="最高" />
+    </label>
+    <label>心情
+      <select id="mood">
+        <option value="">全部</option>
+        <option>开心</option><option>平静</option><option>无聊</option>
+        <option>感动</option><option>好笑</option><option>震撼</option>
+        <option>困惑</option><option>未知</option>
+      </select>
+    </label>
+    <label>来源
+      <select id="source">
+        <option value="">全部</option>
+        <option value="search">搜索</option>
+        <option value="follow">关注</option>
+        <option value="pool">视频池</option>
+      </select>
+    </label>
+    <label>状态
+      <select id="state">
+        <option value="">全部</option>
+        <option value="recommended">推荐过</option>
+        <option value="not-recommended">没推荐</option>
+        <option value="failed">评价失败</option>
+      </select>
+    </label>
+    <label class="grow">搜索
+      <input id="q" type="search" placeholder="标题 / UP / 理由" />
+    </label>
+    <button id="reset" type="button" class="ghost">重置</button>
+  </section>
+
+  <main id="grid" class="grid" aria-live="polite"></main>
+  <p id="empty" class="empty" hidden>还没有看过的记录。等它跑完一轮就会出现。</p>
+  <p id="error" class="error" hidden></p>
+
+  <nav class="pager">
+    <button id="prev" type="button">上一页</button>
+    <span id="page-info" class="page-info"></span>
+    <button id="next" type="button">下一页</button>
+  </nav>
+
+  <aside id="drawer" class="drawer" hidden aria-label="详情"></aside>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

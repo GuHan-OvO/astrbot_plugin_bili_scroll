@@ -62,6 +62,12 @@
     "default": "",
     "hint": "用于当前活动同步和 QQ 推荐分享；在主人 QQ 私聊中执行 /biliUMO 可取得该值。"
   },
+  "PC_BRIDGE_ENABLE": {
+    "description": "【联动】借用陪伴插件的人格与通道发推荐",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后 QQ 推荐优先用 astrbot_plugin_private_companion 的口吻生成并投递，失败自动回退为本插件直发。需陪伴插件为 7.0.0 且已按 patches/README.md 接入。"
+  },
   "PROXY_URL": {
     "description": "【网络代理】插件自定义代理地址（可选）",
     "type": "string",
@@ -731,9 +737,10 @@
     "default": "when_text_insufficient",
     "options": [
       "when_text_insufficient",
-      "always"
+      "always",
+      "never"
     ],
-    "hint": "when_text_insufficient=优先标题、简介、字幕、标签和热评；信息不足时才下载截帧/直读。always=每次都尝试视觉分析，成本较高。"
+    "hint": "when_text_insufficient=优先标题、简介、字幕、标签和热评；信息不足时才下载截帧/直读。always=每次都尝试视觉分析，成本较高。never=完全不做视觉分析（「只看字幕」档用，没有字幕也不看画面）。"
   },
   "ENABLE_VIDEO_LONG_TERM_MEMORY": {
     "description": "【视频】启用分层长期记忆",
@@ -774,6 +781,52 @@
     "type": "int",
     "default": 10,
     "hint": "超长视频最多分析几段，超出部分跳过。建议不要超过 10 段，避免 token 和耗时过高。"
+  },
+  "ANALYSIS_DEPTH": {
+    "description": "【视频】看视频的详细程度",
+    "type": "string",
+    "default": "standard",
+    "options": ["subtitle_only", "lean", "standard", "deep", "custom"],
+    "labels": ["只看字幕", "省 token", "标准", "看更细", "自定义"],
+    "hint": "标准=与旧版行为完全一致。选其它档会覆盖视觉策略/分段数/帧数/预算/两处字数；要逐项调就选「自定义」。"
+  },
+  "ANALYSIS_SUBTITLE_CHARS": {
+    "description": "【视频】字幕最多送多少字",
+    "type": "int",
+    "default": 1500,
+    "min": 200,
+    "max": 20000,
+    "hint": "只影响送进提示词的字幕长度，不影响抓取。默认1500（旧版硬编码值）。仅「自定义」档生效。"
+  },
+  "ANALYSIS_RESULT_CHARS": {
+    "description": "【视频】分析结果最多进多少字",
+    "type": "int",
+    "default": 1600,
+    "min": 200,
+    "max": 8000,
+    "hint": "视频分析结论写入上下文时的截断长度。默认1600（旧版硬编码值）。仅「自定义」档生效。"
+  },
+  "MEDIA_MAX_FRAMES": {
+    "description": "【视频】采样帧数上限",
+    "type": "int",
+    "default": 8,
+    "min": 0,
+    "max": 64,
+    "hint": "视觉分析时最多抽多少帧。0=不抽帧。默认8。仅「自定义」档生效。"
+  },
+  "MEDIA_TOKEN_BUDGET_DAILY": {
+    "description": "【视频】每日媒体理解 token 上限",
+    "type": "int",
+    "default": 50000,
+    "min": 1000,
+    "max": 2000000,
+    "hint": "媒体理解每天最多花多少 token，超了就停止视觉分析。默认50000。仅「自定义」档生效。"
+  },
+  "DEDUPE_SIMILAR_TITLES": {
+    "description": "【视频】合并标题高度相似的候选",
+    "type": "bool",
+    "default": false,
+    "hint": "同一事件常被多个 UP 报道，开启后只保留其中最热的一条。默认关闭：有人更想看不同视角。阈值0.75偏保守，宁可漏合并也不误删。"
   },
   "ENABLE_PROACTIVE": {
     "description": "【主动看片·总开关】启用主动看视频与互动",

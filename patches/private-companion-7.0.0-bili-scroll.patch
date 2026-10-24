@@ -1,0 +1,16 @@
+--- a/astrbot_host/integration_catalog.py
++++ b/astrbot_host/integration_catalog.py
+@@ -15,6 +15,13 @@
+         "description": "仅显示旧版插件的运行状态，旧版资料与执行仍由原插件管理。",
+         "furniture": {"id": "legacy-core", "name": "陪伴核心台", "panel_id": "legacy-core"},
+     },
++    {
++        "plugin_id": "astrbot_plugin_bilibili_ai_bot",
++        "capability_id": "bili_scroll",
++        "label": "刷B站",
++        "description": "定时刷 B站、挑片、在评论区 @ 主人；执行仍由该插件自己完成。",
++        "furniture": {"id": "bili-scroll", "name": "B站电视台", "panel_id": "bili-scroll"},
++    },
+ )
+ 
+ BUNDLED_EXTENSIONS: tuple[dict[str, Any], ...] = (

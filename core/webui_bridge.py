@@ -36,7 +36,10 @@ from .config import (
     SECURITY_LOG_FILE,
     SPECIAL_FOLLOW_SCHEDULE_FILE,
     USER_PROFILE_FILE,
+    WATCH_LOG_FILE,
 )
+
+from .history import find_entry, query_history
 
 PLUGIN_NAME = "astrbot_plugin_bilibili_ai_bot"
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "_conf_schema.json"
@@ -143,6 +146,8 @@ def register_webui(plugin_instance: Any, context: Context):
         ("extensions/page", "GET", handle_extension_page, "Render one extension page schema"),
         ("extensions/action", "POST", handle_extension_action, "Dispatch one extension action"),
         ("extensions/refresh", "POST", handle_extension_refresh, "Refresh extension discovery"),
+        ("history", "GET", handle_get_history, "BiliBot watch history list"),
+        ("history/detail", "GET", handle_get_history_detail, "BiliBot watch history detail"),
     ]
     for endpoint, method, handler, description in routes:
         route = f"/{PLUGIN_NAME}/{endpoint}"
@@ -1135,3 +1140,74 @@ async def handle_extension_refresh(plugin: Any):
     except Exception as exc:
         logger.warning(f"[BiliBot Extensions] refresh failed: {exc}")
         return _response([], "扩展刷新失败，主插件功能不受影响")
+
+
+# ── 历史记录（「它刷过的视频」） ──
+
+
+def _query_float(name: str):
+    raw = str(request.query.get(name, "") or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _query_int(name: str, default: int) -> int:
+    raw = str(request.query.get(name, "") or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _query_bool(name: str):
+    raw = str(request.query.get(name, "") or "").strip().lower()
+    if raw in ("1", "true", "yes"):
+        return True
+    if raw in ("0", "false", "no"):
+        return False
+    return None
+
+
+async def handle_get_history(plugin: Any):
+    """「它刷过的视频」列表：过滤 + 分页。数据源 watch_log.json（写入侧 cap=200）。"""
+    try:
+        entries = _load_json(plugin, WATCH_LOG_FILE, [])
+        payload = query_history(
+            entries,
+            offset=_query_int("offset", 0),
+            limit=_query_int("limit", 24),
+            min_score=_query_float("min_score"),
+            max_score=_query_float("max_score"),
+            mood=str(request.query.get("mood", "") or ""),
+            source=str(request.query.get("source", "") or ""),
+            recommended=_query_bool("recommended"),
+            failed=_query_bool("failed"),
+            q=str(request.query.get("q", "") or ""),
+            since=str(request.query.get("since", "") or ""),
+            until=str(request.query.get("until", "") or ""),
+            today_prefix=datetime.now().strftime("%Y-%m-%d"),
+        )
+        return _response(payload)
+    except Exception as exc:
+        logger.warning(f"[BiliBot WebUI] history failed: {exc}")
+        return _failure("读取历史失败", 500)
+
+
+async def handle_get_history_detail(plugin: Any):
+    """单条详情：评论原话、展开理由、动作明细。"""
+    try:
+        bvid = str(request.query.get("bvid", "") or "").strip()
+        entries = _load_json(plugin, WATCH_LOG_FILE, [])
+        item = find_entry(entries, bvid)
+        if item is None:
+            return _failure("没有这条记录", 404)
+        return _response(item)
+    except Exception as exc:
+        logger.warning(f"[BiliBot WebUI] history detail failed: {exc}")
+        return _failure("读取详情失败", 500)

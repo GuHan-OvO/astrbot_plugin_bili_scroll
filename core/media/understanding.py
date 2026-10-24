@@ -29,6 +29,7 @@ from typing import Any
 
 from ..security import Caller, media_session
 from ..storage import Database, MediaStore
+from ..analysis_depth import resolve as resolve_analysis_depth
 
 
 @dataclass
@@ -57,6 +58,20 @@ class MediaDigestResult:
     from_cache: bool
 
 
+class _ConfigView:
+    """把 ``config_getter(key, default)`` 包成 ``.get()`` 对象，好交给档位解析。"""
+
+    def __init__(self, getter) -> None:
+        self._getter = getter
+
+    def get(self, key, default=None):
+        try:
+            value = self._getter(key, default)
+        except Exception:
+            return default
+        return default if value is None else value
+
+
 class MediaUnderstanding:
     """两阶段媒体理解与缓存管理。"""
 
@@ -78,11 +93,15 @@ class MediaUnderstanding:
         hours = float(self._get("MEDIA_DIGEST_TTL_HOURS", 72))
         return hours * 3600
 
+    def _depth(self) -> dict:
+        """当前档位解析出的有效参数（非 custom 档时，档位值覆盖单项配置）。"""
+        return resolve_analysis_depth(_ConfigView(self._get))
+
     def _token_budget_daily(self) -> int:
-        return int(self._get("MEDIA_TOKEN_BUDGET_DAILY", 50000))
+        return int(self._depth()["token_budget_daily"])
 
     def _max_frames(self) -> int:
-        return int(self._get("MEDIA_MAX_FRAMES", 8))
+        return int(self._depth()["max_frames"])
 
     def _understand_model(self) -> str:
         return str(self._get("MEDIA_UNDERSTAND_MODEL", "cheap") or "cheap")

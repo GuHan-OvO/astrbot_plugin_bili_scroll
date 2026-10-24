@@ -6,6 +6,7 @@ import hashlib
 import uuid
 import aiohttp
 from .network import plugin_http_session
+from .verify import schedule_verify
 from functools import reduce
 from astrbot.api import logger
 from .config import (
@@ -278,15 +279,36 @@ class BilibiliAPIMixin:
         content = re.sub(r'^@[^ \t\n\r]+\s*', '', content)
         return content.strip()
 
-    async def _send_comment(self, oid, comment_text, oid_type=1):
+    async def _send_comment(self, oid, comment_text, oid_type=1, at_name_to_mid=None):
+        """发一条顶级评论。
+
+        ``at_name_to_mid`` 传 ``{昵称: uid}`` 时，请求体会带上同名字段；
+        B站 只有收到它才会把正文里的 ``@昵称`` 解析成真实提及（读回评论时
+        ``content.members`` 会有值），否则只是纯文本。映射由 ``core/mention.py`` 构造。
+        """
+        data = {
+            "oid": oid,
+            "type": oid_type,
+            "message": comment_text,
+            "csrf": self.config.get("BILI_JCT", ""),
+        }
+        if at_name_to_mid:
+            # 与 Web 端一致：带 at 映射时同时带 plat=1
+            data["at_name_to_mid"] = json.dumps(at_name_to_mid, ensure_ascii=False)
+            data["plat"] = 1
         try:
-            d, _ = await self._http_post(
-                BILI_REPLY_URL,
-                data={"oid": oid, "type": oid_type, "message": comment_text, "csrf": self.config.get("BILI_JCT", "")},
-            )
+            d, _ = await self._http_post(BILI_REPLY_URL, data=data)
             code = d.get("code", -1)
             if code == 0:
-                return True
+                try:
+                    rpid = int((d.get("data") or {}).get("rpid") or 0)
+                except (TypeError, ValueError, AttributeError):
+                    rpid = 0
+                # 带 @ 的那条最需要确认「真的可见」，成功后就排一次延迟复核
+                if rpid and at_name_to_mid:
+                    schedule_verify(self, oid, rpid)
+                # 返回 rpid（真值）或 True：调用方原本就只判真假，行为不变
+                return rpid or True
             if code == -101:
                 logger.warning("[BiliBot] 发评论失败：Cookie 已失效")
             elif code == -403 or code == 12015:
@@ -295,6 +317,13 @@ class BilibiliAPIMixin:
                 logger.warning("[BiliBot] 发评论失败：评论区已关闭")
             elif code == 12025:
                 logger.warning("[BiliBot] 发评论失败：评论内容包含敏感词")
+            elif at_name_to_mid:
+                # 带 @ 的请求失败时不做纯文本重试：重发会多出一条公开评论，
+                # 比少一条 @ 更糟。调用方按失败处理即可。
+                logger.warning(
+                    f"[BiliBot] 带 @ 的评论失败({oid}): code={code} {d.get('message', '')}"
+                    f"（未降级重发，避免重复评论）"
+                )
             else:
                 logger.warning(f"[BiliBot] 发评论失败({oid}): code={code} {d.get('message', '')}")
             return False

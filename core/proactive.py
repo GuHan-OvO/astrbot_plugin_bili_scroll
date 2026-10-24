@@ -20,6 +20,9 @@ from .video_evaluation import (
     parse_video_evaluation,
 )
 from .video_discovery import EXPLORATION_QUERIES, prepare_discovery_queries
+from .mention import build_mention_map, compose_comment
+from .pc_bridge import share_via_pc
+from .dedup import dedupe_by_bvid, dedupe_similar_titles
 from .security.redact import wrap_untrusted
 from .content_protocol import (
     ContentProtocolError, PROACTIVE_COMMENT_SCHEMA_PROMPT,
@@ -1059,6 +1062,12 @@ UP主：{video.get('up_name', '')}
                     all_videos.extend(await self._get_newlist_videos(tid, min_pubdate))
             else:
                 logger.warning(f"[BiliBot] 未知视频池: {raw}，可填 热门/推荐/排行榜:游戏/最新:单机游戏")
+        before = len(all_videos)
+        all_videos = dedupe_by_bvid(all_videos)
+        if self.config.get("DEDUPE_SIMILAR_TITLES", False):
+            all_videos = dedupe_similar_titles(all_videos)
+        if len(all_videos) != before:
+            logger.info(f"[BiliBot] 🧹 候选去重：{before} → {len(all_videos)}")
         logger.info(f"[BiliBot] 📦 视频池合计: {len(all_videos)} 个（来源: {', '.join(resolved_sources)}）")
         return all_videos
 
@@ -1242,11 +1251,35 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
         value = aliases.get(value, value)
         return value if value in {"private_message", "comment", "both", "qq_private", "bili_private_and_qq", "all", "off"} else "private_message"
 
+    @staticmethod
+    def _build_pc_share_prompt(text, bvid):
+        """给陪伴插件生成一句话的提示。要求口语、短、不暴露内部流程。"""
+        return (
+            "你刚刷 B站 看到一个值得分享的视频，想随手跟他说一句。"
+            f"你的感受：{text}；链接：https://www.bilibili.com/video/{bvid}。"
+            "规则：一句话，不超过 60 字；像随口分享，不要罗列要点；"
+            "不要出现「推荐」「筛选」「候选」「判重」这类词。"
+        )
+
     async def _send_owner_recommend_qq(self, text, bvid):
         umo = str(self.config.get("OWNER_QQ_UMO", "") or "").strip()
         if not umo:
             logger.warning("[BiliBot] 跳过 QQ 推荐：未配置 OWNER_QQ_UMO")
             return False
+        # 开启联动时优先用「她」的人格与通道；失败再回退到本插件直发
+        if self.config.get("PC_BRIDGE_ENABLE", False):
+            try:
+                ok, _sent = await share_via_pc(
+                    self.context,
+                    umo,
+                    self._build_pc_share_prompt(text, bvid),
+                    f"{text} https://www.bilibili.com/video/{bvid}",
+                )
+                if ok:
+                    logger.info(f"[BiliBot] ✉️ 已通过陪伴插件分享：{bvid}")
+                    return True
+            except Exception as exc:
+                logger.warning(f"[BiliBot] 陪伴联动异常，回退直发：{exc}")
         try:
             from astrbot.api.event import MessageChain
             message = f"{text}\nhttps://www.bilibili.com/video/{bvid}"
@@ -1596,6 +1629,36 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             logger.info(f"[BiliBot] ⭐ 评分：{score}/10 | 心情：{mood} | 短评：{comment}")
             actions = []
             interaction_failed = False
+            # 先落账再互动：互动段若抛未捕获异常，至少「看过什么 + 分数 + 感想」已经写进
+            # watch_log，用户不会完全看不到这一轮发生了什么。互动结果在下面补回同一条。
+            watch_log = self._append_json_list(
+                WATCH_LOG_FILE,
+                {
+                    "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "bvid": bvid,
+                    "title": video.get("title", ""),
+                    "up_name": video.get("up_name", ""),
+                    "up_mid": str(video.get("up_mid", "")),
+                    "score": score,
+                    "score_reason": score_reason,
+                    "mood": mood,
+                    "comment": comment,
+                    "review": review,
+                    "preference_signals": preference_signals,
+                    "search_keywords": search_keywords,
+                    "pic": video.get("pic", ""),
+                    "tname": evaluation.get("partition") or analysis_info.get("tname", ""),
+                    "source": video.get("_source", ""),
+                    "source_detail": video.get("_source_detail", ""),
+                    "manual": is_manual,
+                    "discovery_mode": "explore" if video.get("_exploration") else "interest",
+                    "recommend_reason": evaluation.get("recommend_reason", ""),
+                    "content_summary": self._clip_media_text(video_description, 360),
+                    "analysis_basis": analysis_info.get("analysis_basis", "legacy"),
+                    "actions": [],
+                },
+                cap=200,
+            )
             if oid:
                 # 交互前快速校验 Cookie
                 cookie_ok, _ = await self.check_cookie()
@@ -1741,13 +1804,24 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                                     )
                             if delivery in {"comment", "both", "all"}:
                                 if owner_bili:
-                                    rec_msg = f"@{owner_bili} {rec_text}"
+                                    # 真 @ 需要 at_name_to_mid：只拼正文里的 @名字 是纯文本，
+                                    # B站 不会解析成提及、也不会推送给对方。
+                                    at_map = build_mention_map(owner_bili, owner_mid)
+                                    rec_msg = compose_comment(rec_text, owner_bili)
+                                    if at_map:
+                                        logger.info(f"[BiliBot] 本次带真 @ 映射：{at_map}")
+                                    else:
+                                        logger.warning(
+                                            "[BiliBot] 缺少有效的 OWNER_MID，本次只发纯文本 @"
+                                        )
                                     if (
                                         await self._execute_proactive_action(
                                             f"proactive_owner_comment:{bvid}",
                                             "proactive_owner_recommend",
                                             bvid,
-                                            lambda: self._send_comment(oid, rec_msg),
+                                            lambda: self._send_comment(
+                                                oid, rec_msg, at_name_to_mid=at_map
+                                            ),
                                         )
                                     ).success:
                                         actions.append("📢评论区推荐给主人")
@@ -1794,16 +1868,50 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                     ).success:
                         actions.append("➕关注")
                         logger.info(f"[BiliBot] ➕ 关注了 {video.get('up_name', '')}")
-            log_entry = {"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "bvid": bvid, "title": video.get("title", ""), "up_name": video.get("up_name", ""), "up_mid": str(video.get("up_mid", "")), "score": score, "score_reason": score_reason, "mood": mood, "comment": comment, "review": review, "preference_signals": preference_signals, "search_keywords": search_keywords, "actions": actions, "pic": video.get("pic", ""), "tname": evaluation.get("partition") or analysis_info.get("tname", ""), "source": video.get("_source", ""), "source_detail": video.get("_source_detail", ""), "manual": is_manual}
-            log_entry.update(
-                discovery_mode="explore" if video.get("_exploration") else "interest",
-                recommend_reason=evaluation.get("recommend_reason", ""),
-                recommended_at=getattr(self, "_owner_last_recommended_at", "") if any(self._is_owner_recommend_action(action) for action in actions) else "",
-                content_summary=self._clip_media_text(video_description, 360),
-                analysis_basis=analysis_info.get("analysis_basis", "legacy"),
+            recommended_at = (
+                getattr(self, "_owner_last_recommended_at", "")
+                if any(self._is_owner_recommend_action(action) for action in actions)
+                else ""
             )
-            watch_log.append(log_entry)
-            watch_log = self._append_json_list(WATCH_LOG_FILE, watch_log.pop(), cap=200)
+            # 基础记录已在互动前落盘，这里只把互动结果补回去。
+            # 若那一步没写成（异常/文件不可写），退回整条追加，至少保证留一条。
+            if (
+                watch_log
+                and isinstance(watch_log[-1], dict)
+                and str(watch_log[-1].get("bvid")) == str(bvid)
+            ):
+                watch_log[-1].update(actions=actions, recommended_at=recommended_at)
+                self._save_json(WATCH_LOG_FILE, watch_log[-200:])
+            else:
+                watch_log = self._append_json_list(
+                    WATCH_LOG_FILE,
+                    {
+                        "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "bvid": bvid,
+                        "title": video.get("title", ""),
+                        "up_name": video.get("up_name", ""),
+                        "up_mid": str(video.get("up_mid", "")),
+                        "score": score,
+                        "score_reason": score_reason,
+                        "mood": mood,
+                        "comment": comment,
+                        "review": review,
+                        "preference_signals": preference_signals,
+                        "search_keywords": search_keywords,
+                        "pic": video.get("pic", ""),
+                        "tname": evaluation.get("partition") or analysis_info.get("tname", ""),
+                        "source": video.get("_source", ""),
+                        "source_detail": video.get("_source_detail", ""),
+                        "manual": is_manual,
+                        "discovery_mode": "explore" if video.get("_exploration") else "interest",
+                        "recommend_reason": evaluation.get("recommend_reason", ""),
+                        "content_summary": self._clip_media_text(video_description, 360),
+                        "analysis_basis": analysis_info.get("analysis_basis", "legacy"),
+                        "actions": actions,
+                        "recommended_at": recommended_at,
+                    },
+                    cap=200,
+                )
             recommended_by_private_message = "✉️私信推荐给主人" in actions
             recommended_by_comment = any(
                 action in {"📢推荐给主人", "📢评论区推荐给主人"}
