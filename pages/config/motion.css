@@ -219,3 +219,101 @@
     transition-duration: 1ms !important;
   }
 }
+
+/* ============================================================================
+ * 液态玻璃 + 指针光照：与控制中心保持同一套观感
+ * 数值刻意抄 design/motion-pro.css 的 --glass-*，改一处要记得同步另一处。
+ * ========================================================================== */
+:root {
+  --glass-fill: color-mix(in srgb, #ffffff 78%, transparent);
+  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --glass-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  --light-radius: 360px;
+  --light-strength: 0.22;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --glass-fill: color-mix(in srgb, #1a1a1d 62%, transparent);
+    --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    --glass-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    --light-strength: 0.2;
+  }
+}
+
+.group {
+  background-color: var(--glass-fill);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: var(--glass-hi), var(--glass-rim), var(--shadow-1);
+  transition: background-color 240ms var(--e-out), box-shadow 240ms var(--e-out);
+}
+
+/* config.css 的 .group:hover 优先级更高，会把玻璃的内缘与镜面顶掉，这里补齐 */
+.group:hover {
+  box-shadow: var(--glass-hi), var(--glass-rim), 0 16px 36px -28px rgba(16, 24, 40, 0.45);
+}
+
+/* 粘性顶栏也用玻璃，滚动时内容从它下面透出来 */
+.topbar {
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .group {
+    background-color: var(--surface);
+  }
+
+  .topbar {
+    background: var(--bg);
+  }
+}
+
+/* 指针光照：光斑盖在内容之上（z-index:2），否则会被分组标题、输入框挡住 */
+[data-light] {
+  position: relative;
+  isolation: isolate;
+}
+
+[data-light]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    var(--light-radius) circle at var(--mx, 50%) var(--my, 0%),
+    color-mix(in srgb, var(--accent) 18%, #ffffff) 0%,
+    rgba(255, 255, 255, 0.45) 26%,
+    rgba(255, 255, 255, 0) 64%
+  );
+  mix-blend-mode: soft-light;
+  transition: opacity 220ms var(--e-out);
+}
+
+[data-light]:hover::before,
+[data-light]:focus-within::before {
+  opacity: var(--light-strength);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-light]::before {
+    background: radial-gradient(
+      var(--light-radius) circle at var(--mx, 50%) var(--my, 0%),
+      rgba(180, 205, 255, 0.6) 0%,
+      rgba(180, 205, 255, 0.16) 30%,
+      rgba(180, 205, 255, 0) 62%
+    );
+    mix-blend-mode: screen;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-light]::before {
+    transition-duration: 1ms !important;
+  }
+}

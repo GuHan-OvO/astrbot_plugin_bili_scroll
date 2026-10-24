@@ -410,6 +410,35 @@ window.addEventListener("scroll", () => {
   document.querySelector(".topbar")?.classList.toggle("is-scrolled", window.scrollY > 8);
 }, { passive: true });
 
+// 指针光照：分组卡片第一次被指到时打标记，之后持续写入光斑坐标。
+// 用 pointerover 懒打标记，就不用挂钩子到每次 render()。
+let lightFrame = 0;
+let lightEvent = null;
+
+function paintLight() {
+  lightFrame = 0;
+  const event = lightEvent;
+  if (!event) return;
+  const card = event.target instanceof Element ? event.target.closest("[data-light]") : null;
+  if (!card) return;
+  const rect = card.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  card.style.setProperty("--mx", `${((event.clientX - rect.left) / rect.width) * 100}%`);
+  card.style.setProperty("--my", `${((event.clientY - rect.top) / rect.height) * 100}%`);
+}
+
+if (window.matchMedia("(hover: hover)").matches) {
+  document.addEventListener("pointerover", (event) => {
+    const card = event.target instanceof Element ? event.target.closest(".group") : null;
+    if (card && !card.hasAttribute("data-light")) card.setAttribute("data-light", "");
+  }, { passive: true, capture: true });
+
+  document.addEventListener("pointermove", (event) => {
+    lightEvent = { target: event.target, clientX: event.clientX, clientY: event.clientY };
+    if (!lightFrame) lightFrame = requestAnimationFrame(paintLight);
+  }, { passive: true });
+}
+
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", (event) => {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", event.matches ? "#0b0b0d" : "#f5f5f7");
 });
