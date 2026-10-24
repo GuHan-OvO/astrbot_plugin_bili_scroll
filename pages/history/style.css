@@ -2,12 +2,12 @@
    这样以后改控制中心不会连带把这里弄花。 */
 
 :root {
-  --bg: #f6f8fc;
+  --bg: #fbfbfd;
   --card: #ffffff;
-  --ink: #1b2330;
-  --muted: #6b7789;
-  --line: #e3e8f0;
-  --accent: #3b82f6;
+  --ink: #1d1d1f;
+  --muted: #6e6e73;
+  --line: rgba(0,0,0,0.09);
+  --accent: #0071e3;
   --good: #16a34a;
   --mid: #d97706;
   --low: #94a3b8;
@@ -17,12 +17,12 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #12161d;
-    --card: #1b212b;
-    --ink: #e6ebf3;
-    --muted: #93a0b4;
-    --line: #2a3240;
-    --accent: #60a5fa;
+    --bg: #000000;
+    --card: #1c1c1e;
+    --ink: #f5f5f7;
+    --muted: #a1a1a6;
+    --line: rgba(255,255,255,0.12);
+    --accent: #0a84ff;
     --good: #34d399;
     --mid: #fbbf24;
     --low: #64748b;

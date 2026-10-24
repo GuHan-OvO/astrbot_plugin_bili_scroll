@@ -1,12 +1,12 @@
 :root {
-  --bg: #f6f8fc;
+  --bg: #fbfbfd;
   --panel: #ffffff;
-  --line: #e4e8f0;
+  --line: rgba(0,0,0,0.08);
   --line-strong: #d3d9e5;
-  --text: #1b2130;
-  --muted: #6b7789;
+  --text: #1d1d1f;
+  --muted: #6e6e73;
   --faint: #98a2b3;
-  --accent: #2a6df5;
+  --accent: #0071e3;
   --accent-soft: #eaf1fe;
   --warn: #d9822b;
   --radius: 10px;
