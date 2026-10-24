@@ -331,9 +331,33 @@ class BilibiliAPIMixin:
             logger.error(f"[BiliBot] 发送评论异常: {e}")
             return False
 
+    async def _resolve_self_mid(self):
+        """Bot 自己的 B站 UID。``DEDE_USER_ID`` 没填时从 nav 接口取一次。
+
+        私信接口要求 ``msg[sender_uid]`` 有效，缺了它就发不出去；
+        而 nav 接口本来就要带 Cookie 才通，所以这一步不引入新的凭据要求。
+        结果只缓存在实例上，不回写配置——配置由用户决定。
+        """
+        cached = getattr(self, "_self_mid_cache", "")
+        if str(cached).isdigit():
+            return str(cached)
+        try:
+            d, _ = await self._http_get(BILI_NAV_URL)
+            mid = str(((d or {}).get("data") or {}).get("mid") or "").strip()
+            if mid.isdigit():
+                self._self_mid_cache = mid
+                logger.info(f"[BiliBot] 已从 nav 接口识别 Bot UID：{mid}（建议填进 DEDE_USER_ID）")
+                return mid
+        except Exception as exc:
+            logger.warning(f"[BiliBot] 解析 Bot UID 失败：{exc}")
+        return ""
+
     async def _send_bili_private_payload(self, receiver_mid, msg_type, content, label="私信"):
         """发送 B站网页私信载荷；写操作不自动重试，避免重复发送。"""
         sender_mid = str(self.config.get("DEDE_USER_ID", "") or "").strip()
+        if not sender_mid.isdigit():
+            # DEDE_USER_ID 没填时从 nav 接口取一次自己的 UID（只缓存，不回写配置）
+            sender_mid = await self._resolve_self_mid()
         receiver_mid = str(receiver_mid or "").strip()
         csrf = str(self.config.get("BILI_JCT", "") or "").strip()
         if not self._has_cookie() or not csrf or not sender_mid.isdigit():

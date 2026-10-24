@@ -300,6 +300,16 @@ async def send_test_private(plugin) -> dict:
     if not mid.isdigit():
         return {"ok": False, "kind": "private", "error": "未配置 OWNER_MID（主人 B站 UID）"}
 
+    # 先把最常见的两个前置条件分辨出来，别让用户对着「发送失败」猜方向
+    try:
+        cookie_ok, cookie_detail = await plugin.check_cookie()
+    except Exception as exc:
+        cookie_ok, cookie_detail = False, f"检查异常：{exc}"
+    if not cookie_ok:
+        return {"ok": False, "kind": "private", "error": f"Cookie 不可用：{cookie_detail}"}
+    if not str(plugin.config.get("BILI_JCT", "") or "").strip():
+        return {"ok": False, "kind": "private", "error": "未配置 BILI_JCT（CSRF），私信发不出去"}
+
     text = "（来自自检）私信通道正常，这条是测试消息。"
     try:
         ok = await plugin._send_bili_private_message(int(mid), text)
@@ -311,7 +321,9 @@ async def send_test_private(plugin) -> dict:
         "target_mid": mid,
         "target_name": name,
         "text": text,
-        "detail": "" if ok else "发送失败：Cookie 失效、对方关闭私信，或被风控拦截",
+        "detail": ""
+        if ok
+        else "发送失败：若 Cookie 与 CSRF 都正常，检查 DEDE_USER_ID（发送者 UID）是否与主人 UID 相同，或对方关闭了私信",
     }
 
 

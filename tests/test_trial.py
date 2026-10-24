@@ -235,7 +235,9 @@ class TrialTestActionTests(unittest.IsolatedAsyncioTestCase):
     def _plugin(self, *, rows=None, oid=12345, private_ok=True, comment_result=999):
         plugin = _FakePlugin()
         plugin._watch_rows = list(rows or [])
-        plugin.config.update({"OWNER_MID": "10001", "OWNER_BILI_NAME": "主人"})
+        plugin.config.update(
+            {"OWNER_MID": "10001", "OWNER_BILI_NAME": "主人", "BILI_JCT": "test-csrf"}
+        )
         plugin.private_calls = []
         plugin.comment_calls = []
 
