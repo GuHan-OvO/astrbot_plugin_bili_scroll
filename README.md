@@ -158,6 +158,8 @@ AstrBot WebUI 里本插件自带一个页面：
 <astrbot venv>/Scripts/python.exe -m pytest tests -q
 ```
 
+扩展开发（隔离扩展 Host 的 Page Schema）见 [docs/extension-api-v1.md](docs/extension-api-v1.md)。
+
 当前基线：`450 passed`，另有 1 个**上游既有失败**（`test_video_diagnostics.py::test_failed_download_records_underlying_reason`，与功能无关）。
 
 新增模块：
