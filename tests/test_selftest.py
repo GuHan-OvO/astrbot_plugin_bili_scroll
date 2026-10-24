@@ -64,12 +64,13 @@ class CollectTests(unittest.TestCase):
 
     def test_数据报告字段齐全(self):
         out = collect(_FakePlugin({}))
-        data = out["data"]
-        self.assertIn("watch_log", data)
-        self.assertIn("verify_log", data)
-        self.assertIn("database", data)
+        # 键名是 storage 而不是 data：data 会被响应信封的 unwrap 吃掉，见 core/selftest.py 里的说明
+        storage = out["storage"]
+        self.assertIn("watch_log", storage)
+        self.assertIn("verify_log", storage)
+        self.assertIn("database", storage)
         # 未跑过时 watch_log 计数应为 0 而不是 None
-        self.assertIn(data["watch_log"]["count"], (0, None))
+        self.assertIn(storage["watch_log"]["count"], (0, None))
 
     def test_页面列表包含三个页面(self):
         names = [p["name"] for p in collect(_FakePlugin({}))["pages"]]

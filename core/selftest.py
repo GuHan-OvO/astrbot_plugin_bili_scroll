@@ -133,7 +133,14 @@ def _pages_report() -> list[dict]:
 
 
 def collect(plugin) -> dict:
-    """汇总所有自检信息。任何一段失败都只记错误，不影响其它段。"""
+    """汇总所有自检信息。任何一段失败都只记错误，不影响其它段。
+
+    注意：这里的键名**不能叫 `data`**。后端响应用的是 `{"status": "ok", "data": <本函数返回值>}`
+    这套信封，前端 `unwrap()` 会执行 `result?.data ?? result`。如果本函数返回的字典里也有
+    一个 `data` 键，解包后拿到的就是那一段报告本身，`module` / `config` / `routes` 全部变成
+    undefined —— 表现是四个区块一起「读取失败」且不报错（2026-10-25 实测踩到）。
+    所以存储统计那段改用 `storage`。
+    """
     meta = _read_metadata()
     result: dict = {"ok": True, "errors": []}
 
@@ -147,7 +154,7 @@ def collect(plugin) -> dict:
             "author": meta.get("author"),
         }),
         ("config", lambda: _config_report(plugin)),
-        ("data", lambda: _data_report()),
+        ("storage", lambda: _data_report()),
         ("pages", lambda: _pages_report()),
     ):
         try:

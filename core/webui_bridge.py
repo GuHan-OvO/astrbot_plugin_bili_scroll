@@ -89,6 +89,15 @@ WEB_INTEREST_DB_TIMEOUT_SECONDS = 1.5
 def _response(data: Any = None, message: str | None = None):
     payload: dict[str, Any] = {"status": "ok"}
     if data is not None:
+        # 守卫：页面侧的 unwrap() 会执行 `result?.data ?? result`。如果业务载荷里也有一个
+        # "data" 键，它会被当成信封再解一层，导致所有字段读不到、而且不报错
+        # （selftest 踩过一次：collect() 里有 data 键，四个区块全显示「读取失败」）。
+        # 这里只告警、不改行为，让同类问题下次能在日志里暴露。
+        if isinstance(data, dict) and "data" in data:
+            logger.warning(
+                "[BiliBot WebUI] 响应载荷里含有 data 键，可能与响应信封冲突：%s",
+                list(data)[:6],
+            )
         payload["data"] = data
     if message:
         payload["message"] = message

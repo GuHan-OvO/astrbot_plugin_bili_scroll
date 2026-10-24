@@ -248,7 +248,7 @@ async function load() {
     renderModule(data.module);
     renderMetadata(data.metadata);
     renderConfig(data.config);
-    renderData(data.data, data.pages);
+    renderData(data.storage, data.pages);
     renderRoutes(data.routes, data.pages);
 
     if (Array.isArray(data.errors) && data.errors.length) {
