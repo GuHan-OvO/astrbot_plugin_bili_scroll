@@ -5,8 +5,9 @@
 //    等它渲染完再补，重建一次补一次，不 hook 任何内部函数。
 // 2. 图标必须直接用上游 icons.js 的 `icon()`：`.nav-item span { flex: 1 }` 会把
 //    任何 span 撑开——用 <span> 包图标会把文字挤到最右边。
-// 3. 跳转要绕：插件页面可能跑在 iframe 里，改自己的 hash 无效；改 window.top 的 hash
-//    又可能被 sandbox 静默拦掉（不抛错也不生效），所以回读确认，失败退回开新标签。
+// 3. 跳转**用 <a target="_top"> 而不是 JS 改 hash**：插件页面可能跑在 iframe 里，
+//    脚本改 window.top.location.hash 会被 sandbox 静默拦掉（不抛错也不生效）；
+//    而 target="_top" 是浏览器原生行为，由页面框架决定处理方式，不受脚本沙箱影响。
 
 import { icon } from "./icons.js";
 
@@ -15,7 +16,6 @@ const PAGES = [
   { page: "selftest", label: "自检", icon: "refresh" },
 ];
 
-const VERIFY_DELAY_MS = 400;
 const OBSERVE_DEBOUNCE_MS = 120;
 
 function pluginId() {
@@ -27,72 +27,40 @@ function targetHash(page) {
   return `#/plugin-page/${pluginId()}/${page}`;
 }
 
-function targetUrl(page) {
-  return `${location.origin}/${targetHash(page)}`;
+function buildLink(item) {
+  const link = document.createElement("a");
+  link.className = "nav-item";
+  link.dataset.siblingPage = item.page;
+  link.href = targetHash(item.page);
+  link.target = "_top";
+  link.title = item.label;
+
+  // 与上游同构：svg 直接是子元素，文字单独一个 span（span 会 flex:1）
+  link.innerHTML = `${icon(item.icon, "nav-icon")}<span></span>`;
+  link.querySelector("span").textContent = item.label;
+  return link;
 }
 
-function openInNewTab(page) {
-  const opened = window.open(targetUrl(page), "_blank", "noopener");
-  if (!opened) {
-    window.prompt("页面跳转被拦住了，复制地址后手动打开：", targetUrl(page));
-  }
-}
-
-function navigate(page) {
-  const hash = targetHash(page);
-  let top = null;
-  try {
-    top = window.top;
-  } catch (err) {
-    top = null;
-  }
-
-  if (!top || top === window) {
-    location.hash = hash;
-    return;
-  }
-
-  try {
-    top.location.hash = hash;
-  } catch (err) {
-    openInNewTab(page);
-    return;
-  }
-
-  // sandbox 里赋值既不抛错也不生效，回读确认一次
-  window.setTimeout(() => {
-    let applied = false;
-    try {
-      applied = top.location.hash === hash;
-    } catch (err) {
-      applied = false;
-    }
-    if (!applied) openInNewTab(page);
-  }, VERIFY_DELAY_MS);
-}
-
-function buildButton(item) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "nav-item";
-  button.dataset.siblingPage = item.page;
-  button.title = targetUrl(item.page);
-
-  // 与上游同构：svg 直接是 button 的子元素，文字单独一个 span（span 会 flex:1）
-  button.innerHTML = `${icon(item.icon, "nav-icon")}<span></span>`;
-  button.querySelector("span").textContent = item.label;
-
-  button.addEventListener("click", () => navigate(item.page));
-  return button;
+function injectStyle() {
+  if (document.getElementById("bilibot-sibling-style")) return;
+  const style = document.createElement("style");
+  style.id = "bilibot-sibling-style";
+  // a 标签复用了 button 的 .nav-item 样式，这里只需要去掉下划线、保持可点击
+  style.textContent = `
+    #sidebar a.nav-item { text-decoration: none; cursor: pointer; }
+    #sidebar a.nav-item:visited { color: #657085; }
+  `;
+  document.head.appendChild(style);
 }
 
 function inject() {
   const navList = document.querySelector("#sidebar .nav-list");
   if (!navList) return;
+  injectStyle();
 
   for (const item of PAGES) {
     if (navList.querySelector(`[data-sibling-page="${item.page}"]`)) continue;
-    navList.appendChild(buildButton(item));
+    navList.appendChild(buildLink(item));
   }
 }
 
