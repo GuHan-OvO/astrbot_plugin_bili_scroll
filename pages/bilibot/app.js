@@ -12,7 +12,66 @@ const sidebar = document.querySelector("#sidebar");
 const saveDock = document.querySelector("#save-dock");
 const toastRegion = document.querySelector("#toast-region");
 const modalRoot = document.querySelector("#modal-root");
+const pageProgress = document.querySelector("#page-progress");
 const moduleUrl = new URL(import.meta.url);
+
+const THEME_KEY = "bilibot.theme.v2";
+const RAIL_KEY = "bilibot.rail.v2";
+
+const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function readChoice(key) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeChoice(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* 隐私模式下 localStorage 不可用，静默跳过 */
+  }
+}
+
+const savedTheme = readChoice(THEME_KEY);
+let themeChoice = savedTheme === "dark" || savedTheme === "light" ? savedTheme : "auto";
+
+function resolvedTheme() {
+  if (themeChoice === "light" || themeChoice === "dark") return themeChoice;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+// 主题只切 data-theme；扩展模式另由 data-mode="extension" 覆盖同一批令牌。
+function applyTheme() {
+  const theme = resolvedTheme();
+  document.documentElement.dataset.theme = theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta && document.documentElement.dataset.mode !== "extension") {
+    meta.setAttribute("content", theme === "dark" ? "#0b0b0d" : "#f5f5f7");
+  }
+  const toggle = document.querySelector("#theme-toggle");
+  if (toggle) {
+    toggle.innerHTML = icon(theme === "dark" ? "sun" : "moon");
+    const label = theme === "dark" ? "切换到浅色" : "切换到深色";
+    toggle.setAttribute("aria-label", label);
+    toggle.title = themeChoice === "auto" ? `${label}（当前跟随系统）` : label;
+  }
+}
+
+function toggleTheme() {
+  themeChoice = resolvedTheme() === "dark" ? "light" : "dark";
+  writeChoice(THEME_KEY, themeChoice);
+  // 支持 View Transitions 时整页交叉淡入；否则直接切换，功能不受影响。
+  if (typeof document.startViewTransition === "function" && !prefersReducedMotion()) {
+    document.startViewTransition(() => applyTheme());
+  } else {
+    applyTheme();
+  }
+}
+
 
 function pageAssetUrl(relativePath) {
   const assetUrl = new URL(relativePath, moduleUrl);
@@ -77,6 +136,18 @@ const NAV_ITEMS = [
   ["basics", "settings", "基础设置", "人设、模型与长期配置"],
   ["allconfig", "menu", "全部配置", "全部配置按大类折叠浏览"],
 ];
+
+// 侧边栏分组：只影响呈现顺序，导航真源仍是 NAV_ITEMS。
+// "pages" 是兄弟页面（看过的视频 / 自检）由 sibling-nav.js 注入的位置。
+const NAV_GROUPS = [
+  ["监控", ["overview"]],
+  ["行为", ["autonomy", "interaction"]],
+  ["数据", ["memory"]],
+  ["安全与账号", ["security", "account"]],
+  ["页面", null],
+  ["配置", ["basics", "allconfig"]],
+];
+
 
 const PAGE_KEYS = {
   interaction: [
@@ -584,7 +655,10 @@ function toast(title, message = "", type = "success") {
   node.className = `toast ${type === "error" ? "is-error" : ""}`;
   node.innerHTML = `${icon(type === "error" ? "shield" : "save")}<div><strong>${esc(title)}</strong><span>${esc(message)}</span></div>`;
   toastRegion.append(node);
-  setTimeout(() => node.remove(), 4200);
+  window.setTimeout(() => {
+    node.classList.add("is-leaving");
+    window.setTimeout(() => node.remove(), 260);
+  }, 3800);
 }
 
 function activeExtension() {
@@ -639,12 +713,57 @@ function renderSidebar() {
   const running = state.stats.running !== false;
   const accountReady = state.stats.account_connected || state.account?.logged_in;
   const modeExtensions = availableModeExtensions();
-  sidebar.innerHTML = `<div class="sidebar-brand"><div class="brand-mark"><img src="${esc(brandLogoUrl)}" alt="BiliBot" /></div><div class="brand-copy"><strong>BiliBot</strong><span>控制中心</span></div>${renderModeEntry(modeExtensions)}</div><div class="sidebar-state" aria-label="服务状态"><span class="status-dot ${running ? "is-online" : ""}"></span><div><strong>${running ? "服务运行中" : "服务未运行"}</strong><span>${accountReady ? "账号链路已配置" : "等待连接账号"}</span></div></div><div class="nav-label">管理</div><nav class="nav-list">${NAV_ITEMS.map(([id, iconName, label, hint]) => `<button class="nav-item ${state.currentPage === id ? "is-active" : ""}" data-page="${id}" type="button" title="${esc(hint)}" aria-current="${state.currentPage === id ? "page" : "false"}">${icon(iconName, "nav-icon")}<span>${esc(label)}</span>${id === "basics" && state.dirtyKeys.size ? `<b class="nav-badge">${state.dirtyKeys.size}</b>` : ""}</button>`).join("")}</nav>`;
+  const groupMarkup = NAV_GROUPS.map(([label, ids]) => {
+    const items = ids === null
+      ? `<div class="nav-slot" data-nav-slot="pages"></div>`
+      : ids
+          .filter((id) => NAV_ITEMS.some(([navId]) => navId === id))
+          .map((id) => {
+            const [, iconName, itemLabel, hint] = NAV_ITEMS.find(([navId]) => navId === id);
+            const active = state.currentPage === id;
+            return `<button class="nav-item ${active ? "is-active" : ""}" data-page="${id}" type="button" title="${esc(hint)}" aria-current="${active ? "page" : "false"}">${icon(iconName, "nav-icon")}<span>${esc(itemLabel)}</span>${id === "basics" && state.dirtyKeys.size ? `<b class="nav-badge">${state.dirtyKeys.size}</b>` : ""}</button>`;
+          })
+          .join("");
+    if (ids !== null && !items) return "";
+    return `<div class="nav-label">${esc(label)}</div>${items}`;
+  }).join("");
+  sidebar.innerHTML = `<div class="sidebar-brand"><div class="brand-mark"><img src="${esc(brandLogoUrl)}" alt="BiliBot" /></div><div class="brand-copy"><strong>BiliBot</strong><span>控制中心</span></div>${renderModeEntry(modeExtensions)}</div><div class="sidebar-state" aria-label="服务状态"><span class="status-dot ${running ? "is-online" : ""}"></span><div><strong>${running ? "服务运行中" : "服务未运行"}</strong><span>${accountReady ? "账号链路已配置" : "等待连接账号"}</span></div></div><div class="sidebar-scroll"><nav class="nav-list"><span class="nav-indicator" aria-hidden="true"></span>${groupMarkup}</nav></div><div class="sidebar-foot"><p>${state.dirtyKeys.size ? `${state.dirtyKeys.size} 项配置待保存` : "BiliBot 控制中心"}</p><button class="rail-toggle" data-rail-toggle type="button" aria-label="收起或展开侧边栏" title="收起或展开侧边栏">${icon("arrow-left")}</button></div>`;
   sidebar.querySelectorAll("[data-page]").forEach((button) => button.addEventListener("click", () => navigate(button.dataset.page)));
   sidebar.querySelector("[data-enter-extension]")?.addEventListener("click", (event) => enterExtension(event.currentTarget.dataset.enterExtension));
   sidebar.querySelector("[data-open-mode-picker]")?.addEventListener("click", openModePicker);
   sidebar.querySelector("[data-popout-extension]")?.addEventListener("click", (event) => openExtensionStandalone(event.currentTarget.dataset.popoutExtension));
+  sidebar.querySelector("[data-rail-toggle]")?.addEventListener("click", toggleRail);
+  window.requestAnimationFrame(updateNavIndicator);
 }
+
+function toggleRail() {
+  const rail = !sidebar.classList.contains("is-rail");
+  sidebar.classList.toggle("is-rail", rail);
+  writeChoice(RAIL_KEY, rail ? "1" : "0");
+}
+
+// 选中态滑块：把背景指示器移到当前导航项上，切换页面时连续滑动而不是闪现。
+function updateNavIndicator() {
+  const list = sidebar.querySelector(".nav-list");
+  const indicator = list?.querySelector(".nav-indicator");
+  if (!list || !indicator) return;
+  const active = list.querySelector(".nav-item.is-active");
+  if (!active) {
+    indicator.classList.remove("is-visible");
+    return;
+  }
+  indicator.style.setProperty("--nav-y", `${active.offsetTop}px`);
+  indicator.style.height = `${active.offsetHeight}px`;
+  indicator.classList.add("is-visible");
+}
+
+function setPageChrome(page) {
+  const item = NAV_ITEMS.find(([id]) => id === page);
+  const crumb = document.querySelector("#crumb-page");
+  if (crumb) crumb.textContent = item ? item[2] : "总览";
+  if (state.mode !== "extension") document.title = item ? `${item[2]} · BiliBot 控制中心` : "BiliBot 控制中心";
+}
+
 
 function updateSaveDock() {
   if (state.mode === "extension") {
@@ -756,16 +875,19 @@ async function navigate(page) {
   stopQrPoll();
   closeMobileNav();
   renderSidebar();
+  setPageChrome(page);
   content.setAttribute("aria-busy", "true");
   content.classList.add("page-exit");
+  pageProgress?.classList.add("is-active");
   try {
-    await Promise.all([refreshPageData(page), sleep(150)]);
+    await Promise.all([refreshPageData(page), sleep(130)]);
     if (token !== state.pageToken) return;
     content.innerHTML = renderPage(page);
     content.classList.remove("page-exit");
     content.classList.add("page-enter");
     bindContent();
     requestAnimationFrame(() => requestAnimationFrame(() => content.classList.remove("page-enter")));
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   } catch (error) {
     if (token !== state.pageToken) return;
     content.innerHTML = renderErrorState("页面数据读取失败", error.message || "请检查插件日志并重试");
@@ -773,7 +895,10 @@ async function navigate(page) {
     content.classList.add("page-enter");
     bindContent();
   } finally {
-    if (token === state.pageToken) content.removeAttribute("aria-busy");
+    if (token === state.pageToken) {
+      content.removeAttribute("aria-busy");
+      pageProgress?.classList.remove("is-active");
+    }
   }
 }
 
@@ -783,10 +908,19 @@ function setVisualMode(mode) {
   state.mode = extensionMode ? "extension" : "host";
   app.classList.toggle("creator-mode", extensionMode);
   document.body.classList.toggle("creator-mode", extensionMode);
-  document.documentElement.dataset.theme = extensionMode ? "creator" : "light";
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", extensionMode ? (extension?.presentation?.surface || "#080b12") : "#f6f8fc");
-  const mobileBrand = document.querySelector(".mobile-brand span");
-  if (mobileBrand) mobileBrand.textContent = extensionMode ? `BiliBot / ${extension?.short_name || extension?.name || "Extension"}` : "BiliBot";
+  document.documentElement.dataset.mode = extensionMode ? "extension" : "host";
+  applyTheme();
+  if (extensionMode) {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", extension?.presentation?.surface || "#070a12");
+  }
+  const brand = document.querySelector(".crumb-brand");
+  if (brand) brand.textContent = extensionMode ? `BiliBot / ${extension?.short_name || extension?.name || "扩展"}` : "BiliBot";
+  const crumbPage = document.querySelector("#crumb-page");
+  if (crumbPage) {
+    crumbPage.textContent = extensionMode
+      ? (extension?.navigation?.find((item) => item.page === state.extensionPage)?.title || "工作台")
+      : (NAV_ITEMS.find(([id]) => id === state.currentPage)?.[2] || "总览");
+  }
 }
 
 function openExtensionStandalone(extensionId) {
@@ -895,7 +1029,13 @@ function statusPill(label, tone = "neutral") {
 
 function metricCard(label, value, foot, iconName, tone = "blue", progress = null, quota = null) {
   const meter = progress === null ? "" : `<div class="metric-meter"><div><span>今日用量</span>${quota === null ? "" : `<b>${esc(value)} / ${esc(quota)}</b>`}</div><div class="micro-progress"><i style="width:${clamp(progress, 0, 100)}%"></i></div></div>`;
-  return `<article class="metric-card tone-${tone}"><div class="metric-top"><span class="metric-icon">${icon(iconName)}</span><span>${esc(label)}</span></div><strong>${esc(value)}</strong><p>${esc(foot)}</p>${meter}</article>`;
+  const raw = String(value ?? "");
+  // 纯数字（可带千分位）走一次 620ms 的滚动；文案值原样输出，绝不编造数字。
+  const numeric = /^-?\d[\d,]*(?:\.\d+)?$/.test(raw);
+  const valueMarkup = numeric
+    ? `<strong data-count-up="${esc(raw.replace(/,/g, ""))}">${esc(raw)}</strong>`
+    : `<strong>${esc(raw)}</strong>`;
+  return `<article class="metric-card tone-${tone}"><div class="metric-top"><span class="metric-icon">${icon(iconName)}</span><span>${esc(label)}</span></div>${valueMarkup}<p>${esc(foot)}</p>${meter}</article>`;
 }
 
 function sectionHead(title, subtitle = "", iconName = "settings", extra = "") {
@@ -2153,6 +2293,72 @@ function bindStepperControls(root = content) {
   }));
 }
 
+/* ── 动效编排：滚动显现与数值滚动 ─────────────────────────────────── */
+
+let revealObserver = null;
+
+function revealObserverFor() {
+  if (revealObserver || typeof IntersectionObserver !== "function") return revealObserver;
+  revealObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.classList.add("is-revealed");
+      revealObserver.unobserve(entry.target);
+    }
+  }, { rootMargin: "0px 0px -6% 0px", threshold: 0.05 });
+  return revealObserver;
+}
+
+// 只给「首屏看不见的分区」打标记：首屏交给 page-enter 的交错，滚动到才显现。
+function markReveals(root) {
+  const sections = [...root.children].filter((node) => node.nodeType === 1 && !node.classList.contains("page-head"));
+  if (!sections.length) return;
+  if (prefersReducedMotion() || typeof IntersectionObserver !== "function") {
+    sections.forEach((node) => node.removeAttribute("data-reveal"));
+    return;
+  }
+  const fold = window.innerHeight || 800;
+  const observer = revealObserverFor();
+  // 每次重渲染都会换掉整片 DOM，旧观察目标直接丢弃，避免观察器持有游离节点。
+  observer?.disconnect();
+  sections.forEach((node, index) => {
+    node.removeAttribute("data-reveal");
+    if (index < 2) return;
+    if (node.getBoundingClientRect().top < fold) return;
+    node.setAttribute("data-reveal", "");
+    if (observer) observer.observe(node);
+  });
+}
+
+function animateCountUps(root) {
+  const nodes = [...root.querySelectorAll("[data-count-up]")];
+  if (!nodes.length || prefersReducedMotion()) return;
+  const formatter = new Intl.NumberFormat("zh-CN");
+  for (const node of nodes) {
+    const target = Number(node.dataset.countUp);
+    if (!Number.isFinite(target) || Math.abs(target) < 1) continue;
+    const started = performance.now();
+    const duration = 620;
+    const tick = (now) => {
+      const progress = Math.min(1, (now - started) / duration);
+      if (progress < 1) {
+        node.textContent = formatter.format(Math.round(target * (1 - Math.pow(1 - progress, 3))));
+        window.requestAnimationFrame(tick);
+      } else {
+        node.textContent = formatter.format(target);
+      }
+    };
+    node.textContent = formatter.format(0);
+    window.requestAnimationFrame(tick);
+  }
+}
+
+function enhancePage(root = content) {
+  markReveals(root);
+  animateCountUps(root);
+  updateNavIndicator();
+}
+
 function bindContent() {
   bindConfigControls();
   if (state.currentPage === "autonomy") bindRingInteractions();
@@ -2235,6 +2441,7 @@ function bindContent() {
     next?.setSelectionRange(position, position);
   });
   if (state.currentPage === "account" && !state.account?.logged_in) generateQr();
+  enhancePage();
 }
 
 function setActiveScheduleEvent(index) {
@@ -2594,8 +2801,36 @@ function init() {
   if (mobileMenu) mobileMenu.innerHTML = icon("menu");
   mobileMenu?.addEventListener("click", openMobileNav);
   document.querySelector("#sidebar-scrim")?.addEventListener("click", closeMobileNav);
+
+  const refreshButton = document.querySelector("#refresh-page");
+  if (refreshButton) refreshButton.innerHTML = icon("refresh");
+  refreshButton?.addEventListener("click", () => handleAction("refresh", refreshButton));
+
+  const themeButton = document.querySelector("#theme-toggle");
+  themeButton?.addEventListener("click", toggleTheme);
+  applyTheme();
+
+  if (readChoice(RAIL_KEY) === "1") sidebar.classList.add("is-rail");
+
+  // 「跟随系统」时，系统切换深浅色要即时反映；手动选过就不再跟随。
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
+    if (themeChoice === "auto") applyTheme();
+  });
+
+  window.addEventListener("scroll", () => {
+    document.querySelector(".topbar")?.classList.toggle("is-scrolled", window.scrollY > 4);
+  }, { passive: true });
+  window.addEventListener("resize", () => window.requestAnimationFrame(updateNavIndicator), { passive: true });
+
+  // 工具选择器与确认框此前没有键盘关闭，这里统一按 Escape 触发遮罩自身的关闭逻辑。
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const backdrop = modalRoot.querySelector(".modal-backdrop, .drawer-backdrop");
+    if (backdrop) backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
   window.addEventListener("pointermove", (event) => {
-    if (state.mode !== "extension" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (state.mode !== "extension" || prefersReducedMotion()) return;
     app.style.setProperty("--creator-pointer-x", `${event.clientX}px`);
     app.style.setProperty("--creator-pointer-y", `${event.clientY}px`);
   }, { passive: true });
@@ -2607,9 +2842,11 @@ function init() {
   });
   loadBase().then(() => {
     app.classList.remove("is-booting");
+    setPageChrome(state.currentPage);
     renderCurrentPage();
     updateSaveDock();
   }).catch((error) => {
+    app.classList.remove("is-booting");
     content.innerHTML = renderErrorState("无法加载 BiliBot 控制中心", error.message || "请检查 AstrBot 页面权限");
     bindContent();
     toast("初始化失败", error.message || "请检查插件日志", "error");

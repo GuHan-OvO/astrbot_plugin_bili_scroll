@@ -1,61 +1,70 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f5f5f7" />
   <title>自检 · 我会自己刷B站</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <header class="head">
-    <h1>自检</h1>
-    <p class="sub">看这个插件现在到底能不能跑。只读，不会发任何 B站 请求。</p>
-    <div class="actions">
-      <button id="reload" type="button">重新检查</button>
-      <button id="trial" type="button" class="primary">试运行</button>
-      <span id="stamp" class="stamp"></span>
-    </div>
-  </header>
+  <div class="ambient" aria-hidden="true"><span></span><span></span></div>
 
-  <p id="error" class="error" hidden></p>
+  <div class="page">
+    <header class="page-bar">
+      <div class="bar-copy">
+        <span class="eyebrow">BILIBOT / SELF CHECK</span>
+        <h1>自检</h1>
+        <p class="bar-sub">看这个插件现在到底能不能跑。只读，不会发任何 B站 请求。</p>
+      </div>
+      <div class="bar-actions">
+        <span id="stamp" class="stamp"></span>
+        <button id="reload" class="btn soft" type="button">重新检查</button>
+        <button id="trial" class="btn primary" type="button">试运行</button>
+      </div>
+    </header>
 
-  <main id="root" class="grid">
-    <section class="card" id="card-module">
-      <h2>模块</h2>
-      <dl id="module-list"></dl>
+    <p id="error" class="error" hidden></p>
+
+    <main id="root" class="grid">
+      <section class="card" id="card-module">
+        <header class="card-head"><span class="dot idle"></span><h2>模块</h2></header>
+        <dl id="module-list" class="kv"></dl>
+      </section>
+
+      <section class="card" id="card-config">
+        <header class="card-head"><span class="dot idle"></span><h2>配置</h2></header>
+        <p class="note" id="config-total"></p>
+        <ul id="config-required" class="checks"></ul>
+        <details class="fold">
+          <summary>可选配置</summary>
+          <dl id="config-optional" class="kv"></dl>
+        </details>
+      </section>
+
+      <section class="card" id="card-data">
+        <header class="card-head"><span class="dot idle"></span><h2>数据</h2></header>
+        <dl id="data-list" class="kv"></dl>
+      </section>
+
+      <section class="card" id="card-pages">
+        <header class="card-head"><span class="dot idle"></span><h2>页面与路由</h2></header>
+        <dl id="route-list" class="kv"></dl>
+        <ul id="page-list" class="checks"></ul>
+      </section>
+    </main>
+
+    <section class="card wide" id="card-trial" hidden>
+      <header class="card-head"><span class="dot idle"></span><h2>试运行</h2></header>
+      <p class="note" id="trial-note"></p>
+      <dl id="trial-cookie" class="kv"></dl>
+      <h3 class="sub-head">候选</h3>
+      <ul id="trial-candidates" class="checks"></ul>
+      <h3 class="sub-head">正式跑会做什么</h3>
+      <ul id="trial-plan" class="checks"></ul>
     </section>
-
-    <section class="card" id="card-config">
-      <h2>配置</h2>
-      <p class="note" id="config-total"></p>
-      <ul id="config-required" class="checks"></ul>
-      <details>
-        <summary>可选配置</summary>
-        <dl id="config-optional"></dl>
-      </details>
-    </section>
-
-    <section class="card" id="card-data">
-      <h2>数据</h2>
-      <dl id="data-list"></dl>
-    </section>
-
-    <section class="card" id="card-pages">
-      <h2>页面与路由</h2>
-      <dl id="route-list"></dl>
-      <ul id="page-list" class="checks"></ul>
-    </section>
-  </main>
-
-  <section class="card wide" id="card-trial" hidden>
-    <h2>试运行</h2>
-    <p class="note" id="trial-note"></p>
-    <dl id="trial-cookie"></dl>
-    <h3>候选</h3>
-    <ul id="trial-candidates" class="checks"></ul>
-    <h3>正式跑会做什么</h3>
-    <ul id="trial-plan" class="checks"></ul>
-  </section>
+  </div>
 
   <script type="module" src="./app.js"></script>
 </body>

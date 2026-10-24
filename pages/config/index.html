@@ -1,34 +1,43 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="light dark" />
-  <title>BiliBot 配置</title>
+  <meta name="theme-color" content="#f5f5f7" />
+  <title>配置 · 我会自己刷B站</title>
   <link rel="stylesheet" href="./config.css" />
 </head>
 <body>
+  <div class="ambient" aria-hidden="true"><span></span><span></span></div>
+
   <header class="topbar">
-    <div class="title">
-      <strong>BiliBot 配置</strong>
-      <span id="meta" class="meta"></span>
+    <div class="bar-copy">
+      <span class="eyebrow">BILIBOT / CONFIG</span>
+      <h1>插件配置</h1>
+      <p class="meta" id="meta"></p>
     </div>
     <div class="tools">
-      <input id="search" class="search" type="search" placeholder="搜索配置项、键名或说明" autocomplete="off" />
-      <button id="expand" class="btn" type="button">展开全部</button>
-      <button id="collapse" class="btn" type="button">收起全部</button>
+      <label class="search">
+        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.8 2.77a2.4 2.4 0 0 1 3.4 3.4 2.4 2.4 0 0 1-3.4-3.4m.71.74a1.36 1.36 0 1 0 1.92 1.92A1.36 1.36 0 0 0 3.52 3.5"/><path d="M6.2 6.2 8.1 8.1" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+        <input id="search" type="search" placeholder="搜索配置项、键名或说明" autocomplete="off" aria-label="搜索配置" />
+      </label>
+      <button id="expand" class="btn soft" type="button">展开全部</button>
+      <button id="collapse" class="btn soft" type="button">收起全部</button>
+      <span id="dirty" class="dirty" hidden></span>
+      <button id="revert" class="btn soft" type="button" hidden>撤销改动</button>
       <button id="save" class="btn primary" type="button" disabled>保存</button>
     </div>
   </header>
 
   <main id="list" class="list">
-    <p class="hint-plain">正在读取配置…</p>
+    <div class="skeleton-list" aria-hidden="true">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+    <p class="sr-only" role="status">正在读取配置…</p>
   </main>
-
-  <footer id="dock" class="dock" hidden>
-    <span id="dock-text"></span>
-    <button id="revert" class="btn" type="button">撤销改动</button>
-  </footer>
 
   <script type="module" src="./config.js"></script>
 </body>

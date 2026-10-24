@@ -23,6 +23,13 @@ const el = {
   trialPlan: document.getElementById("trial-plan"),
 };
 
+const cards = {
+  module: document.getElementById("card-module"),
+  config: document.getElementById("card-config"),
+  data: document.getElementById("card-data"),
+  pages: document.getElementById("card-pages"),
+};
+
 function unwrap(result) {
   if (result && result.status === "ok" && Object.prototype.hasOwnProperty.call(result, "data")) {
     return result.data;
@@ -49,20 +56,32 @@ function node(tag, className, text) {
   return n;
 }
 
-function clear(node) {
-  node.replaceChildren();
+function clear(target) {
+  target.replaceChildren();
+}
+
+function markCard(card, tone) {
+  const dot = card?.querySelector(".dot");
+  if (!dot) return;
+  dot.classList.remove("ok", "bad", "idle");
+  dot.classList.add(tone);
 }
 
 function addRow(dl, label, value, tone) {
   dl.appendChild(node("dt", null, label));
-  const dd = node("dd", tone ? tone : null, value === undefined || value === null || value === "" ? "—" : value);
+  const text = value === undefined || value === null || value === "" ? "—" : value;
+  const dd = node("dd", tone || null, text);
   dl.appendChild(dd);
   return dd;
 }
 
 function renderModule(info) {
   clear(el.moduleList);
-  if (!info) return addRow(el.moduleList, "状态", "读取失败", "bad-text");
+  if (!info) {
+    markCard(cards.module, "bad");
+    return addRow(el.moduleList, "状态", "读取失败", "bad-text");
+  }
+  markCard(cards.module, "ok");
   addRow(el.moduleList, "包名", info.plugin_name);
   addRow(el.moduleList, "插件目录", info.plugin_root);
   addRow(el.moduleList, "数据目录", info.data_dir);
@@ -83,10 +102,15 @@ function renderConfig(cfg) {
   clear(el.configRequired);
   if (!cfg) {
     el.configTotal.textContent = "读取失败";
+    markCard(cards.config, "bad");
     return;
   }
-  el.configTotal.textContent = `配置项共 ${cfg.total_keys} 个`;
-  for (const item of cfg.required || []) {
+  const required = cfg.required || [];
+  const allOk = required.every((item) => item.ok);
+  markCard(cards.config, allOk ? "ok" : "bad");
+  el.configTotal.textContent = `配置项共 ${cfg.total_keys} 个${allOk ? "" : " · 有必填项未通过"}`;
+
+  for (const item of required) {
     const li = node("li");
     li.appendChild(node("span", `dot ${item.ok ? "ok" : "bad"}`));
     const body = node("div");
@@ -104,20 +128,29 @@ function renderConfig(cfg) {
 
 function renderData(data, pages) {
   clear(el.dataList);
-  if (!data) return addRow(el.dataList, "状态", "读取失败", "bad-text");
-
+  if (!data) {
+    markCard(cards.data, "bad");
+    return addRow(el.dataList, "状态", "读取失败", "bad-text");
+  }
   const watch = data.watch_log || {};
-  addRow(el.dataList, "看过的视频", watch.count === null ? "文件损坏" : `${watch.count} 条`);
   const verify = data.verify_log || {};
-  addRow(el.dataList, "复核记录", verify.count === null ? "文件损坏" : `${verify.count} 条`);
   const db = data.database || {};
+  const broken = watch.count === null || verify.count === null;
+  markCard(cards.data, broken ? "bad" : "ok");
+
+  addRow(el.dataList, "看过的视频", watch.count === null ? "文件损坏" : `${watch.count} 条`);
+  addRow(el.dataList, "复核记录", verify.count === null ? "文件损坏" : `${verify.count} 条`);
   addRow(el.dataList, "数据库", db.exists ? `存在（${Math.round((db.size || 0) / 1024)} KB）` : "尚未创建");
   addRow(el.dataList, "页面目录", `${(pages || []).length} 个`);
 }
 
 function renderRoutes(routes, pages) {
   clear(el.routeList);
-  if (!routes) return addRow(el.routeList, "状态", "读取失败", "bad-text");
+  if (!routes) {
+    markCard(cards.pages, "bad");
+    return addRow(el.routeList, "状态", "读取失败", "bad-text");
+  }
+  markCard(cards.pages, (pages || []).length ? "ok" : "bad");
   addRow(el.routeList, "路由前缀", routes.prefix);
   for (const example of routes.examples || []) {
     addRow(el.routeList, "示例", example);
@@ -135,22 +168,16 @@ function renderRoutes(routes, pages) {
   }
 }
 
-
 function renderTrial(data) {
   el.trialCard.hidden = false;
+  markCard(el.trialCard, data.plan?.proactive_enabled ? "ok" : "idle");
 
   const ms = data.elapsed_ms;
-  el.trialNote.textContent =
-    `耗时 ${ms} ms · 取到 ${data.candidate_total ?? 0} 个候选 · 没有发出任何写请求`;
+  el.trialNote.textContent = `耗时 ${ms} ms · 取到 ${data.candidate_total ?? 0} 个候选 · 没有发出任何写请求`;
 
   clear(el.trialCookie);
   const cookie = data.cookie || {};
-  addRow(
-    el.trialCookie,
-    "登录态",
-    cookie.detail || "—",
-    cookie.ok ? "ok-text" : "bad-text"
-  );
+  addRow(el.trialCookie, "登录态", cookie.detail || "—", cookie.ok ? "ok-text" : "bad-text");
 
   clear(el.trialCandidates);
   const list = data.candidates || [];
@@ -159,7 +186,7 @@ function renderTrial(data) {
   }
   for (const item of list) {
     const li = node("li");
-    li.appendChild(node("span", `dot ${item.source ? "ok" : ""}`));
+    li.appendChild(node("span", `dot ${item.source ? "ok" : "idle"}`));
     const body = node("div");
     body.appendChild(node("span", "name", item.title || item.bvid));
     const meta = [item.up_name, item.tname, item.play && `${item.play} 播放`, item.source]
@@ -172,34 +199,33 @@ function renderTrial(data) {
 
   clear(el.trialPlan);
   const plan = data.plan || {};
-  const actions = plan.actions || [];
   if (!plan.proactive_enabled) {
     const li = node("li");
     li.appendChild(node("span", "dot bad"));
-    li.appendChild(node("span", "hint", "ENABLE_PROACTIVE 关着，正式跑也不会启动"));
+    li.appendChild(node("span", "hint bad-text", "ENABLE_PROACTIVE 关着，正式跑也不会启动"));
     el.trialPlan.appendChild(li);
   }
-  for (const action of actions) {
+  for (const action of plan.actions || []) {
     const li = node("li");
-    li.appendChild(node("span", `dot ${action.enabled ? "ok" : ""}`));
+    li.appendChild(node("span", `dot ${action.enabled ? "ok" : "idle"}`));
     li.appendChild(
       node(
         "span",
         "hint",
-        action.enabled
-          ? `${action.action}：评分 ≥ ${action.threshold}`
-          : `${action.action}：已关闭`
+        action.enabled ? `${action.action}：评分 ≥ ${action.threshold}` : `${action.action}：已关闭`
       )
     );
     el.trialPlan.appendChild(li);
   }
-  el.trialPlan.appendChild(node("li", "hint", plan.note || ""));
+  if (plan.note) el.trialPlan.appendChild(node("li", "hint", plan.note));
 }
 
 async function runTrial() {
   el.trial.disabled = true;
+  el.trial.textContent = "取片中…";
   el.error.hidden = true;
   el.trialCard.hidden = false;
+  markCard(el.trialCard, "idle");
   el.trialNote.textContent = "正在取片…（不会互动）";
   try {
     renderTrial(await apiPost("trial"));
@@ -209,11 +235,13 @@ async function runTrial() {
     el.error.textContent = `试运行失败：${err?.message || err}`;
   } finally {
     el.trial.disabled = false;
+    el.trial.textContent = "试运行";
   }
 }
 
 async function load() {
   el.reload.disabled = true;
+  el.reload.textContent = "检查中…";
   el.error.hidden = true;
   try {
     const data = await apiGet("selftest");
@@ -227,17 +255,23 @@ async function load() {
       el.error.hidden = false;
       el.error.textContent = `部分区块读取失败：${data.errors.join("；")}`;
     }
-    el.stamp.textContent = `检查于 ${new Date().toLocaleTimeString()}`;
+    el.stamp.textContent = `检查于 ${new Date().toLocaleTimeString("zh-CN")}`;
   } catch (err) {
     el.error.hidden = false;
     el.error.textContent = `读取失败：${err?.message || err}`;
+    Object.values(cards).forEach((card) => markCard(card, "bad"));
   } finally {
     el.reload.disabled = false;
+    el.reload.textContent = "重新检查";
   }
 }
 
 el.reload.addEventListener("click", load);
 el.trial.addEventListener("click", runTrial);
+
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", (event) => {
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", event.matches ? "#0b0b0d" : "#f5f5f7");
+});
 
 if (bridge?.ready) {
   Promise.resolve(bridge.ready()).then(load).catch(() => load());

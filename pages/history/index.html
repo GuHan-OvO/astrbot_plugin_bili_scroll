@@ -1,64 +1,87 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>刷B站 · 看过的视频</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <title>看过的视频 · 我会自己刷B站</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <header class="head">
-    <h1>看过的视频</h1>
-    <div id="stats" class="stats" aria-live="polite"></div>
-  </header>
+  <div class="ambient" aria-hidden="true"><span></span><span></span></div>
 
-  <section class="filters" aria-label="筛选">
-    <label>分数
-      <input id="min-score" type="number" min="0" max="10" step="0.5" placeholder="最低" />
-      <span class="dash">–</span>
-      <input id="max-score" type="number" min="0" max="10" step="0.5" placeholder="最高" />
-    </label>
-    <label>心情
-      <select id="mood">
-        <option value="">全部</option>
-        <option>开心</option><option>平静</option><option>无聊</option>
-        <option>感动</option><option>好笑</option><option>震撼</option>
-        <option>困惑</option><option>未知</option>
-      </select>
-    </label>
-    <label>来源
-      <select id="source">
-        <option value="">全部</option>
-        <option value="search">搜索</option>
-        <option value="follow">关注</option>
-        <option value="pool">视频池</option>
-      </select>
-    </label>
-    <label>状态
-      <select id="state">
-        <option value="">全部</option>
-        <option value="recommended">推荐过</option>
-        <option value="not-recommended">没推荐</option>
-        <option value="failed">评价失败</option>
-      </select>
-    </label>
-    <label class="grow">搜索
-      <input id="q" type="search" placeholder="标题 / UP / 理由" />
-    </label>
-    <button id="reset" type="button" class="ghost">重置</button>
-  </section>
+  <div class="page">
+    <header class="page-bar">
+      <div class="bar-copy">
+        <span class="eyebrow">BILIBOT / HISTORY</span>
+        <h1>看过的视频</h1>
+        <p class="bar-sub" id="stats" aria-live="polite"></p>
+      </div>
+      <div class="bar-actions">
+        <button id="reset" class="btn soft" type="button">重置筛选</button>
+      </div>
+    </header>
 
-  <main id="grid" class="grid" aria-live="polite"></main>
-  <p id="empty" class="empty" hidden>还没有看过的记录。等它跑完一轮就会出现。</p>
-  <p id="error" class="error" hidden></p>
+    <section class="filters" aria-label="筛选条件">
+      <label class="field">
+        <span>分数</span>
+        <div class="range-pair">
+          <input id="min-score" type="number" min="0" max="10" step="0.5" placeholder="最低" aria-label="最低分" />
+          <i>–</i>
+          <input id="max-score" type="number" min="0" max="10" step="0.5" placeholder="最高" aria-label="最高分" />
+        </div>
+      </label>
+      <label class="field">
+        <span>心情</span>
+        <select id="mood" aria-label="按心情筛选">
+          <option value="">全部</option>
+          <option>开心</option><option>平静</option><option>无聊</option>
+          <option>感动</option><option>好笑</option><option>震撼</option>
+          <option>困惑</option><option>未知</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>来源</span>
+        <select id="source" aria-label="按来源筛选">
+          <option value="">全部</option>
+          <option value="search">搜索</option>
+          <option value="follow">关注</option>
+          <option value="pool">视频池</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>状态</span>
+        <select id="state" aria-label="按状态筛选">
+          <option value="">全部</option>
+          <option value="recommended">推荐过</option>
+          <option value="not-recommended">没推荐</option>
+          <option value="failed">评价失败</option>
+        </select>
+      </label>
+      <label class="field grow">
+        <span>搜索</span>
+        <input id="q" type="search" placeholder="标题 / UP / 理由" aria-label="搜索标题、UP 或理由" />
+      </label>
+    </section>
 
-  <nav class="pager">
-    <button id="prev" type="button">上一页</button>
-    <span id="page-info" class="page-info"></span>
-    <button id="next" type="button">下一页</button>
-  </nav>
+    <div class="result-bar" aria-live="polite">
+      <span id="count" class="count"></span>
+    </div>
 
-  <aside id="drawer" class="drawer" hidden aria-label="详情"></aside>
+    <main id="grid" class="grid" aria-live="polite"></main>
+    <p id="empty" class="empty" hidden>还没有看过的记录。等它跑完一轮就会出现。</p>
+    <p id="error" class="error" hidden></p>
+
+    <nav class="pager" aria-label="分页">
+      <button id="prev" type="button" class="btn soft" aria-label="上一页">上一页</button>
+      <span id="page-info" class="page-info"></span>
+      <button id="next" type="button" class="btn soft" aria-label="下一页">下一页</button>
+    </nav>
+  </div>
+
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+  <aside id="drawer" class="drawer" hidden aria-label="视频详情" role="dialog" aria-modal="true"></aside>
 
   <script type="module" src="./app.js"></script>
 </body>

@@ -11,6 +11,7 @@ const PAGE_SIZE = 24;
 const el = {
   grid: document.getElementById("grid"),
   stats: document.getElementById("stats"),
+  count: document.getElementById("count"),
   empty: document.getElementById("empty"),
   error: document.getElementById("error"),
   pageInfo: document.getElementById("page-info"),
@@ -18,6 +19,7 @@ const el = {
   next: document.getElementById("next"),
   reset: document.getElementById("reset"),
   drawer: document.getElementById("drawer"),
+  backdrop: document.getElementById("drawer-backdrop"),
   minScore: document.getElementById("min-score"),
   maxScore: document.getElementById("max-score"),
   mood: document.getElementById("mood"),
@@ -26,7 +28,7 @@ const el = {
   q: document.getElementById("q"),
 };
 
-const state = { offset: 0, total: 0, items: [], loading: false };
+const state = { offset: 0, total: 0, items: [], loading: false, firstLoad: true, returnFocus: null };
 
 function unwrap(result) {
   if (result && result.status === "ok" && Object.prototype.hasOwnProperty.call(result, "data")) {
@@ -86,16 +88,29 @@ function renderStats(stats = {}) {
   ];
   if (stats.failed) parts.push(["失败", stats.failed]);
   for (const [label, value] of parts) {
-    const span = node("span", null, `${label} `);
-    span.appendChild(node("b", null, value));
+    const span = node("span");
+    span.append(document.createTextNode(`${label} `), node("b", null, value));
     el.stats.appendChild(span);
-    el.stats.appendChild(document.createTextNode("　"));
   }
+}
+
+function renderSkeleton(count = 6) {
+  const cards = [];
+  for (let i = 0; i < count; i += 1) {
+    const card = node("div", "skeleton");
+    const thumb = node("div", "thumb");
+    const body = node("div", "body");
+    body.append(node("i"), node("i"));
+    card.append(thumb, body);
+    cards.push(card);
+  }
+  el.grid.replaceChildren(...cards);
 }
 
 function renderCard(item) {
   const card = node("button", "card");
   card.type = "button";
+  card.setAttribute("aria-label", `${item.title || item.bvid || "视频"}，打开详情`);
 
   const thumb = node("div", "thumb");
   if (item.pic) {
@@ -141,11 +156,15 @@ function render() {
   el.pageInfo.textContent = `第 ${page} / ${pages} 页 · 共 ${state.total} 条`;
   el.prev.disabled = state.offset <= 0;
   el.next.disabled = state.offset + PAGE_SIZE >= state.total;
+  el.count.textContent = state.total
+    ? `第 ${state.offset + 1}–${Math.min(state.offset + PAGE_SIZE, state.total)} 条，共 ${state.total} 条`
+    : "";
 }
 
 async function load() {
   state.loading = true;
   el.error.hidden = true;
+  if (state.firstLoad) renderSkeleton();
   try {
     const data = await apiGet("history", buildQuery());
     state.items = Array.isArray(data.items) ? data.items : [];
@@ -158,36 +177,59 @@ async function load() {
     el.error.textContent = `加载失败：${err?.message || err}`;
   } finally {
     state.loading = false;
+    state.firstLoad = false;
     render();
   }
 }
 
+function openDrawerShell() {
+  el.drawer.hidden = false;
+  el.backdrop.hidden = false;
+  state.returnFocus = document.activeElement;
+  requestAnimationFrame(() => {
+    el.backdrop.classList.add("is-visible");
+    el.drawer.classList.add("is-visible");
+  });
+  document.body.style.overflow = "hidden";
+}
+
 function closeDrawer() {
-  el.drawer.hidden = true;
-  el.drawer.replaceChildren();
+  if (el.drawer.hidden) return;
+  el.backdrop.classList.remove("is-visible");
+  el.drawer.classList.remove("is-visible");
+  window.setTimeout(() => {
+    el.drawer.hidden = true;
+    el.backdrop.hidden = true;
+    el.drawer.replaceChildren();
+  }, 320);
+  document.body.style.overflow = "";
+  if (state.returnFocus instanceof HTMLElement && state.returnFocus.isConnected) {
+    state.returnFocus.focus({ preventScroll: true });
+  }
 }
 
 async function openDetail(bvid) {
   if (!bvid) return;
-  el.drawer.hidden = false;
+  openDrawerShell();
   el.drawer.replaceChildren(node("p", "meta", "读取中…"));
   try {
-    const item = await apiGet("history/detail", { bvid });
-    renderDetail(item);
+    renderDetail(await apiGet("history/detail", { bvid }));
   } catch (err) {
     el.drawer.replaceChildren(node("p", "error", `读取失败：${err?.message || err}`));
   }
+  el.drawer.scrollTop = 0;
 }
 
 function renderDetail(item) {
   const frag = document.createDocumentFragment();
 
-  const close = node("button", "close", "×");
+  const head = node("div", "drawer-head");
+  const close = node("button", "drawer-close", "×");
   close.type = "button";
+  close.setAttribute("aria-label", "关闭详情");
   close.addEventListener("click", closeDrawer);
-  frag.appendChild(close);
-
-  frag.appendChild(node("h2", null, item.title || item.bvid));
+  head.append(node("h2", null, item.title || item.bvid), close);
+  frag.appendChild(head);
 
   const dl = node("dl");
   const rows = [
@@ -200,12 +242,13 @@ function renderDetail(item) {
     ["看过", item.seen_times ? `${item.seen_times} 次` : ""],
     ["推荐过", item.recommended ? item.recommended_at || "是" : "否"],
   ];
+  let rowCount = 0;
   for (const [label, value] of rows) {
     if (!value) continue;
-    dl.appendChild(node("dt", null, label));
-    dl.appendChild(node("dd", null, value));
+    dl.append(node("dt", null, label), node("dd", null, value));
+    rowCount += 1;
   }
-  frag.appendChild(dl);
+  if (rowCount) frag.appendChild(dl);
 
   const sections = [
     ["为什么值得", item.score_reason],
@@ -218,20 +261,17 @@ function renderDetail(item) {
   ];
   for (const [title, value] of sections) {
     if (!value) continue;
-    const section = node("section");
-    section.appendChild(node("h3", null, title));
-    section.appendChild(node("div", "quote", value));
+    const section = node("section", "detail-section");
+    section.append(node("h3", null, title), node("div", "quote", value));
     frag.appendChild(section);
   }
 
   if (item.bvid) {
-    const link = node("a", null, "在 B站 打开");
+    const link = node("a", "drawer-link", "在 B站 打开");
     link.href = `https://www.bilibili.com/video/${encodeURIComponent(item.bvid)}`;
     link.target = "_blank";
     link.rel = "noreferrer";
-    const section = node("section");
-    section.appendChild(link);
-    frag.appendChild(section);
+    frag.appendChild(link);
   }
 
   el.drawer.replaceChildren(frag);
@@ -253,6 +293,7 @@ el.q.addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
     state.offset = 0;
+    state.firstLoad = false;
     load();
   }, 300);
 });
@@ -260,24 +301,33 @@ el.q.addEventListener("input", () => {
 for (const control of [el.minScore, el.maxScore, el.mood, el.source, el.state]) {
   control.addEventListener("change", () => {
     state.offset = 0;
+    state.firstLoad = false;
     load();
   });
 }
 
 el.prev.addEventListener("click", () => {
   state.offset = Math.max(0, state.offset - PAGE_SIZE);
+  state.firstLoad = false;
   load();
 });
 
 el.next.addEventListener("click", () => {
   state.offset += PAGE_SIZE;
+  state.firstLoad = false;
   load();
 });
 
 el.reset.addEventListener("click", resetFilters);
+el.backdrop.addEventListener("click", closeDrawer);
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeDrawer();
+});
+
+// 跟随系统深浅色：只用 CSS 变量，JS 无需干预；这里仅同步 theme-color。
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", (event) => {
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", event.matches ? "#0b0b0d" : "#f5f5f7");
 });
 
 if (bridge?.ready) {

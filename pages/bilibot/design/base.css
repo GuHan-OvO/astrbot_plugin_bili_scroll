@@ -1,0 +1,327 @@
+/* ============================================================================
+ * BiliBot 控制中心 · 基础层
+ *
+ * reset、排版基线、焦点可见、滚动条、环境背景、工具类。
+ * 这里不出现具体组件，组件全部在 components / pages / shell 里。
+ * ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  /* 底色挂在根元素上：.ambient 用 z-index:-1 画在画布背景之上、正文之下 */
+  background: var(--ambient-base);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-regular);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: color var(--dur-slow) var(--ease-out);
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+}
+
+/* 图标：上游 icons.js 输出的是无 fill 的 <svg class="gicon"> */
+.gicon {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  fill: currentColor;
+  overflow: visible;
+}
+
+/* ── 焦点：键盘可达，鼠标不打扰 ─────────────────────────────────────── */
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+::selection {
+  background: var(--accent-soft-strong);
+  color: var(--text-strong);
+}
+
+/* ── 滚动条 ─────────────────────────────────────────────────────────── */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--r-pill);
+  background-clip: content-box;
+  background-color: var(--scroll-thumb);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scroll-thumb-hover);
+}
+
+/* ── 环境背景 ─────────────────────────────────────────────────────────
+ * 三层极低饱和的光晕，用 26s 的缓慢漂移建立「活着」的氛围。
+ * 固定定位 + transform 动画，不触发重排；prefers-reduced-motion 下静止。
+ */
+
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--accent-soft) 0%, transparent 60%),
+    var(--ambient-base);
+}
+
+.ambient-orb {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(72px);
+  opacity: 0.9;
+  will-change: transform;
+}
+
+.ambient-orb-a {
+  top: -14vh;
+  left: -6vw;
+  width: 52vw;
+  height: 52vw;
+  background: var(--ambient-a);
+  animation: ambientDriftA var(--dur-ambient) var(--ease-in-out) infinite alternate;
+}
+
+.ambient-orb-b {
+  top: 24vh;
+  right: -10vw;
+  width: 44vw;
+  height: 44vw;
+  background: var(--ambient-b);
+  animation: ambientDriftB calc(var(--dur-ambient) * 1.25) var(--ease-in-out) infinite alternate;
+}
+
+.ambient-orb-c {
+  bottom: -18vh;
+  left: 26vw;
+  width: 40vw;
+  height: 40vw;
+  background: var(--ambient-c);
+  animation: ambientDriftC calc(var(--dur-ambient) * 1.6) var(--ease-in-out) infinite alternate;
+}
+
+@keyframes ambientDriftA {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(6vw, 4vh, 0) scale(1.12);
+  }
+}
+
+@keyframes ambientDriftB {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  to {
+    transform: translate3d(-7vw, 6vh, 0) scale(0.94);
+  }
+}
+
+@keyframes ambientDriftC {
+  from {
+    transform: translate3d(0, 0, 0) scale(0.96);
+  }
+  to {
+    transform: translate3d(4vw, -5vh, 0) scale(1.1);
+  }
+}
+
+/* ── 工具类 ─────────────────────────────────────────────────────────── */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* 滚动到视口时才出现的分区（由 app.js 打标 + IntersectionObserver 解除） */
+[data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition: opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-apple);
+}
+
+[data-reveal].is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
+/* 页面加载时的顶栏进度条 */
+.page-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: calc(var(--z-topbar) + 1);
+  width: 100%;
+  height: 2px;
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.page-progress.is-active {
+  opacity: 1;
+  animation: progressSweep 1.15s var(--ease-in-out) infinite;
+}
+
+@keyframes progressSweep {
+  0% {
+    transform: scaleX(0.05) translateX(0);
+  }
+  60% {
+    transform: scaleX(0.72) translateX(0);
+  }
+  100% {
+    transform: scaleX(0.95) translateX(6%);
+    opacity: 0.2;
+  }
+}
+
+/* ── 减少动态效果 ────────────────────────────────────────────────────
+ * 保留必要的状态反馈（颜色、边框、透明度），只压掉位移、视差与循环动画。
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .ambient-orb {
+    animation: none !important;
+  }
+
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+
+  .page-progress.is-active {
+    animation: none;
+    opacity: 0.7;
+    transform: scaleX(0.6);
+  }
+}

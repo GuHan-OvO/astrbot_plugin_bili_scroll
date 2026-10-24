@@ -1,14 +1,20 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="light" data-mode="host">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="light" />
-  <meta name="theme-color" content="#f6f8fc" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f5f5f7" />
   <title>BiliBot 控制中心</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <link rel="stylesheet" href="./creator.css" />
-  <link rel="stylesheet" href="./theme.css" />
+
+  <!-- 设计系统：令牌 → 基础 → 外壳 → 组件 → 页面 → 工作室 → 动效 -->
+  <link rel="stylesheet" href="./design/tokens.css" />
+  <link rel="stylesheet" href="./design/base.css" />
+  <link rel="stylesheet" href="./design/shell.css" />
+  <link rel="stylesheet" href="./design/components.css" />
+  <link rel="stylesheet" href="./design/pages.css" />
+  <link rel="stylesheet" href="./design/studio.css" />
+  <link rel="stylesheet" href="./design/motion.css" />
 </head>
 <body>
   <div class="ambient" aria-hidden="true">
@@ -17,21 +23,29 @@
     <span class="ambient-orb ambient-orb-c"></span>
   </div>
 
-  <div id="app" class="app-shell is-booting">
-    <header class="mobile-header">
-      <button id="mobile-menu" class="icon-button" type="button" aria-label="打开导航"></button>
-      <div class="mobile-brand">
-        <img src="./assets/logo.png" alt="" />
-        <span>BiliBot</span>
-      </div>
-      <span id="mobile-status" class="status-dot" aria-label="连接状态"></span>
-    </header>
+  <div class="page-progress" id="page-progress" aria-hidden="true"></div>
 
+  <div id="app" class="app-shell is-booting">
     <aside id="sidebar" class="sidebar" aria-label="BiliBot 主导航"></aside>
     <button id="sidebar-scrim" class="sidebar-scrim" type="button" aria-label="关闭导航"></button>
 
-    <main class="main-stage">
-      <div id="content" class="content" tabindex="-1">
+    <div class="main-stage">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="mobile-menu" class="icon-button" type="button" aria-label="打开导航"></button>
+          <div class="crumb">
+            <span class="crumb-brand">BiliBot</span>
+            <i>/</i>
+            <strong id="crumb-page">总览</strong>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button id="refresh-page" class="icon-button is-bordered" type="button" aria-label="刷新当前页面" title="刷新当前页面"></button>
+          <button id="theme-toggle" class="icon-button is-bordered" type="button" aria-label="切换深浅色" title="切换深浅色"></button>
+        </div>
+      </header>
+
+      <main id="content" class="content" tabindex="-1">
         <div class="boot-screen" aria-live="polite">
           <div class="boot-mark"><img src="./assets/logo.png" alt="BiliBot" /></div>
           <div class="boot-copy">
@@ -40,8 +54,8 @@
           </div>
           <div class="boot-progress"><i></i></div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
 
     <div id="save-dock" class="save-dock" aria-live="polite"></div>
     <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>

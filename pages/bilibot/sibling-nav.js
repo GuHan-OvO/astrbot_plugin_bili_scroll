@@ -1,13 +1,16 @@
-// 把「看过的视频」「自检」加到 BiliBot 控制中心的左侧导航里。
+// 把「看过的视频」「自检」两个兄弟页面挂进 BiliBot 控制中心的侧边栏。
 //
 // 三个关键点：
 // 1. 侧边栏是 app.js 里一大段模板字符串拼的、每次切页都会重建，所以用 MutationObserver
 //    等它渲染完再补，重建一次补一次，不 hook 任何内部函数。
-// 2. 图标必须直接用上游 icons.js 的 `icon()`：`.nav-item span { flex: 1 }` 会把
+// 2. 图标必须直接用上游 icons.js 的 `icon()`：`.nav-item > span { flex: 1 }` 会把
 //    任何 span 撑开——用 <span> 包图标会把文字挤到最右边。
 // 3. 跳转**用 <a target="_top"> 而不是 JS 改 hash**：插件页面可能跑在 iframe 里，
 //    脚本改 window.top.location.hash 会被 sandbox 静默拦掉（不抛错也不生效）；
 //    而 target="_top" 是浏览器原生行为，由页面框架决定处理方式，不受脚本沙箱影响。
+//
+// 落点：优先写进侧边栏预留的 `[data-nav-slot="pages"]`（带「页面」分组标题）；
+// 找不到就退回旧的插入点（`[data-page="basics"]` 之前），再找不到就追加到导航末尾。
 
 import { icon } from "./icons.js";
 
@@ -41,34 +44,24 @@ function buildLink(item) {
   return link;
 }
 
-function injectStyle() {
-  if (document.getElementById("bilibot-sibling-style")) return;
-  const style = document.createElement("style");
-  style.id = "bilibot-sibling-style";
-  // a 标签复用了 button 的 .nav-item 样式，这里只需要去掉下划线、保持可点击
-  style.textContent = `
-    #sidebar a.nav-item { text-decoration: none; cursor: pointer; }
-    #sidebar a.nav-item:visited { color: #657085; }
-  `;
-  document.head.appendChild(style);
+function container() {
+  const sidebar = document.querySelector("#sidebar");
+  if (!sidebar) return null;
+  return sidebar.querySelector('[data-nav-slot="pages"]') || sidebar.querySelector(".nav-list");
 }
 
 function inject() {
-  const navList = document.querySelector("#sidebar .nav-list");
-  if (!navList) return;
-  injectStyle();
+  const host = container();
+  if (!host) return;
 
-  // 插到「基础设置」之前。找不到锚点（上游改了导航项）就退回追加到末尾，至少不会消失。
-  const anchor = navList.querySelector('[data-page="basics"]');
+  // 插入锚点：只有退回旧结构时才用得上
+  const anchor = host.querySelector('[data-page="basics"]');
 
   for (const item of PAGES) {
-    if (navList.querySelector(`[data-sibling-page="${item.page}"]`)) continue;
+    if (document.querySelector(`#sidebar [data-sibling-page="${item.page}"]`)) continue;
     const link = buildLink(item);
-    if (anchor && anchor.parentNode === navList) {
-      navList.insertBefore(link, anchor);
-    } else {
-      navList.appendChild(link);
-    }
+    if (anchor && anchor.parentNode === host) host.insertBefore(link, anchor);
+    else host.appendChild(link);
   }
 }
 

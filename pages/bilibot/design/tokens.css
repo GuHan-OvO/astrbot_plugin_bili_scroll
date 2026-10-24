@@ -1,0 +1,298 @@
+/* ============================================================================
+ * BiliBot 控制中心 · 设计令牌
+ *
+ * 这一层只放变量，不放任何选择器规则（:root 与主题覆盖除外）。
+ * 所有视觉决策都必须引用这里的令牌，组件层不允许再出现裸色值。
+ *
+ * 主题：
+ *   html[data-theme="light"]  浅色（默认）
+ *   html[data-theme="dark"]   深色
+ *   html[data-mode="extension"] 扩展工作区（深色工作室，独立的表面与强调色）
+ * ========================================================================== */
+
+:root {
+  /* ── 字体 ──────────────────────────────────────────────────────────── */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Mono", ui-monospace, Consolas, "Courier New", monospace;
+
+  /* 字号阶梯：从展示级到标签级，全部带行高 */
+  --fs-display: 34px;
+  --lh-display: 1.1;
+  --fs-title: 24px;
+  --lh-title: 1.22;
+  --fs-heading: 19px;
+  --lh-heading: 1.3;
+  --fs-section: 16px;
+  --lh-section: 1.35;
+  --fs-body: 14px;
+  --lh-body: 1.6;
+  --fs-sm: 13px;
+  --lh-sm: 1.55;
+  --fs-xs: 12px;
+  --lh-xs: 1.5;
+  --fs-micro: 11px;
+  --lh-micro: 1.4;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 650;
+
+  --tracking-display: -0.028em;
+  --tracking-title: -0.02em;
+  --tracking-section: -0.012em;
+  --tracking-label: 0.08em;
+
+  /* ── 间距：4 的倍数，命名按用途而非数值 ───────────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 56px;
+  --sp-10: 72px;
+
+  /* 组件内部留白与组件之间的距离（节奏靠这两组拉开） */
+  --pad-card: var(--sp-6);
+  --pad-card-tight: var(--sp-5);
+  --pad-control-y: 9px;
+  --pad-control-x: 12px;
+  --gap-grid: var(--sp-4);
+  --gap-section: var(--sp-7);
+
+  /* ── 圆角 ──────────────────────────────────────────────────────────── */
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r-md: 13px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+  --r-2xl: 30px;
+  --r-pill: 999px;
+
+  /* ── 版式尺寸 ──────────────────────────────────────────────────────── */
+  --sidebar-w: 268px;
+  --sidebar-rail-w: 78px;
+  --topbar-h: 62px;
+  --content-max: 1180px;
+  --content-pad-x: clamp(18px, 3vw, 40px);
+  --content-pad-y: var(--sp-7);
+
+  /* ── 动效 ──────────────────────────────────────────────────────────── */
+  --dur-press: 90ms; /* 按下、即时反馈 */
+  --dur-fast: 150ms; /* hover、焦点、开关 */
+  --dur-base: 220ms; /* 菜单、标签切换、卡片抬升 */
+  --dur-slow: 320ms; /* 抽屉、弹窗、折叠面板 */
+  --dur-page: 420ms; /* 页面进出、视图切换 */
+  --dur-ambient: 26s; /* 环境氛围 */
+
+  --ease-out: cubic-bezier(0.22, 0.68, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
+
+  --stagger-step: 34ms;
+  --lift-hover: -2px;
+  --press-scale: 0.978;
+
+  /* ── 层级 ──────────────────────────────────────────────────────────── */
+  --z-base: 0;
+  --z-sidebar: 40;
+  --z-topbar: 30;
+  --z-scrim: 45;
+  --z-dock: 50;
+  --z-toast: 60;
+  --z-modal: 70;
+
+  /* ── 图标 ──────────────────────────────────────────────────────────── */
+  --icon-sm: 15px;
+  --icon-md: 18px;
+  --icon-lg: 22px;
+}
+
+/* ============================================================================
+ * 浅色主题（默认）
+ * ========================================================================== */
+
+:root,
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f5f5f7;
+  --bg-deep: #ececf0;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-muted: #fafafc;
+  --surface-sunken: #f1f1f4;
+  --surface-glass: rgba(255, 255, 255, 0.72);
+  --surface-glass-strong: rgba(255, 255, 255, 0.86);
+
+  --text: #1d1d1f;
+  --text-strong: #000000;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #8e8e93;
+  --text-on-accent: #ffffff;
+
+  --line: rgba(0, 0, 0, 0.075);
+  --line-strong: rgba(0, 0, 0, 0.14);
+  --line-input: rgba(0, 0, 0, 0.16);
+
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --accent-press: #0058b8;
+  --accent-soft: rgba(0, 113, 227, 0.09);
+  --accent-soft-strong: rgba(0, 113, 227, 0.16);
+  --accent-ring: rgba(0, 113, 227, 0.28);
+
+  --green: #1f8a3d;
+  --green-soft: rgba(52, 199, 89, 0.14);
+  --orange: #b35c00;
+  --orange-soft: rgba(255, 149, 0, 0.16);
+  --red: #c9302c;
+  --red-soft: rgba(255, 59, 48, 0.11);
+  --violet: #5f4dd6;
+  --violet-soft: rgba(94, 92, 230, 0.13);
+  --pink: #c3244f;
+  --pink-soft: rgba(255, 45, 85, 0.12);
+  --cyan: #00708f;
+  --cyan-soft: rgba(50, 173, 230, 0.14);
+
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.045), 0 1px 1px rgba(16, 24, 40, 0.025);
+  --shadow-2: 0 10px 28px -14px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.04);
+  --shadow-3: 0 28px 64px -24px rgba(16, 24, 40, 0.28), 0 8px 20px -12px rgba(16, 24, 40, 0.14);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+  --ambient-a: rgba(0, 113, 227, 0.1);
+  --ambient-b: rgba(255, 45, 85, 0.07);
+  --ambient-c: rgba(94, 92, 230, 0.08);
+  --ambient-base: #f5f5f7;
+
+  --scroll-thumb: rgba(0, 0, 0, 0.18);
+  --scroll-thumb-hover: rgba(0, 0, 0, 0.3);
+  --backdrop: rgba(20, 20, 24, 0.34);
+}
+
+/* ============================================================================
+ * 深色主题
+ * ========================================================================== */
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b0b0d;
+  --bg-deep: #000000;
+  --surface: #1a1a1d;
+  --surface-raised: #212125;
+  --surface-muted: #161618;
+  --surface-sunken: #101012;
+  --surface-glass: rgba(26, 26, 29, 0.72);
+  --surface-glass-strong: rgba(26, 26, 29, 0.88);
+
+  --text: #f5f5f7;
+  --text-strong: #ffffff;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #7c7c82;
+  --text-on-accent: #ffffff;
+
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --line-input: rgba(255, 255, 255, 0.2);
+
+  --accent: #0a84ff;
+  --accent-hover: #3b9dff;
+  --accent-press: #0060c9;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+  --accent-soft-strong: rgba(10, 132, 255, 0.26);
+  --accent-ring: rgba(10, 132, 255, 0.4);
+
+  --green: #30d158;
+  --green-soft: rgba(48, 209, 88, 0.16);
+  --orange: #ff9f0a;
+  --orange-soft: rgba(255, 159, 10, 0.16);
+  --red: #ff453a;
+  --red-soft: rgba(255, 69, 58, 0.16);
+  --violet: #a29bff;
+  --violet-soft: rgba(130, 126, 255, 0.18);
+  --pink: #ff6482;
+  --pink-soft: rgba(255, 100, 130, 0.16);
+  --cyan: #64d2ff;
+  --cyan-soft: rgba(100, 210, 255, 0.16);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 12px 32px -16px rgba(0, 0, 0, 0.8), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 32px 72px -24px rgba(0, 0, 0, 0.9), 0 10px 24px -14px rgba(0, 0, 0, 0.6);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  --ambient-a: rgba(10, 132, 255, 0.16);
+  --ambient-b: rgba(255, 69, 58, 0.1);
+  --ambient-c: rgba(130, 126, 255, 0.14);
+  --ambient-base: #0b0b0d;
+
+  --scroll-thumb: rgba(255, 255, 255, 0.2);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.34);
+  --backdrop: rgba(0, 0, 0, 0.56);
+}
+
+/* ============================================================================
+ * 扩展工作区（Studio）：只覆盖表面与强调色，尺寸与动效沿用全局令牌
+ * ========================================================================== */
+
+html[data-mode="extension"] {
+  color-scheme: dark;
+
+  --bg: #070a12;
+  --bg-deep: #04060b;
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-raised: rgba(255, 255, 255, 0.075);
+  --surface-muted: rgba(255, 255, 255, 0.028);
+  --surface-sunken: rgba(0, 0, 0, 0.24);
+  --surface-glass: rgba(10, 14, 24, 0.72);
+  --surface-glass-strong: rgba(10, 14, 24, 0.9);
+
+  --text: #eef1f8;
+  --text-strong: #ffffff;
+  --text-secondary: #9aa4bb;
+  --text-tertiary: #6f7c96;
+
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.17);
+  --line-input: rgba(255, 255, 255, 0.2);
+
+  --accent: #6f8dff;
+  --accent-hover: #8ba3ff;
+  --accent-press: #4f6ef0;
+  --accent-soft: rgba(111, 141, 255, 0.16);
+  --accent-soft-strong: rgba(111, 141, 255, 0.28);
+  --accent-ring: rgba(111, 141, 255, 0.42);
+
+  --green: #4ade9b;
+  --green-soft: rgba(74, 222, 155, 0.16);
+  --orange: #ffbe5c;
+  --orange-soft: rgba(255, 190, 92, 0.16);
+  --red: #ff7a7a;
+  --red-soft: rgba(255, 122, 122, 0.16);
+  --violet: #b18cff;
+  --violet-soft: rgba(177, 140, 255, 0.18);
+  --pink: #ff8fb8;
+  --pink-soft: rgba(255, 143, 184, 0.16);
+  --cyan: #6ee7f9;
+  --cyan-soft: rgba(110, 231, 249, 0.16);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 18px 40px -22px rgba(0, 0, 0, 0.9);
+  --shadow-3: 0 40px 90px -30px rgba(0, 0, 0, 0.95);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  --ambient-a: rgba(111, 141, 255, 0.2);
+  --ambient-b: rgba(177, 140, 255, 0.14);
+  --ambient-c: rgba(110, 231, 249, 0.1);
+  --ambient-base: #070a12;
+
+  --scroll-thumb: rgba(255, 255, 255, 0.16);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.28);
+  --backdrop: rgba(2, 4, 8, 0.66);
+}

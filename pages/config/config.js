@@ -1,3 +1,8 @@
+// 「插件配置」页面。数据来自插件自己的 WebUI 路由：
+//   GET  config/schema → { KEY: { type, description, hint, options, min, max, condition, invisible } }
+//   GET  config        → { KEY: value }
+//   POST config        → 提交 patch 对象，返回 { saved: [...] } 或 { status:"ok" }
+
 const bridge = window.AstrBotPluginPage || null;
 
 const state = {
@@ -17,8 +22,7 @@ const el = {
   expand: document.getElementById("expand"),
   collapse: document.getElementById("collapse"),
   revert: document.getElementById("revert"),
-  dock: document.getElementById("dock"),
-  dockText: document.getElementById("dock-text"),
+  dirty: document.getElementById("dirty"),
   meta: document.getElementById("meta"),
 };
 
@@ -76,8 +80,7 @@ function isVisible(key, field) {
   if (!cond || typeof cond !== "object") return true;
   for (const [dep, expected] of Object.entries(cond)) {
     if (!Object.prototype.hasOwnProperty.call(state.schema, dep)) continue;
-    const value = currentValue(dep);
-    if (value !== expected) return false;
+    if (currentValue(dep) !== expected) return false;
   }
   return true;
 }
@@ -85,13 +88,9 @@ function isVisible(key, field) {
 function setDraft(key, value) {
   const base = state.values[key];
   const same = JSON.stringify(base) === JSON.stringify(value);
-  if (same) {
-    state.draft[key] = value;
-    state.dirty.delete(key);
-  } else {
-    state.draft[key] = value;
-    state.dirty.add(key);
-  }
+  state.draft[key] = value;
+  if (same) state.dirty.delete(key);
+  else state.dirty.add(key);
   refresh();
 }
 
@@ -110,6 +109,20 @@ function buildControl(key, field) {
     track.className = "track";
     wrap.append(input, track);
     return wrap;
+  }
+
+  if (field.options?.length) {
+    const select = document.createElement("select");
+    select.setAttribute("aria-label", labelOf(key, field));
+    for (const option of field.options) {
+      const node = document.createElement("option");
+      node.value = String(option);
+      node.textContent = String(option);
+      if (String(value) === String(option)) node.selected = true;
+      select.appendChild(node);
+    }
+    select.addEventListener("change", () => setDraft(key, select.value));
+    return select;
   }
 
   if (NUMERIC.has(type)) {
@@ -210,10 +223,13 @@ function buildList() {
     buckets.get(name).push(key);
   }
 
+  let index = 0;
   for (const [name, keys] of buckets) {
     const section = document.createElement("details");
     section.className = "group";
     section.dataset.group = name;
+    section.style.animationDelay = `${Math.min(index, 8) * 24}ms`;
+    index += 1;
 
     const summary = document.createElement("summary");
     summary.className = "group-head";
@@ -237,7 +253,13 @@ function buildList() {
     state.groups.push({ name, section, gcount, keys });
   }
 
-  updateMeta();
+  if (!state.groups.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-search";
+    empty.textContent = "这个插件没有可编辑的配置项。";
+    el.list.append(empty);
+  }
+
   refresh();
 }
 
@@ -268,18 +290,22 @@ function updateVisibility() {
 function updateMeta() {
   const total = Object.keys(state.schema).length;
   const parts = [`${total} 项`, `${state.groups.length} 组`];
-  if (state.dirty.size) parts.push(`${state.dirty.size} 处未保存`);
+  if (state.query) {
+    const matched = state.rows.filter((entry) => !entry.row.hidden).length;
+    parts.push(`匹配 ${matched} 项`);
+  }
   el.meta.textContent = parts.join(" · ");
 }
 
 function refresh() {
   updateVisibility();
-  updateMeta();
   const count = state.dirty.size;
   el.save.disabled = count === 0;
   el.save.textContent = count ? `保存 (${count})` : "保存";
-  el.dock.hidden = count === 0;
-  if (count) el.dockText.textContent = `有 ${count} 处改动未保存`;
+  el.dirty.hidden = count === 0;
+  el.revert.hidden = count === 0;
+  if (count) el.dirty.textContent = `${count} 处未保存`;
+  updateMeta();
 }
 
 async function save() {
@@ -321,7 +347,7 @@ function flash(message, isError) {
   node.classList.toggle("error", Boolean(isError));
   node.classList.add("on");
   window.clearTimeout(flashTimer);
-  flashTimer = window.setTimeout(() => node.classList.remove("on"), 2200);
+  flashTimer = window.setTimeout(() => node.classList.remove("on"), 2400);
 }
 
 function fail(message) {
@@ -353,6 +379,7 @@ async function boot() {
 el.search.addEventListener("input", () => {
   state.query = el.search.value.trim().toLowerCase();
   updateVisibility();
+  updateMeta();
 });
 
 el.save.addEventListener("click", save);
@@ -363,11 +390,23 @@ el.expand.addEventListener("click", () => {
 el.collapse.addEventListener("click", () => {
   for (const group of state.groups) group.section.open = false;
 });
+
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    save();
+  }
+});
+
 window.addEventListener("beforeunload", (event) => {
   if (state.dirty.size) {
     event.preventDefault();
     event.returnValue = "";
   }
+});
+
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", (event) => {
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", event.matches ? "#0b0b0d" : "#f5f5f7");
 });
 
 boot();
