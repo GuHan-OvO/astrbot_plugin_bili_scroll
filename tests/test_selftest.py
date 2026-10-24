@@ -74,10 +74,13 @@ class CollectTests(unittest.TestCase):
         # 未跑过时 watch_log 计数应为 0 而不是 None
         self.assertIn(storage["watch_log"]["count"], (0, None))
 
-    def test_页面列表包含三个页面(self):
+    def test_页面列表只剩控制中心与配置(self):
+        # 「看过的视频」「自检」已并入控制中心 SPA（bilibot/views/*.js），不再是独立页面目录
         names = [p["name"] for p in collect(_FakePlugin({}))["pages"]]
-        for expected in ("bilibot", "selftest", "history"):
-            self.assertIn(expected, names)
+        self.assertIn("bilibot", names)
+        self.assertIn("config", names)
+        for gone in ("history", "selftest"):
+            self.assertNotIn(gone, names)
 
     def test_路由前缀来自包名(self):
         out = collect(_FakePlugin({}))
