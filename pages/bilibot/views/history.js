@@ -1038,6 +1038,7 @@ export function mountHistory(host) {
     if (item.pic) {
       const img = node("img");
       img.loading = "lazy";
+      img.referrerPolicy = "no-referrer";
       img.alt = "";
       img.src = item.pic.startsWith("//") ? `https:${item.pic}` : item.pic;
       img.addEventListener("error", () => img.remove(), { once: true });

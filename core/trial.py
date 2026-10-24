@@ -119,8 +119,8 @@ async def run_trial(plugin) -> dict:
 
 _STATE_ATTR = "_trial_live_state"
 
-LIVE_COOLDOWN_SECONDS = 300
-"""两次真刷之间的最小间隔。
+LIVE_COOLDOWN_SECONDS = 30
+"""两次真刷之间的最小间隔。300 秒实测太钝（一轮本身就要一两分钟，等于跑完再罚站五分钟后才能继续），30 秒足够挡住连点。
 
 按钮 disabled 只挡得住「同一个页面没刷新」的情况；真正要防的是**连着刷两个视频**——
 每刷一次都是一组真实的 B站 写操作，风控是累积的。所以冷却放在后端，刷新页面也拦得住。

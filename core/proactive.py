@@ -1605,7 +1605,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             evaluation = await self._evaluate_video(analysis_info, video_description)
             if not evaluation:
                 logger.warning("[BiliBot] 评价失败，跳过互动")
-                watch_log.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "bvid": bvid, "title": video.get("title", ""), "up_name": video.get("up_name", ""), "score": 0, "mood": "未知", "comment": "评价失败", "review": "", "actions": [], "pic": video.get("pic", ""), "tname": analysis_info.get("tname", ""), "source": video.get("_source", ""), "source_detail": video.get("_source_detail", ""), "manual": is_manual})
+                watch_log.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "bvid": bvid, "title": video.get("title", ""), "up_name": video.get("up_name", ""), "score": 0, "mood": "未知", "comment": "评价失败", "review": "", "actions": [], "pic": (analysis_info.get("pic") or video.get("pic", "")), "tname": analysis_info.get("tname", ""), "source": video.get("_source", ""), "source_detail": video.get("_source_detail", ""), "manual": is_manual})
                 watch_log[-1]["evaluation_status"] = "failed"
                 watch_log[-1]["diagnostic"] = analysis_info.get("_evaluation_diagnostic", {})
                 watch_log[-1]["content_analyzed"] = analysis_info.get("analysis_basis") != "metadata"
@@ -1646,7 +1646,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                     "review": review,
                     "preference_signals": preference_signals,
                     "search_keywords": search_keywords,
-                    "pic": video.get("pic", ""),
+                    "pic": (analysis_info.get("pic") or video.get("pic", "")),
                     "tname": evaluation.get("partition") or analysis_info.get("tname", ""),
                     "source": video.get("_source", ""),
                     "source_detail": video.get("_source_detail", ""),
@@ -1898,7 +1898,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                         "review": review,
                         "preference_signals": preference_signals,
                         "search_keywords": search_keywords,
-                        "pic": video.get("pic", ""),
+                        "pic": (analysis_info.get("pic") or video.get("pic", "")),
                         "tname": evaluation.get("partition") or analysis_info.get("tname", ""),
                         "source": video.get("_source", ""),
                         "source_detail": video.get("_source_detail", ""),
@@ -2134,7 +2134,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                     "time": datetime.now().strftime("%Y-%m-%d %H:%M"), "bvid": bvid,
                     "title": video.get("title", ""), "up_name": video.get("up_name", ""),
                     "score": 0, "mood": "未知", "comment": "评价失败", "review": "",
-                    "actions": [], "pic": video.get("pic", ""), "tname": analysis_info.get("tname", ""),
+                    "actions": [], "pic": (analysis_info.get("pic") or video.get("pic", "")), "tname": analysis_info.get("tname", ""),
                     "source": "special_follow",
                     "evaluation_status": "failed",
                     "diagnostic": analysis_info.get("_evaluation_diagnostic", {}),
@@ -2231,7 +2231,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                 "mood": mood, "comment": comment, "review": review,
                 "preference_signals": preference_signals,
                 "search_keywords": search_keywords,
-                "actions": actions, "pic": video.get("pic", ""), "tname": evaluation.get("partition") or analysis_info.get("tname", ""),
+                "actions": actions, "pic": (analysis_info.get("pic") or video.get("pic", "")), "tname": evaluation.get("partition") or analysis_info.get("tname", ""),
                 "source": "special_follow",
             }
             watch_log.append(log_entry)

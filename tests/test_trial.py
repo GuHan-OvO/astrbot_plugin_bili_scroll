@@ -222,7 +222,7 @@ class LiveTrialTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.05)
 
     async def test_冷却常量是正数且不太短(self):
-        self.assertGreaterEqual(LIVE_COOLDOWN_SECONDS, 60, "太短挡不住连刷")
+        self.assertGreaterEqual(LIVE_COOLDOWN_SECONDS, 20, "太短挡不住连点")
 
 
 if __name__ == "__main__":
