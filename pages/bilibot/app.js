@@ -2526,16 +2526,33 @@ function bindPointerMotion() {
 }
 
 // 给真正值得倾斜/打光的元素挂标记：不是所有卡片都动，只挑有信息密度的
+// 卡片家族：全站都吃指针光照，只有信息密度最高的两张再额外做 3D 倾斜
+const LIGHT_CARD_SELECTOR = [
+  ".card",
+  ".section-card",
+  ".metric-card",
+  ".capability-card",
+  ".behavior-card",
+  ".ring-card",
+  ".event-card",
+  ".settings-group",
+  ".qr-card",
+  ".cache-card",
+  ".health-hero",
+  ".security-hero",
+  ".account-hero",
+  ".activity-panel",
+  ".tool-access-card",
+  ".mode-picker-card",
+  ".monitor-card",
+  ".relationship-card",
+  ".plan-mode-card",
+  ".ring-event-group",
+].join(", ");
+
 function decorateMotion(root = content) {
-  root.querySelectorAll(".metric-card, .capability-card").forEach((node) => {
-    node.setAttribute("data-light", "");
-    node.setAttribute("data-tilt", "");
-  });
-  root
-    .querySelectorAll(
-      ".health-hero, .monitor-card, .security-hero, .relationship-card, .qr-card, .cache-card, .ring-card, .plan-mode-card"
-    )
-    .forEach((node) => node.setAttribute("data-light", ""));
+  root.querySelectorAll(LIGHT_CARD_SELECTOR).forEach((node) => node.setAttribute("data-light", ""));
+  root.querySelectorAll(".metric-card, .capability-card").forEach((node) => node.setAttribute("data-tilt", ""));
 }
 
 // 滚动叙事：顶栏形变、页头视差、环境层位移、回到顶部按钮，全部读同一组变量

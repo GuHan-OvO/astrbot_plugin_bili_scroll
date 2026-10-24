@@ -49,7 +49,25 @@
 
   /* 指针光照在卡片上的半径与强度 */
   --light-radius: 360px;
-  --light-strength: 0.16;
+  --light-strength: 0.22;
+
+  /* 液态玻璃：半透明填充、内缘描边、上缘镜面、背景模糊 */
+  --glass-fill: color-mix(in srgb, var(--surface) 76%, transparent);
+  --glass-edge: color-mix(in srgb, var(--text) 9%, transparent);
+  --glass-blur: 20px;
+  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --glass-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  --glass-shade: inset 0 -22px 34px -30px rgba(16, 24, 40, 0.4);
+}
+
+html[data-theme="dark"],
+html[data-mode="extension"] {
+  --glass-fill: color-mix(in srgb, var(--surface) 62%, transparent);
+  --glass-edge: color-mix(in srgb, #ffffff 11%, transparent);
+  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --glass-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --glass-shade: inset 0 -24px 36px -30px rgba(0, 0, 0, 0.55);
+  --light-strength: 0.2;
 }
 
 /* ============================================================================
@@ -63,18 +81,27 @@
   isolation: isolate;
 }
 
+/* 指针光照：全局铺在**所有卡片**上，并且盖在内容之上。
+   之前放在 z-index:0，会被卡片里不透明的子块（列表行、内嵌容器、图表底板）挡住，
+   表现为「光标移过去但看不到光」。现在抬到 z-index:2 且 pointer-events:none。 */
+[data-light] {
+  position: relative;
+  isolation: isolate;
+}
+
 [data-light]::before {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 2;
   border-radius: inherit;
   pointer-events: none;
   opacity: 0;
   background: radial-gradient(
     var(--light-radius) circle at var(--mx, 50%) var(--my, 0%),
-    rgba(255, 255, 255, 0.9) 0%,
-    rgba(255, 255, 255, 0) 62%
+    color-mix(in srgb, var(--accent) 18%, #ffffff) 0%,
+    rgba(255, 255, 255, 0.45) 26%,
+    rgba(255, 255, 255, 0) 64%
   );
   mix-blend-mode: soft-light;
   transition: opacity var(--t3) var(--ease-enter);
@@ -90,37 +117,65 @@ html[data-theme="dark"] [data-light]::before,
 html[data-mode="extension"] [data-light]::before {
   background: radial-gradient(
     var(--light-radius) circle at var(--mx, 50%) var(--my, 0%),
-    rgba(180, 205, 255, 0.55) 0%,
-    rgba(180, 205, 255, 0) 60%
+    rgba(180, 205, 255, 0.6) 0%,
+    rgba(180, 205, 255, 0.16) 30%,
+    rgba(180, 205, 255, 0) 62%
   );
   mix-blend-mode: screen;
 }
 
-/* 边缘高光：贴着圆角的一圈细线，指针靠近时增强 */
-[data-light]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  opacity: 0;
-  background: radial-gradient(
-      220px circle at var(--mx, 50%) var(--my, 0%),
-      rgba(255, 255, 255, 0.85),
-      transparent 70%
-    )
-    border-box;
-  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  transition: opacity var(--t3) var(--ease-enter);
+/* ============================================================================
+ * 一·五、液态玻璃：半透明填充 + 背景模糊 + 上缘镜面 + 内缘描边
+ * 只作用于「卡片这一层容器」，卡片内部的列表行保持实色，避免层层叠玻璃糊成一片。
+ * ========================================================================== */
+
+.card,
+.section-card,
+.metric-card,
+.capability-card,
+.behavior-card,
+.ring-card,
+.event-card,
+.settings-group,
+.qr-card,
+.cache-card,
+.health-hero,
+.security-hero,
+.account-hero,
+.activity-panel,
+.tool-access-card,
+.mode-picker-card,
+.ring-event-group {
+  background-color: var(--glass-fill);
+  border-color: var(--glass-edge);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  box-shadow: var(--glass-hi), var(--glass-rim), var(--glass-shade), var(--shadow-1);
+  transition: background-color var(--t3) var(--ease-enter), border-color var(--t3) var(--ease-enter),
+    box-shadow var(--t3) var(--ease-enter);
 }
 
-[data-light]:hover::after {
-  opacity: 0.7;
+/* 没有 backdrop-filter 时退回实色，避免半透明卡片叠在背景上发脏 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card,
+  .section-card,
+  .metric-card,
+  .capability-card,
+  .behavior-card,
+  .ring-card,
+  .event-card,
+  .settings-group,
+  .qr-card,
+  .cache-card,
+  .health-hero,
+  .security-hero,
+  .account-hero,
+  .activity-panel,
+  .tool-access-card,
+  .mode-picker-card,
+  .ring-event-group {
+    background-color: var(--surface);
+  }
 }
 
 /* 3D 倾斜：--rx/--ry 由指针位置映射而来（角度），子层用 translateZ 拉开纵深 */
@@ -134,7 +189,8 @@ html[data-mode="extension"] [data-light]::before {
 
 [data-tilt]:hover {
   --tilt-lift: -4px;
-  box-shadow: var(--shadow-3);
+  /* 抬升阴影要带上玻璃的内缘与镜面，否则 hover 时玻璃感会「掉」成实心卡 */
+  box-shadow: var(--glass-hi), var(--glass-rim), var(--shadow-3);
 }
 
 [data-tilt] > * {
