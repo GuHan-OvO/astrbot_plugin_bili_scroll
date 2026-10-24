@@ -713,6 +713,8 @@ function renderSidebar() {
     sidebar.innerHTML = `<div class="creator-brand-lockup">${state.standalone ? "" : `<button class="creator-return" data-leave-extension type="button" aria-label="${esc(extension.presentation?.return_label || "返回 BiliBot")}">${icon("arrow-left")}</button>`}<div class="creator-brand-type"><span>BILIBOT /</span><strong>${esc(extension.short_name || extension.name || extension.id)}</strong><small>${esc(extension.presentation?.workspace_label || "EXTENSION WORKSPACE")}</small></div></div><div class="creator-live-signal"><i></i><span><b>HOST LINK</b>安全连接已建立</span><em>API 01</em></div><div class="creator-nav-label">WORKSPACE</div><nav class="creator-nav-list">${nav.map((item, index) => `<button class="creator-nav-item ${state.extensionPage === item.page ? "is-active" : ""}" data-extension-page="${esc(item.page)}" type="button" title="${esc(item.description || item.title)}" aria-current="${state.extensionPage === item.page ? "page" : "false"}"><span class="creator-nav-index">${String(index + 1).padStart(2, "0")}</span>${icon(item.icon || "star", "creator-nav-icon")}<span><b>${esc(item.title)}</b><small>${esc(item.description || "")}</small></span></button>`).join("")}</nav><div class="creator-sidebar-foot"><span>ISOLATED EXTENSION</span><p>不共享 Cookie · 不注入代码</p></div>`;
     sidebar.querySelector("[data-leave-extension]")?.addEventListener("click", leaveExtension);
     sidebar.querySelectorAll("[data-extension-page]").forEach((button) => button.addEventListener("click", () => navigateExtension(button.dataset.extensionPage)));
+    // 扩展模式的侧栏没有 .nav-list，回到宿主模式时不该从旧位置滑过来
+    navIndicatorPos = null;
     return;
   }
   sidebar.className = "sidebar";
@@ -740,7 +742,7 @@ function renderSidebar() {
   sidebar.querySelector("[data-open-mode-picker]")?.addEventListener("click", openModePicker);
   sidebar.querySelector("[data-popout-extension]")?.addEventListener("click", (event) => openExtensionStandalone(event.currentTarget.dataset.popoutExtension));
   sidebar.querySelector("[data-rail-toggle]")?.addEventListener("click", toggleRail);
-  window.requestAnimationFrame(updateNavIndicator);
+  updateNavIndicator();
 }
 
 function toggleRail() {
@@ -750,6 +752,12 @@ function toggleRail() {
 }
 
 // 选中态滑块：把背景指示器移到当前导航项上，切换页面时连续滑动而不是闪现。
+//
+// 侧边栏每次切页都会整体重建（innerHTML），新指示器天生站在 top:0 —— 直接设目标位置
+// 就会「从天而降」。所以这里记住上一次的落点：重建后先让新元素**瞬时**站到旧位置，
+// 再在下一帧滑到目标位置，视觉上才是从原处滑过去。
+let navIndicatorPos = null;
+
 function updateNavIndicator() {
   const list = sidebar.querySelector(".nav-list");
   const indicator = list?.querySelector(".nav-indicator");
@@ -759,9 +767,29 @@ function updateNavIndicator() {
     indicator.classList.remove("is-visible");
     return;
   }
-  indicator.style.setProperty("--nav-y", `${active.offsetTop}px`);
-  indicator.style.height = `${active.offsetHeight}px`;
+
+  const targetY = active.offsetTop;
+  const targetHeight = active.offsetHeight;
+  const from = navIndicatorPos;
+
+  // 第一帧：关掉过渡，把指示器放到「旧位置」（首次渲染就是目标位置）
+  indicator.style.transition = "none";
+  indicator.style.setProperty("--nav-y", `${from === null ? targetY : from.y}px`);
+  indicator.style.height = `${from === null ? targetHeight : from.height}px`;
   indicator.classList.add("is-visible");
+  void indicator.offsetHeight; // 强制结算，避免两帧被合并成一次跳变
+  indicator.style.transition = "";
+
+  navIndicatorPos = { y: targetY, height: targetHeight };
+
+  if (from === null || (from.y === targetY && from.height === targetHeight)) return;
+  window.requestAnimationFrame(() => {
+    // 目标可能已经过期（连点两次）
+    const still = sidebar.querySelector(".nav-list .nav-indicator");
+    if (still !== indicator) return;
+    indicator.style.setProperty("--nav-y", `${targetY}px`);
+    indicator.style.height = `${targetHeight}px`;
+  });
 }
 
 function setPageChrome(page) {
@@ -876,30 +904,64 @@ async function refreshPageData(page) {
 
 async function navigate(page) {
   if (!NAV_ITEMS.some(([id]) => id === page) || page === state.currentPage && !content.querySelector(".error-state")) return;
+  const fromPage = state.currentPage;
   state.currentPage = page;
   state.pageToken += 1;
   const token = state.pageToken;
   stopQrPoll();
   closeMobileNav();
-  destroyEmbedded();
   renderSidebar();
   setPageChrome(page);
   content.setAttribute("aria-busy", "true");
-  content.classList.add("page-exit");
   pageProgress?.classList.add("is-active");
-  try {
-    await Promise.all([refreshPageData(page), sleep(130)]);
-    if (token !== state.pageToken) return;
+
+  // 前进/后退决定新层从哪一侧推入：按侧栏顺序比较，不猜
+  const order = (id) => NAV_ITEMS.findIndex(([navId]) => navId === id);
+  const direction = order(page) >= order(fromPage) ? "forward" : "back";
+  const useTransition = canViewTransition();
+
+  // 真正的换页动作：旧的内嵌视图必须在新内容写入前销毁，否则 shadow DOM 会漏
+  const paint = () => {
+    destroyEmbedded();
     content.innerHTML = renderPage(page);
-    content.classList.remove("page-exit");
-    content.classList.add("page-enter");
+    content.dataset.page = page;
     bindContent();
     mountEmbedded(page, token);
-    requestAnimationFrame(() => requestAnimationFrame(() => content.classList.remove("page-enter")));
+    // 新页从顶部开始：在快照捕获前改滚动位置，避免转场结束后才跳一下
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  };
+
+  if (!useTransition) content.classList.add("page-exit");
+  try {
+    await Promise.all([refreshPageData(page), sleep(useTransition ? 60 : 130)]);
+    if (token !== state.pageToken) return;
+
+    if (useTransition) {
+      nameTransitionLayers(content);
+      document.documentElement.dataset.vtDir = direction;
+      const transition = document.startViewTransition(() => {
+        content.classList.remove("page-exit");
+        paint();
+        nameTransitionLayers(content);
+      });
+      transition.finished
+        .catch(() => {})
+        .finally(() => {
+          clearTransitionLayers(content);
+          delete document.documentElement.dataset.vtDir;
+        });
+      await transition.finished.catch(() => {});
+    } else {
+      paint();
+      content.classList.remove("page-exit");
+      content.classList.add("page-enter");
+      requestAnimationFrame(() => requestAnimationFrame(() => content.classList.remove("page-enter")));
+    }
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   } catch (error) {
     if (token !== state.pageToken) return;
     content.innerHTML = renderErrorState("页面数据读取失败", error.message || "请检查插件日志并重试");
+    content.dataset.page = page;
     content.classList.remove("page-exit");
     content.classList.add("page-enter");
     bindContent();
@@ -1019,6 +1081,7 @@ function renderCurrentPage() {
     bindCreatorContent();
   } else {
     content.innerHTML = renderPage(state.currentPage);
+    content.dataset.page = state.currentPage;
     bindContent();
   }
   requestAnimationFrame(() => content.focus({ preventScroll: true }));
@@ -1473,9 +1536,48 @@ function bindCreatorContent() {
 
 // 内嵌视图：这两页的界面在 views/*.js 里用 Shadow DOM 自渲染，
 // renderPage 只给出一个占位容器，真正的内容由 mountEmbedded 异步挂上去。
+// 视图模块「启动就预热，点击直接取」。
+//
+// 为什么不能等到点击再 import：AstrBot 会把插件页 JS 里出现的资源 URL 重写成
+// `...?asset_token=<JWT>`，而这个 token 的有效期只有 60 秒
+// （PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS = 60）。懒加载的 chunk 带的是 app.js
+// 被请求那一刻签发的 token，用户点晚一点就过期 → 403 →
+// "Failed to fetch dynamically imported module"。预热把请求放在 token 刚签发时。
+const EMBEDDED_MODULE_URLS = {
+  history: "./views/history.js",
+  selftest: "./views/selftest.js",
+};
+
+const embeddedModules = new Map();
+
+function loadEmbeddedModule(page, reload = false) {
+  const cached = embeddedModules.get(page);
+  if (cached && !reload) return cached;
+  const base = pageAssetUrl(EMBEDDED_MODULE_URLS[page]);
+  // 失败过的模块 URL 会被浏览器模块表记住；重试必须换一个 URL 才会真的重新取
+  const specifier = reload ? `${base}${base.includes("?") ? "&" : "?"}_r=${Date.now()}` : base;
+  const promise = import(specifier).catch((error) => {
+    // 加载失败不留缓存，下次切页还能重试
+    embeddedModules.delete(page);
+    throw error;
+  });
+  embeddedModules.set(page, promise);
+  return promise;
+}
+
+function preloadEmbeddedModules() {
+  for (const page of Object.keys(EMBEDDED_MODULE_URLS)) {
+    loadEmbeddedModule(page).catch((error) => {
+      console.warn(`[bilibot] 内嵌视图预加载失败：${page}`, error);
+    });
+  }
+}
+
 const EMBEDDED_MOUNTERS = {
-  history: async (host) => (await import("./views/history.js")).mountHistory(host),
-  selftest: async (host) => (await import("./views/selftest.js")).mountSelftest(host),
+  history: async (host, options) =>
+    (await loadEmbeddedModule("history", options?.reload)).mountHistory(host),
+  selftest: async (host, options) =>
+    (await loadEmbeddedModule("selftest", options?.reload)).mountSelftest(host),
 };
 
 function renderPage(page) {
@@ -1497,12 +1599,12 @@ function renderPage(page) {
 // 当前挂载着的内嵌视图（同一时刻只有一个页面可见）
 let embeddedView = null;
 
-async function mountEmbedded(page, token) {
+async function mountEmbedded(page, token, options = {}) {
   const host = content.querySelector("[data-embedded-view]");
   const mount = EMBEDDED_MOUNTERS[page];
   if (!host || !mount) return;
   try {
-    const view = await mount(host);
+    const view = await mount(host, options);
     // 模块加载期间用户可能已经切走
     if (token !== state.pageToken) {
       view?.destroy?.();
@@ -1510,6 +1612,7 @@ async function mountEmbedded(page, token) {
     }
     host.classList.remove("is-loading");
     host.dataset.theme = resolvedTheme();
+    applyEmbeddedMotion(host);
     embeddedView = view || null;
   } catch (error) {
     if (token !== state.pageToken) return;
@@ -1517,9 +1620,28 @@ async function mountEmbedded(page, token) {
     host.classList.remove("is-loading");
     host.shadowRoot?.replaceChildren();
     host.textContent = "";
+    // 最常见的成因是资源 token 过期（插件页静态资源地址带 60 秒有效期的
+    // asset_token，长时间停留后再加载新 chunk 会 403），刷新一次即可重新签发。
     const box = document.createElement("div");
     box.className = "error-state";
-    box.textContent = `页面加载失败：${error?.message || error}`;
+    const title = document.createElement("h2");
+    title.textContent = "这个页面没能加载出来";
+    const detail = document.createElement("p");
+    detail.textContent = `${error?.message || error}。页面停留较久时插件页的临时访问凭据会过期，刷新即可。`;
+    const actions = document.createElement("div");
+    actions.className = "error-actions";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "button primary";
+    retry.textContent = "重新加载本页";
+    retry.addEventListener("click", () => mountEmbedded(page, state.pageToken, { reload: true }));
+    const reload = document.createElement("button");
+    reload.type = "button";
+    reload.className = "button soft";
+    reload.textContent = "刷新整个页面";
+    reload.addEventListener("click", () => window.location.reload());
+    actions.append(retry, reload);
+    box.append(title, detail, actions);
     host.appendChild(box);
   }
 }
@@ -2354,6 +2476,225 @@ function bindStepperControls(root = content) {
 
 /* ── 动效编排：滚动显现与数值滚动 ─────────────────────────────────── */
 
+/* ── Motion v2：指针光照、3D 倾斜、滚动叙事、分层转场 ─────────────── */
+
+// 指针位置只写进「当次命中的那个元素」，不做全站遍历；
+// 每个元素各自维护 --mx/--my（百分比），容器尺寸变化时无需重算。
+let pointerFrame = 0;
+let pointerEvent = null;
+
+function applyPointerLight() {
+  pointerFrame = 0;
+  const event = pointerEvent;
+  if (!event || prefersReducedMotion()) return;
+  const node = event.target?.closest?.(
+    "[data-light],[data-tilt],.button,.icon-button,.segmented button"
+  );
+  if (!node) return;
+  const rect = node.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const px = ((event.clientX - rect.left) / rect.width) * 100;
+  const py = ((event.clientY - rect.top) / rect.height) * 100;
+  node.style.setProperty("--mx", `${px.toFixed(2)}%`);
+  node.style.setProperty("--my", `${py.toFixed(2)}%`);
+
+  if (node.hasAttribute("data-tilt")) {
+    // 上下 ±3°、左右 ±3°，指针离开中心才有值，避免中心区域抖动
+    node.style.setProperty("--rx", `${(((py - 50) / 50) * -3).toFixed(2)}deg`);
+    node.style.setProperty("--ry", `${(((px - 50) / 50) * 3).toFixed(2)}deg`);
+  }
+
+  if (document.documentElement.dataset.mode === "extension") {
+    document.documentElement.style.setProperty("--mx-raw", String(event.clientX));
+    document.documentElement.style.setProperty("--my-raw", String(event.clientY));
+  }
+}
+
+function settleTilt(event) {
+  const node = event.target?.closest?.("[data-tilt]");
+  if (!node) return;
+  node.style.setProperty("--rx", "0deg");
+  node.style.setProperty("--ry", "0deg");
+}
+
+function bindPointerMotion() {
+  content.addEventListener("pointermove", (event) => {
+    pointerEvent = event;
+    if (!pointerFrame) pointerFrame = window.requestAnimationFrame(applyPointerLight);
+  }, { passive: true });
+  content.addEventListener("pointerout", settleTilt, { passive: true });
+}
+
+// 给真正值得倾斜/打光的元素挂标记：不是所有卡片都动，只挑有信息密度的
+function decorateMotion(root = content) {
+  root.querySelectorAll(".metric-card, .capability-card").forEach((node) => {
+    node.setAttribute("data-light", "");
+    node.setAttribute("data-tilt", "");
+  });
+  root
+    .querySelectorAll(
+      ".health-hero, .monitor-card, .security-hero, .relationship-card, .qr-card, .cache-card, .ring-card, .plan-mode-card"
+    )
+    .forEach((node) => node.setAttribute("data-light", ""));
+}
+
+// 滚动叙事：顶栏形变、页头视差、环境层位移、回到顶部按钮，全部读同一组变量
+let scrollFrame = 0;
+const scrollTopButton = () => document.querySelector("#scroll-top");
+
+function syncScrollMotion() {
+  scrollFrame = 0;
+  const top = window.scrollY || 0;
+  const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+  const root = document.documentElement;
+  root.style.setProperty("--scroll-y", `${top}px`);
+  root.style.setProperty("--scroll-progress", (Math.min(1, top / max)).toFixed(4));
+  document.querySelector(".topbar")?.classList.toggle("is-scrolled", top > 8);
+  scrollTopButton()?.classList.toggle("is-visible", top > 420);
+}
+
+function bindScrollMotion() {
+  window.addEventListener("scroll", () => {
+    if (!scrollFrame) scrollFrame = window.requestAnimationFrame(syncScrollMotion);
+  }, { passive: true });
+  syncScrollMotion();
+}
+
+// 分层视图过渡：给 #content 的直接子元素逐层命名，转场时每层各走各的错峰
+function nameTransitionLayers(root) {
+  [...root.children].forEach((node, index) => {
+    if (node.nodeType !== 1 || index > 9) return;
+    node.style.viewTransitionName = `vt-layer-${index}`;
+  });
+  // 共享元素：两页的标题相互变形，读起来像同一块内容移动到了新位置
+  const title = root.querySelector(".page-title");
+  if (title) title.style.viewTransitionName = "page-title";
+}
+
+function clearTransitionLayers(root) {
+  root.querySelectorAll("*").forEach((node) => {
+    if (node.style && node.style.viewTransitionName) node.style.viewTransitionName = "";
+  });
+}
+
+function canViewTransition() {
+  return typeof document.startViewTransition === "function" && !prefersReducedMotion();
+}
+
+/* 浮层景深：有浮层时外壳整体后退 + 压暗，遮罩从最近一次指针位置扩散 */
+let lastPointer = { x: window.innerWidth / 2, y: Math.round(window.innerHeight * 0.28) };
+
+function markOverlayOrigin() {
+  const backdrop = modalRoot.querySelector(".modal-backdrop, .drawer-backdrop");
+  if (!backdrop) return;
+  backdrop.style.setProperty("--origin-x", `${lastPointer.x}px`);
+  backdrop.style.setProperty("--origin-y", `${lastPointer.y}px`);
+}
+
+function bindOverlayDepth() {
+  if (typeof MutationObserver !== "function") return;
+  new MutationObserver(() => {
+    const open = modalRoot.childElementCount > 0;
+    app.classList.toggle("is-dimmed", open);
+    if (open) markOverlayOrigin();
+  }).observe(modalRoot, { childList: true });
+}
+
+// 一次性按钮反馈：点击涟漪 + 真实刷新时的图标旋转
+function pulseButton(node) {
+  if (!node || prefersReducedMotion()) return;
+  node.classList.add("is-rippling");
+  window.setTimeout(() => node.classList.remove("is-rippling"), 640);
+}
+
+function spinIcon(node, duration = 900) {
+  if (!node || prefersReducedMotion()) return;
+  node.classList.add("is-spinning");
+  window.setTimeout(() => node.classList.remove("is-spinning"), duration);
+}
+
+/* 内嵌视图（Shadow DOM）没有权限改它们的样式表，改用构造样式表注入一层动效：
+   shadow 内部与独立页同名（.card/.thumb/.btn/...），所以这层规则能通用。 */
+const EMBED_MOTION_CSS = `
+:host { --e-out: cubic-bezier(0.16, 1, 0.3, 1); --e-glide: cubic-bezier(0.33, 0, 0.1, 1); }
+
+.grid > * { animation: embedRise 420ms var(--e-out) backwards; }
+.grid > *:nth-child(1) { animation-delay: 0ms; }
+.grid > *:nth-child(2) { animation-delay: 26ms; }
+.grid > *:nth-child(3) { animation-delay: 52ms; }
+.grid > *:nth-child(4) { animation-delay: 78ms; }
+.grid > *:nth-child(5) { animation-delay: 104ms; }
+.grid > *:nth-child(6) { animation-delay: 130ms; }
+.grid > *:nth-child(n + 7) { animation-delay: 156ms; }
+@keyframes embedRise {
+  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.99); filter: blur(6px); }
+}
+
+.card {
+  transition: transform 260ms var(--e-glide), box-shadow 260ms var(--e-out), border-color 260ms var(--e-out);
+}
+.card:hover {
+  transform: translate3d(0, -3px, 0) scale(1.004);
+  box-shadow: 0 22px 48px -26px rgba(16, 24, 40, 0.42);
+}
+.card:active { transform: translate3d(0, -1px, 0) scale(0.995); transition-duration: 90ms; }
+.thumb img { transition: transform 520ms var(--e-glide); }
+.card:hover .thumb img { transform: scale(1.05); }
+
+.btn { transition: transform 160ms var(--e-out), box-shadow 200ms var(--e-out), background-color 160ms var(--e-out); }
+.btn:hover { transform: translateY(-1px); box-shadow: 0 10px 22px -16px rgba(16, 24, 40, 0.4); }
+.btn:active { transform: scale(0.972); transition-duration: 80ms; }
+
+.filters { animation: embedRise 360ms var(--e-out) both; }
+
+.drawer { transition: transform 340ms var(--e-out); }
+.drawer-backdrop { transition: opacity 240ms var(--e-out); }
+.drawer:not([hidden]) .detail-section { animation: embedRise 320ms var(--e-out) both; }
+
+.skeleton .thumb, .skeleton i { animation: embedShimmer 1.4s ease-in-out infinite; }
+@keyframes embedShimmer { to { background-position: -200% 0; } }
+
+.checks li, .kv dt, .kv dd { animation: embedRise 300ms var(--e-out) both; }
+.checks li:nth-child(2) { animation-delay: 30ms; }
+.checks li:nth-child(3) { animation-delay: 60ms; }
+.checks li:nth-child(4) { animation-delay: 90ms; }
+.checks li:nth-child(n + 5) { animation-delay: 120ms; }
+
+.tag { transition: transform 180ms var(--e-out), background-color 180ms var(--e-out); }
+.tag:hover { transform: translateY(-1px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .grid > *, .filters, .drawer .detail-section, .checks li, .kv dt, .kv dd { animation: none !important; }
+  .card, .btn, .thumb img, .drawer { transition-duration: 1ms !important; }
+  .card:hover, .btn:hover { transform: none !important; }
+}
+`;
+
+let embedMotionSheet = null;
+
+function embeddedMotionSheet() {
+  if (embedMotionSheet) return embedMotionSheet;
+  if (typeof CSSStyleSheet !== "function" || typeof CSSStyleSheet.prototype.replaceSync !== "function") {
+    return null;
+  }
+  try {
+    embedMotionSheet = new CSSStyleSheet();
+    embedMotionSheet.replaceSync(EMBED_MOTION_CSS);
+  } catch {
+    embedMotionSheet = null;
+  }
+  return embedMotionSheet;
+}
+
+function applyEmbeddedMotion(host) {
+  const sheet = embeddedMotionSheet();
+  const root = host?.shadowRoot;
+  if (!sheet || !root) return;
+  const current = root.adoptedStyleSheets || [];
+  if (current.includes(sheet)) return;
+  root.adoptedStyleSheets = [...current, sheet];
+}
+
 let revealObserver = null;
 
 function revealObserverFor() {
@@ -2415,13 +2756,19 @@ function animateCountUps(root) {
 function enhancePage(root = content) {
   markReveals(root);
   animateCountUps(root);
+  decorateMotion(root);
   updateNavIndicator();
 }
 
 function bindContent() {
   bindConfigControls();
   if (state.currentPage === "autonomy") bindRingInteractions();
-  content.querySelectorAll("[data-action]").forEach((node) => node.addEventListener("click", () => handleAction(node.dataset.action, node)));
+  content.querySelectorAll("[data-action]").forEach((node) => node.addEventListener("click", () => {
+    // 只对真实动作给反馈：主按钮涟漪、刷新类动作转图标
+    if (node.classList.contains("primary")) pulseButton(node);
+    if (/^refresh/.test(node.dataset.action || "")) spinIcon(node);
+    handleAction(node.dataset.action, node);
+  }));
   content.querySelectorAll("[data-page-target]").forEach((node) => node.addEventListener("click", () => navigate(node.dataset.pageTarget)));
   content.querySelectorAll("[data-plan-mode]").forEach((node) => node.addEventListener("click", () => {
     const autonomous = node.dataset.planMode === "autonomous";
@@ -2863,7 +3210,10 @@ function init() {
 
   const refreshButton = document.querySelector("#refresh-page");
   if (refreshButton) refreshButton.innerHTML = icon("refresh");
-  refreshButton?.addEventListener("click", () => handleAction("refresh", refreshButton));
+  refreshButton?.addEventListener("click", () => {
+    spinIcon(refreshButton);
+    handleAction("refresh", refreshButton);
+  });
 
   const themeButton = document.querySelector("#theme-toggle");
   themeButton?.addEventListener("click", toggleTheme);
@@ -2876,11 +3226,6 @@ function init() {
     if (themeChoice === "auto") applyTheme();
   });
 
-  window.addEventListener("scroll", () => {
-    document.querySelector(".topbar")?.classList.toggle("is-scrolled", window.scrollY > 4);
-  }, { passive: true });
-  window.addEventListener("resize", () => window.requestAnimationFrame(updateNavIndicator), { passive: true });
-
   // 工具选择器与确认框此前没有键盘关闭，这里统一按 Escape 触发遮罩自身的关闭逻辑。
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
@@ -2888,11 +3233,30 @@ function init() {
     if (backdrop) backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 
+  // 滚动叙事（顶栏形变 / 页头视差 / 环境层位移 / 回到顶部）统一走 syncScrollMotion
+  bindScrollMotion();
+  window.addEventListener("resize", () => window.requestAnimationFrame(updateNavIndicator), { passive: true });
+
+  // 指针光照与 3D 倾斜：只喂给当次命中的元素
+  bindPointerMotion();
   window.addEventListener("pointermove", (event) => {
+    lastPointer = { x: event.clientX, y: event.clientY };
     if (state.mode !== "extension" || prefersReducedMotion()) return;
     app.style.setProperty("--creator-pointer-x", `${event.clientX}px`);
     app.style.setProperty("--creator-pointer-y", `${event.clientY}px`);
   }, { passive: true });
+
+  // 浮层景深：有浮层时外壳后退并压暗，遮罩从触发点方向扩散
+  bindOverlayDepth();
+
+  const scrollTop = document.querySelector("#scroll-top");
+  if (scrollTop) {
+    scrollTop.innerHTML = icon("arrow-left");
+    scrollTop.addEventListener("click", () => {
+      window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    });
+  }
+
   window.addEventListener("beforeunload", (event) => {
     if (state.dirtyKeys.size || state.scheduleDirty) {
       event.preventDefault();
@@ -2904,6 +3268,8 @@ function init() {
     setPageChrome(state.currentPage);
     renderCurrentPage();
     updateSaveDock();
+    // 内嵌视图在 token 还新鲜时就取回来（插件页资源带 60 秒有效期的 asset_token）
+    preloadEmbeddedModules();
   }).catch((error) => {
     app.classList.remove("is-booting");
     content.innerHTML = renderErrorState("无法加载 BiliBot 控制中心", error.message || "请检查 AstrBot 页面权限");

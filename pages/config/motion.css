@@ -1,0 +1,221 @@
+/* 「插件配置」页的动效层（第二轮）：叠在 config.css 之后，只加动态，不改布局。 */
+
+:root {
+  --e-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --e-glide: cubic-bezier(0.33, 0, 0.1, 1);
+  --e-overshoot: cubic-bezier(0.22, 1.4, 0.36, 1);
+}
+
+/* 顶栏：滚动后收窄 + 投影，与内容拉开层次 */
+.topbar {
+  transition: padding 260ms var(--e-glide), box-shadow 260ms var(--e-out),
+    background-color 260ms var(--e-out), border-color 260ms var(--e-out);
+}
+
+.topbar.is-scrolled {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-bottom-color: var(--line);
+  box-shadow: 0 12px 30px -24px rgba(16, 24, 40, 0.4);
+}
+
+.topbar h1 {
+  transition: font-size 260ms var(--e-glide), letter-spacing 260ms var(--e-glide);
+}
+
+.topbar.is-scrolled h1 {
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+
+/* 搜索框聚焦：焦点环 + 底光一起亮 */
+.search {
+  position: relative;
+}
+
+.search::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--violet, var(--accent)));
+  transform: scaleX(0);
+  opacity: 0;
+  transition: transform 300ms var(--e-out), opacity 200ms var(--e-out);
+  pointer-events: none;
+}
+
+.search:focus-within::after {
+  transform: scaleX(1);
+  opacity: 0.9;
+}
+
+/* 分组：逐条错峰落位，开合时内部字段依次滑入 */
+.group {
+  transition: box-shadow 240ms var(--e-out), border-color 240ms var(--e-out);
+}
+
+.group:hover {
+  box-shadow: 0 16px 36px -28px rgba(16, 24, 40, 0.45);
+}
+
+.group[open] .group-body > .row {
+  /* backwards 而不是 both：动画结束后不留 filter，文字回到正常光栅化路径 */
+  animation: rowIn 320ms var(--e-out) backwards;
+}
+
+.group[open] .group-body > .row:nth-child(1) { animation-delay: 0ms; }
+.group[open] .group-body > .row:nth-child(2) { animation-delay: 22ms; }
+.group[open] .group-body > .row:nth-child(3) { animation-delay: 44ms; }
+.group[open] .group-body > .row:nth-child(4) { animation-delay: 66ms; }
+.group[open] .group-body > .row:nth-child(5) { animation-delay: 88ms; }
+.group[open] .group-body > .row:nth-child(n + 6) { animation-delay: 110ms; }
+
+@keyframes rowIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+    filter: blur(4px);
+  }
+}
+
+/* 行悬停：左侧细亮条延展，标出当前正在编辑的那一条 */
+.row {
+  position: relative;
+}
+
+.row::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateY(-50%);
+  transition: height 260ms var(--e-out);
+}
+
+.row:hover::before,
+.row:focus-within::before {
+  height: 58%;
+}
+
+/* 开关：轨道内高光 + 激活柔光，滑块已有弹性位移 */
+.switch .track {
+  position: relative;
+  overflow: hidden;
+}
+
+.switch .track::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent 62%);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.switch input:checked + .track {
+  box-shadow: 0 0 0 4px var(--green-soft);
+}
+
+/* 未保存标记：出现时弹一下，让人注意到改了哪一条 */
+.mark.on {
+  animation: markPop 320ms var(--e-overshoot) both;
+}
+
+@keyframes markPop {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
+/* 脏计数徽标同样弹入 */
+.dirty {
+  animation: markPop 320ms var(--e-overshoot) both;
+}
+
+/* 保存中：按钮内的进度条纹缓慢流动（真实请求期间才出现） */
+.btn.primary:disabled {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn.primary:disabled::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: saveFlow 1.1s linear infinite;
+}
+
+@keyframes saveFlow {
+  from {
+    background-position: -120% 0;
+  }
+  to {
+    background-position: 220% 0;
+  }
+}
+
+/* 骨架 → 真实内容：整块淡出，内容从下方 8px 浮入 */
+.skeleton-list {
+  transition: opacity 240ms var(--e-out);
+}
+
+.list .group {
+  animation: groupIn 420ms var(--e-out) backwards;
+}
+
+@keyframes groupIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+    filter: blur(6px);
+  }
+}
+
+/* 提示条：弹簧入场 + 退场收缩 */
+.toast {
+  transition: transform 340ms var(--e-overshoot), opacity 220ms var(--e-out);
+}
+
+.toast.on {
+  transform: translate(-50%, 0) scale(1);
+}
+
+/* 筛选后的行/组不重复播放入场：只在展开时播 */
+.group:not([open]) .row {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group[open] .group-body > .row,
+  .list .group,
+  .mark.on,
+  .dirty,
+  .btn.primary:disabled::after {
+    animation: none !important;
+  }
+
+  .topbar,
+  .topbar h1,
+  .search::after,
+  .row::before,
+  .toast {
+    transition-duration: 1ms !important;
+  }
+}

@@ -1,0 +1,1372 @@
+/* ============================================================================
+ * BiliBot · Motion System v2（第二轮动效深化）
+ *
+ * 这一层叠在 motion.css 之上，不改任何布局与业务类名，只通过
+ *   [data-light]  指针光照      [data-tilt]  3D 倾斜
+ *   html[data-vt-dir]  转场方向   .app-shell.is-dimmed  浮层压暗
+ *   --scroll-y / --scroll-progress  滚动叙事
+ * 这几组「约定点」工作，标记由 app.js 打。
+ *
+ * 节奏分成七档，同一档内的组件必须同调：
+ *   T0 60ms   指针跟随的最短反馈
+ *   T1 120ms  图标、描边、焦点环
+ *   T2 180ms  按钮、开关、输入
+ *   T3 260ms  卡片、折叠、标签页
+ *   T4 340ms  浮层、抽屉
+ *   T5 460ms  页面转场单层
+ *   T6 700ms  多阶段展开
+ *   T7 ∞      环境氛围（只受设计约束）
+ * ========================================================================== */
+
+:root {
+  /* 进入 / 退出用不同曲线：进来的东西要减速，离开的东西要加速 */
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-glide: cubic-bezier(0.33, 0, 0.1, 1);
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-overshoot: cubic-bezier(0.22, 1.4, 0.36, 1);
+
+  --t0: 60ms;
+  --t1: 120ms;
+  --t2: 180ms;
+  --t3: 260ms;
+  --t4: 340ms;
+  --t5: 460ms;
+  --t6: 700ms;
+
+  /* 交错基数与层间隔 */
+  --stagger-tight: 18ms;
+  --stagger-loose: 44ms;
+  --vt-layer-delay: 24ms;
+
+  /* 空间：透视距离、抬升量、模糊半径 */
+  --depth-perspective: 1100px;
+  --depth-lift: 6px;
+  --depth-push: 28px;
+  --blur-veil: 10px;
+  --blur-far: 26px;
+
+  /* 指针光照在卡片上的半径与强度 */
+  --light-radius: 360px;
+  --light-strength: 0.16;
+}
+
+/* ============================================================================
+ * 一、空间层级：指针光照、3D 倾斜、边缘高光
+ * ========================================================================== */
+
+/* 指针光照：一层跟随光斑 + 一层掠过的高光。
+   --mx / --my 由 app.js 写成「容器内的百分比」，容器尺寸变化时不用重算。 */
+[data-light] {
+  position: relative;
+  isolation: isolate;
+}
+
+[data-light]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    var(--light-radius) circle at var(--mx, 50%) var(--my, 0%),
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 255, 255, 0) 62%
+  );
+  mix-blend-mode: soft-light;
+  transition: opacity var(--t3) var(--ease-enter);
+}
+
+[data-light]:hover::before,
+[data-light]:focus-within::before {
+  opacity: var(--light-strength);
+}
+
+/* 深色与工作室主题里高光改成冷色，避免整块发灰 */
+html[data-theme="dark"] [data-light]::before,
+html[data-mode="extension"] [data-light]::before {
+  background: radial-gradient(
+    var(--light-radius) circle at var(--mx, 50%) var(--my, 0%),
+    rgba(180, 205, 255, 0.55) 0%,
+    rgba(180, 205, 255, 0) 60%
+  );
+  mix-blend-mode: screen;
+}
+
+/* 边缘高光：贴着圆角的一圈细线，指针靠近时增强 */
+[data-light]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+      220px circle at var(--mx, 50%) var(--my, 0%),
+      rgba(255, 255, 255, 0.85),
+      transparent 70%
+    )
+    border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: opacity var(--t3) var(--ease-enter);
+}
+
+[data-light]:hover::after {
+  opacity: 0.7;
+}
+
+/* 3D 倾斜：--rx/--ry 由指针位置映射而来（角度），子层用 translateZ 拉开纵深 */
+[data-tilt] {
+  transform-style: preserve-3d;
+  transform: perspective(var(--depth-perspective)) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))
+    translate3d(0, var(--tilt-lift, 0px), 0);
+  transition: transform var(--t3) var(--ease-glide), box-shadow var(--t3) var(--ease-enter);
+  will-change: transform;
+}
+
+[data-tilt]:hover {
+  --tilt-lift: -4px;
+  box-shadow: var(--shadow-3);
+}
+
+[data-tilt] > * {
+  transform: translateZ(var(--z, 0px));
+}
+
+[data-tilt] .metric-icon,
+[data-tilt] .section-icon,
+[data-tilt] .capability-icon,
+[data-tilt] .event-color,
+[data-tilt] .profile-avatar {
+  --z: 18px;
+}
+
+[data-tilt] .metric-card > strong,
+[data-tilt] > strong {
+  --z: 12px;
+}
+
+/* 只在指针设备上启用倾斜，触屏没有 hover 语义 */
+@media (hover: none) {
+  [data-tilt] {
+    transform: none !important;
+  }
+
+  [data-light]::before,
+  [data-light]::after {
+    display: none;
+  }
+}
+
+/* ============================================================================
+ * 二、页面转场：分层视图过渡（View Transitions API）
+ *
+ * app.js 在切换前给旧内容的直接子元素挂 vt-layer-N，切换后给新内容挂同名，
+ * 于是每一层各自独立做「位移 + 模糊 + 淡入」，按 N 递增错峰。
+ * 方向由 html[data-vt-dir="forward|back"] 决定：前进从右侧推入，后退从左侧。
+ * ========================================================================== */
+
+/* 根层：整页交叉淡入，作为各分层位移的底噪 */
+::view-transition-old(root) {
+  animation: vtRootOut var(--t4) var(--ease-exit) both;
+}
+
+::view-transition-new(root) {
+  animation: vtRootIn var(--t5) var(--ease-enter) both;
+}
+
+@keyframes vtRootOut {
+  to {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+
+@keyframes vtRootIn {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+/* 每一层的进入：位移 + 轻微缩放 + 模糊消散，方向感由 data-vt-dir 给出 */
+::view-transition-old(vt-layer-0),
+::view-transition-new(vt-layer-0),
+::view-transition-old(vt-layer-1),
+::view-transition-new(vt-layer-1),
+::view-transition-old(vt-layer-2),
+::view-transition-new(vt-layer-2),
+::view-transition-old(vt-layer-3),
+::view-transition-new(vt-layer-3),
+::view-transition-old(vt-layer-4),
+::view-transition-new(vt-layer-4),
+::view-transition-old(vt-layer-5),
+::view-transition-new(vt-layer-5),
+::view-transition-old(vt-layer-6),
+::view-transition-new(vt-layer-6),
+::view-transition-old(vt-layer-7),
+::view-transition-new(vt-layer-7),
+::view-transition-old(vt-layer-8),
+::view-transition-new(vt-layer-8),
+::view-transition-old(vt-layer-9),
+::view-transition-new(vt-layer-9) {
+  animation-duration: var(--t5);
+  animation-timing-function: var(--ease-enter);
+  animation-fill-mode: both;
+  mix-blend-mode: normal;
+}
+
+/* 旧层：加速离场并轻微后退，给新层让出纵深 */
+::view-transition-old(vt-layer-0),
+::view-transition-old(vt-layer-1),
+::view-transition-old(vt-layer-2),
+::view-transition-old(vt-layer-3),
+::view-transition-old(vt-layer-4),
+::view-transition-old(vt-layer-5),
+::view-transition-old(vt-layer-6),
+::view-transition-old(vt-layer-7),
+::view-transition-old(vt-layer-8),
+::view-transition-old(vt-layer-9) {
+  animation-name: vtLayerOut;
+  animation-duration: var(--t3);
+  animation-timing-function: var(--ease-exit);
+}
+
+/* 新层：逐层错峰进入 */
+::view-transition-new(vt-layer-0) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 0);
+}
+::view-transition-new(vt-layer-1) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 1);
+}
+::view-transition-new(vt-layer-2) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 2);
+}
+::view-transition-new(vt-layer-3) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 3);
+}
+::view-transition-new(vt-layer-4) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 4);
+}
+::view-transition-new(vt-layer-5) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 5);
+}
+::view-transition-new(vt-layer-6) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 6);
+}
+::view-transition-new(vt-layer-7) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 7);
+}
+::view-transition-new(vt-layer-8) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 8);
+}
+::view-transition-new(vt-layer-9) {
+  animation-name: vtLayerInForward;
+  animation-delay: calc(var(--vt-layer-delay) * 9);
+}
+
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-0),
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-1),
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-2),
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-3),
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-4),
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-5),
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-6),
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-7),
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-8),
+html[data-vt-dir="back"] ::view-transition-new(vt-layer-9) {
+  animation-name: vtLayerInBack;
+}
+
+@keyframes vtLayerOut {
+  to {
+    opacity: 0;
+    transform: translate3d(0, -14px, 0) scale(0.985);
+    filter: blur(8px);
+  }
+}
+
+@keyframes vtLayerInForward {
+  from {
+    opacity: 0;
+    transform: translate3d(34px, 10px, 0) scale(0.985);
+    filter: blur(10px);
+  }
+}
+
+@keyframes vtLayerInBack {
+  from {
+    opacity: 0;
+    transform: translate3d(-34px, 10px, 0) scale(0.985);
+    filter: blur(10px);
+  }
+}
+
+/* 共享元素：两页的 .page-title 同名，于是标题本身在两层之间连续变形 */
+::view-transition-group(page-title) {
+  animation-duration: var(--t5);
+  animation-timing-function: var(--ease-enter);
+  z-index: 3;
+}
+
+::view-transition-old(page-title) {
+  animation: titleMorphOut var(--t3) var(--ease-exit) both;
+}
+
+::view-transition-new(page-title) {
+  animation: titleMorphIn var(--t5) var(--ease-enter) both;
+}
+
+@keyframes titleMorphOut {
+  to {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translateY(-10px) scale(0.97);
+  }
+}
+
+@keyframes titleMorphIn {
+  from {
+    opacity: 0;
+    filter: blur(7px);
+    transform: translateY(14px) scale(1.03);
+  }
+}
+
+/* 页头在转场里多走一小段：标题比内容早落位 */
+html[data-vt-dir] ::view-transition-new(vt-layer-0) {
+  animation-duration: calc(var(--t5) - 60ms);
+}
+
+/* 不支持 View Transitions 时的回退：沿用 motion.css 的 page-enter 交错，
+   这里额外给旧页一个更利落的离场 */
+.content.page-exit {
+  opacity: 0.45;
+  transform: translate3d(0, -10px, 0) scale(0.992);
+  filter: blur(3px);
+  transition: opacity var(--t2) var(--ease-exit), transform var(--t2) var(--ease-exit),
+    filter var(--t2) var(--ease-exit);
+}
+
+/* ============================================================================
+ * 三、浮层：景深压暗、原点感知、进出闭环
+ * ========================================================================== */
+
+/* 浮层打开时整块外壳后退：缩放 + 轻微模糊 + 降饱和，形成「浮层在更近的一层」 */
+.app-shell.is-dimmed .main-stage {
+  transform: perspective(1600px) translate3d(0, 0, -34px);
+  filter: blur(2.5px) saturate(0.94);
+  opacity: 0.9;
+  transition: transform var(--t4) var(--ease-exit), filter var(--t4) var(--ease-exit),
+    opacity var(--t4) var(--ease-exit);
+}
+
+.app-shell .main-stage {
+  transition: transform var(--t4) var(--ease-enter), filter var(--t4) var(--ease-enter),
+    opacity var(--t4) var(--ease-enter);
+}
+
+/* 遮罩：原点感知的径向扩散，而不是整块同步变暗 */
+.modal-backdrop,
+.drawer-backdrop {
+  background:
+    radial-gradient(
+      120% 120% at var(--origin-x, 50%) var(--origin-y, 50%),
+      transparent 0%,
+      var(--backdrop) 62%
+    );
+  animation: veilIn var(--t4) var(--ease-enter) both;
+}
+
+.modal-backdrop.is-closing,
+.drawer-backdrop.is-closing {
+  animation: veilOut var(--t3) var(--ease-exit) both;
+}
+
+@keyframes veilIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px) saturate(100%);
+  }
+}
+
+@keyframes veilOut {
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0px) saturate(100%);
+  }
+}
+
+/* 对话框：从触发点方向进入，带一点翻转的纵深感 */
+.modal,
+.mode-picker,
+.creator-modal {
+  transform-origin: var(--origin-x, 50%) var(--origin-y, 0%);
+  transform: perspective(1200px) translate3d(0, 18px, 90px) rotateX(-3deg) scale(0.96);
+  filter: blur(6px);
+  transition: transform var(--t4) var(--ease-enter), opacity var(--t3) var(--ease-enter),
+    filter var(--t3) var(--ease-enter);
+}
+
+.modal-backdrop.is-visible .modal,
+.modal-backdrop.is-visible .mode-picker,
+.modal-backdrop.is-visible .creator-modal {
+  transform: perspective(1200px) translate3d(0, 0, 0) rotateX(0) scale(1);
+  filter: blur(0);
+}
+
+.modal-backdrop.is-closing .modal,
+.modal-backdrop.is-closing .mode-picker {
+  transform: perspective(1200px) translate3d(0, -8px, 40px) scale(0.975);
+  filter: blur(4px);
+  transition: transform var(--t3) var(--ease-exit), opacity var(--t3) var(--ease-exit),
+    filter var(--t3) var(--ease-exit);
+}
+
+/* 抽屉：带侧向纵深推入 + 内侧高光，收起时加速滑出 */
+.autonomy-drawer {
+  transform: translate3d(104%, 0, 0) rotateY(-6deg);
+  transform-origin: 100% 50%;
+  filter: blur(8px);
+  transition: transform var(--t4) var(--ease-enter), filter var(--t3) var(--ease-enter);
+}
+
+.drawer-backdrop.is-visible .autonomy-drawer {
+  transform: none;
+  filter: blur(0);
+}
+
+.drawer-backdrop.is-closing .autonomy-drawer {
+  transform: translate3d(104%, 0, 0) rotateY(-4deg);
+  filter: blur(6px);
+  transition: transform var(--t3) var(--ease-exit), filter var(--t3) var(--ease-exit);
+}
+
+.autonomy-drawer::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--accent-ring) 18%,
+    var(--accent-ring) 82%,
+    transparent
+  );
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+/* 抽屉里的字段逐条滑入 */
+.drawer-backdrop.is-visible .drawer-fields > * {
+  animation: staggerRow var(--t3) var(--ease-enter) both;
+}
+
+.drawer-backdrop.is-visible .drawer-fields > *:nth-child(1) { animation-delay: calc(var(--stagger-tight) * 1); }
+.drawer-backdrop.is-visible .drawer-fields > *:nth-child(2) { animation-delay: calc(var(--stagger-tight) * 2); }
+.drawer-backdrop.is-visible .drawer-fields > *:nth-child(3) { animation-delay: calc(var(--stagger-tight) * 3); }
+.drawer-backdrop.is-visible .drawer-fields > *:nth-child(4) { animation-delay: calc(var(--stagger-tight) * 4); }
+.drawer-backdrop.is-visible .drawer-fields > *:nth-child(5) { animation-delay: calc(var(--stagger-tight) * 5); }
+.drawer-backdrop.is-visible .drawer-fields > *:nth-child(n + 6) { animation-delay: calc(var(--stagger-tight) * 6); }
+
+@keyframes staggerRow {
+  from {
+    opacity: 0;
+    transform: translate3d(10px, 0, 0);
+  }
+}
+
+/* 工具选择的每一行也是错峰进入 */
+.tool-modal-list .tool-group {
+  animation: staggerRow var(--t3) var(--ease-enter) both;
+}
+
+.tool-modal-list .tool-group:nth-child(1) { animation-delay: calc(var(--stagger-tight) * 1); }
+.tool-modal-list .tool-group:nth-child(2) { animation-delay: calc(var(--stagger-tight) * 2); }
+.tool-modal-list .tool-group:nth-child(3) { animation-delay: calc(var(--stagger-tight) * 3); }
+.tool-modal-list .tool-group:nth-child(n + 4) { animation-delay: calc(var(--stagger-tight) * 4); }
+
+/* ============================================================================
+ * 四、滚动叙事：顶部栏形变、页头视差、章节进度、环境层位移
+ * ========================================================================== */
+
+/* 顶栏随滚动收窄变暗（is-scrolled 由 app.js 打，--scroll-progress 是 0~1） */
+.topbar {
+  transition: height var(--t3) var(--ease-glide), padding var(--t3) var(--ease-glide),
+    background-color var(--t3) var(--ease-glide), border-color var(--t3) var(--ease-glide),
+    box-shadow var(--t3) var(--ease-glide), backdrop-filter var(--t3) var(--ease-glide);
+}
+
+.topbar.is-scrolled {
+  height: 52px;
+  background: var(--surface-glass-strong);
+  box-shadow: 0 1px 0 var(--line), 0 10px 30px -22px rgba(0, 0, 0, 0.35);
+  backdrop-filter: saturate(200%) blur(26px);
+}
+
+.topbar.is-scrolled .crumb {
+  transform: scale(0.96);
+  transform-origin: 0 50%;
+  opacity: 0.86;
+  transition: transform var(--t3) var(--ease-glide), opacity var(--t3) var(--ease-glide);
+}
+
+/* 滚动进度条：贴在顶栏下沿的一条细线，宽度 = 阅读进度 */
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 100%;
+  height: 1.5px;
+  transform-origin: 0 50%;
+  transform: scaleX(var(--scroll-progress, 0));
+  background: linear-gradient(90deg, transparent, var(--accent));
+  opacity: 0;
+  transition: opacity var(--t2) var(--ease-enter);
+  pointer-events: none;
+}
+
+.topbar.is-scrolled::after {
+  opacity: 0.85;
+}
+
+/* 页头视差：标题、副标题、操作区按不同速度上移并在滚动中淡出 */
+.page-head > div:first-child {
+  transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.045), 0);
+  will-change: transform;
+}
+
+.page-title {
+  transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.018), 0);
+}
+
+.page-actions {
+  transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.03), 0);
+}
+
+/* 章节标题进入视口时做一次「遮罩揭示」，而不是又一次淡入 */
+[data-reveal].is-revealed > .section-head h2,
+[data-reveal].is-revealed .page-title {
+  animation: maskReveal var(--t6) var(--ease-enter) backwards;
+}
+
+@keyframes maskReveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0.2;
+    letter-spacing: 0.02em;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    letter-spacing: normal;
+  }
+}
+
+/* 环境层随滚动缓慢位移，形成视差（幅度很小，只做纵深） */
+.ambient-orb-a {
+  transform: translate3d(0, calc(var(--scroll-y, 0px) * 0.05), 0);
+}
+
+.ambient-orb-b {
+  transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.035), 0);
+}
+
+.ambient-orb-c {
+  transform: translate3d(0, calc(var(--scroll-y, 0px) * 0.075), 0);
+}
+
+/* 滚动到顶部的回位按钮：只在滚动后浮现 */
+.scroll-top {
+  position: fixed;
+  right: var(--sp-6);
+  bottom: var(--sp-6);
+  z-index: var(--z-dock);
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-glass-strong);
+  box-shadow: var(--shadow-2);
+  color: var(--text-secondary);
+  backdrop-filter: blur(18px);
+  opacity: 0;
+  transform: translate3d(0, 14px, 0) scale(0.9);
+  pointer-events: none;
+  transition: opacity var(--t3) var(--ease-enter), transform var(--t3) var(--ease-overshoot),
+    color var(--t2) var(--ease-enter);
+}
+
+.scroll-top.is-visible {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.scroll-top:hover {
+  color: var(--accent);
+  transform: translateY(-2px) scale(1.04);
+}
+
+/* 图标是 arrow-left，转 90° 朝上 */
+.scroll-top .gicon {
+  transform: rotate(90deg);
+  transition: transform var(--t2) var(--ease-overshoot);
+}
+
+.scroll-top:hover .gicon {
+  transform: rotate(90deg) translateY(-2px);
+}
+
+/* 浮层打开时，藏在后面的悬浮件一起让位，不抢焦点 */
+.app-shell.is-dimmed .save-dock,
+.app-shell.is-dimmed .scroll-top {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t2) var(--ease-exit);
+}
+
+/* 内嵌视图的占位态：骨架呼吸，而不是一行干字 */
+.embedded-page.is-loading {
+  display: grid;
+  place-items: center;
+  min-height: 46vh;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: linear-gradient(
+    100deg,
+    var(--surface-muted) 25%,
+    var(--surface) 42%,
+    var(--surface-muted) 58%
+  );
+  background-size: 300% 100%;
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  animation: embeddedShimmer 1.6s var(--ease-glide) infinite;
+}
+
+@keyframes embeddedShimmer {
+  to {
+    background-position: -160% 0;
+  }
+}
+
+/* ============================================================================
+ * 五、微交互：按钮、图标、开关、输入、提示
+ * ========================================================================== */
+
+/* 按钮：指针跟光 + 按下压缩 + 主按钮的环形脉冲 */
+.button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.button::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  opacity: 0;
+  background: radial-gradient(
+    160px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, 0.55),
+    transparent 65%
+  );
+  transition: opacity var(--t2) var(--ease-enter);
+}
+
+.button:hover::before {
+  opacity: 0.85;
+}
+
+.button.soft::before,
+.button.danger::before {
+  background: radial-gradient(
+    160px circle at var(--mx, 50%) var(--my, 50%),
+    var(--accent-soft-strong),
+    transparent 65%
+  );
+}
+
+.button:active {
+  transform: translateY(1px) scale(0.968);
+  transition-duration: var(--t0);
+}
+
+/* 主按钮点击后的扩散环：由 JS 加 .is-rippling，动画结束自动移除 */
+.button.is-rippling::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, 0.85),
+    transparent 45%
+  );
+  animation: buttonRipple 620ms var(--ease-enter) both;
+  pointer-events: none;
+}
+
+@keyframes buttonRipple {
+  from {
+    opacity: 0.9;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+/* 按钮里的图标在悬停时按语义轻微位移（箭头右移、刷新旋转、保存下沉） */
+.button:hover .gicon {
+  transition: transform var(--t2) var(--ease-overshoot);
+}
+
+.button[data-action="refresh"]:hover .gicon,
+.button[data-action="refresh-memory"]:hover .gicon,
+.button[data-action="refresh-security"]:hover .gicon,
+.button[data-action="refresh-account"]:hover .gicon {
+  transform: rotate(90deg);
+}
+
+.button[data-action="refresh"].is-spinning .gicon,
+.icon-button.is-spinning .gicon {
+  animation: spin 900ms linear infinite;
+}
+
+.button[data-action="save"]:hover .gicon,
+.button.primary:hover .gicon {
+  transform: translateY(1px) scale(1.05);
+}
+
+/* 图标按钮：底光从指针位置扩散 */
+.icon-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.icon-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    90px circle at var(--mx, 50%) var(--my, 50%),
+    var(--accent-soft),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity var(--t2) var(--ease-enter);
+  pointer-events: none;
+}
+
+.icon-button:hover::after {
+  opacity: 1;
+}
+
+/* 折叠箭头：只用旋转，不弹跳 */
+.settings-group[open] > summary > .gicon,
+.tool-group[open] > summary > .gicon,
+.admin-range-details[open] > summary > i .gicon,
+.fold[open] > summary .gicon {
+  transform: rotate(90deg);
+  transition: transform var(--t3) var(--ease-overshoot);
+}
+
+/* 开关：滑块按下时拉伸（已有），这里补轨道的光泽与激活时的柔光 */
+.switch-track::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 60%);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.switch-control input:checked + .switch-track {
+  box-shadow: 0 0 0 4px var(--green-soft), inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+/* 输入控件：聚焦时从中心向两侧扫开一道底线 */
+.field-control,
+.row-control {
+  position: relative;
+}
+
+.field-control::after,
+.row-control::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--violet));
+  transform: scaleX(0);
+  transform-origin: 50% 50%;
+  opacity: 0;
+  transition: transform var(--t3) var(--ease-enter), opacity var(--t2) var(--ease-enter);
+  pointer-events: none;
+}
+
+.field-control:focus-within::after,
+.row-control:focus-within::after {
+  transform: scaleX(1);
+  opacity: 0.9;
+}
+
+/* 校验/提示文案出现时，周围布局连续推开 */
+.field-copy p,
+.row-hint {
+  animation: hintIn var(--t3) var(--ease-enter) both;
+}
+
+@keyframes hintIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+    max-height: 0;
+  }
+}
+
+/* Toast：弹簧入场 + 退场时向右塌缩；多条堆叠时上面的轻微压缩 */
+.toast {
+  animation: toastSpring var(--t4) var(--ease-overshoot) both;
+  transform-origin: 100% 0%;
+}
+
+.toast.is-leaving {
+  animation: toastCollapse var(--t3) var(--ease-exit) both;
+}
+
+.toast-region .toast:not(:last-child) {
+  transform: scale(0.97);
+  opacity: 0.75;
+}
+
+@keyframes toastSpring {
+  from {
+    opacity: 0;
+    transform: translate3d(24px, -6px, 0) scale(0.9);
+    filter: blur(6px);
+  }
+}
+
+@keyframes toastCollapse {
+  to {
+    opacity: 0;
+    transform: translate3d(28px, 0, 0) scale(0.94);
+    filter: blur(4px);
+    max-height: 0;
+    margin-top: -8px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+/* 分段控制器：滑块用弹性曲线跟上 */
+.segmented-thumb {
+  transition: transform var(--t3) var(--ease-overshoot), width var(--t3) var(--ease-overshoot);
+}
+
+/* 状态点：在线时呼吸；离线时静止（真实状态驱动的动效） */
+.status-dot.is-online {
+  animation: dotBreathe 2.8s var(--ease-glide) infinite;
+}
+
+@keyframes dotBreathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px var(--green-soft);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 7px transparent;
+    opacity: 0.72;
+  }
+}
+
+/* ============================================================================
+ * 六、内容与列表：网格、卡片、骨架、空/错/成功态
+ * ========================================================================== */
+
+/* 骨架屏 → 真实内容：骨架淡出、内容从下方 8px 处浮入 */
+.skeleton-list {
+  transition: opacity var(--t3) var(--ease-exit), filter var(--t3) var(--ease-exit);
+}
+
+.list:not(:has(.skeleton-list)) .group {
+  animation: contentSettle var(--t4) var(--ease-enter) backwards;
+}
+
+@keyframes contentSettle {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.995);
+    filter: blur(4px);
+  }
+}
+
+/* 列表项：新增/过滤后重新排版时，卡片自身轻微压缩再回弹（由 JS 触发一次） */
+.is-layout-shift {
+  animation: layoutSettle var(--t3) var(--ease-overshoot) both;
+}
+
+@keyframes layoutSettle {
+  0% {
+    transform: scale(0.985);
+  }
+  60% {
+    transform: scale(1.004);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* 监控行 / 事件行：悬停时整行左推 2px + 底色渐入，左侧色条延展 */
+.monitor-row,
+.event-row {
+  position: relative;
+}
+
+.monitor-row::before,
+.event-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateY(-50%);
+  transition: height var(--t3) var(--ease-enter);
+  pointer-events: none;
+}
+
+.monitor-row:hover::before,
+.event-row:hover::before,
+.event-row.is-active::before {
+  height: 62%;
+}
+
+.event-row.is-active {
+  box-shadow: inset 0 0 0 1px var(--accent-ring), 0 8px 20px -14px var(--accent-ring);
+}
+
+/* 能力卡 / 行为卡：进入选中态时边框从中心向两端点亮 */
+.capability-card.is-enabled,
+.behavior-card.is-enabled {
+  position: relative;
+}
+
+.capability-card.is-enabled::after,
+.behavior-card.is-enabled::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
+  animation: borderTrace 520ms var(--ease-enter) both;
+  pointer-events: none;
+}
+
+@keyframes borderTrace {
+  from {
+    clip-path: inset(0 50% 0 50%);
+    opacity: 0;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+/* 画像行：头像外圈在悬停时转一圈细弧 */
+.profile-avatar {
+  position: relative;
+}
+
+.profile-avatar::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  border-top-color: var(--accent);
+  opacity: 0;
+  transition: opacity var(--t2) var(--ease-enter);
+  animation: spin 3.2s linear infinite;
+  animation-play-state: paused;
+}
+
+.profile-row:hover .profile-avatar::after {
+  opacity: 0.9;
+  animation-play-state: running;
+}
+
+/* 空态 → 有数据：整块做一次轻缩放落位 */
+.empty-inline,
+.empty-search,
+.empty-event {
+  animation: contentSettle var(--t4) var(--ease-enter) backwards;
+}
+
+/* 错误态：进入时横向抖动一次（只一次，不循环） */
+.error-state {
+  animation: errorShake 420ms var(--ease-snap) both;
+}
+
+@keyframes errorShake {
+  0% {
+    transform: translate3d(0, 6px, 0);
+    opacity: 0;
+  }
+  40% {
+    transform: translate3d(-5px, 0, 0);
+  }
+  65% {
+    transform: translate3d(4px, 0, 0);
+  }
+  85% {
+    transform: translate3d(-2px, 0, 0);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* 进度条数值变化：条本身用弹性过渡，数字由 JS 滚动 */
+.micro-progress i,
+.quota-track i,
+.activity-fill {
+  transition: width var(--t6) var(--ease-enter);
+}
+
+/* 缓存条：加载完成后从 0 展开 */
+.cache-bucket-grid .cache-bucket strong {
+  animation: contentSettle var(--t4) var(--ease-enter) backwards;
+}
+
+/* ============================================================================
+ * 七、页面专属动态（不同页面不同叙事，不共用同一套入场）
+ * ========================================================================== */
+
+/* 总览：体征条的光斑缓慢横扫，代表「系统在呼吸」 */
+.health-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    var(--health-tint, var(--accent-soft)) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  animation: healthSweep 9s var(--ease-glide) infinite;
+  opacity: 0.7;
+}
+
+@keyframes healthSweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  55%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.health-orb {
+  transition: transform var(--t4) var(--ease-overshoot), box-shadow var(--t4) var(--ease-enter);
+}
+
+.health-hero:hover .health-orb {
+  transform: scale(1.06) rotate(-4deg);
+}
+
+/* 自主与作息：事件环整体缓慢自转的光环 + 指针脉冲（已有 pulse，这里加外环） */
+.ring-shell::before {
+  content: "";
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    var(--accent-soft) 60deg,
+    transparent 140deg
+  );
+  filter: blur(12px);
+  opacity: 0.5;
+  animation: orbitSpin 22s linear infinite;
+  pointer-events: none;
+}
+
+.ring-event.is-active {
+  animation: ringPulse 2.4s var(--ease-glide) infinite;
+}
+
+@keyframes ringPulse {
+  0%,
+  100% {
+    stroke-width: 26;
+    opacity: 1;
+  }
+  50% {
+    stroke-width: 30;
+    opacity: 0.86;
+  }
+}
+
+.ring-center {
+  transition: transform var(--t3) var(--ease-overshoot), box-shadow var(--t3) var(--ease-enter);
+}
+
+/* 活跃度滑杆：拖动的填充里有流动的光带 */
+.activity-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.5),
+    transparent
+  );
+  background-size: 220% 100%;
+  animation: fillFlow 3.4s var(--ease-glide) infinite;
+}
+
+@keyframes fillFlow {
+  from {
+    background-position: -120% 0;
+  }
+  to {
+    background-position: 220% 0;
+  }
+}
+
+/* 回复与互动：兴趣快照的洞察卡按顺序落下 */
+.interest-insight-grid article {
+  animation: contentSettle var(--t4) var(--ease-enter) backwards;
+}
+
+.interest-insight-grid article:nth-child(2) { animation-delay: calc(var(--stagger-loose) * 1); }
+.interest-insight-grid article:nth-child(3) { animation-delay: calc(var(--stagger-loose) * 2); }
+.interest-insight-grid article:nth-child(4) { animation-delay: calc(var(--stagger-loose) * 3); }
+.interest-insight-grid article:nth-child(n + 5) { animation-delay: calc(var(--stagger-loose) * 4); }
+
+/* 记忆与关系：好感度条按真实数值生长，头像色环随分档变化 */
+.profile-progress i {
+  transform-origin: 0 50%;
+  animation: barGrow var(--t6) var(--ease-enter) both;
+}
+
+@keyframes barGrow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* 安全：盾牌在「已保护」时缓慢自转的扫描光 */
+.security-hero.is-safe > span {
+  position: relative;
+  overflow: hidden;
+}
+
+.security-hero.is-safe > span::after {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: conic-gradient(from 0deg, transparent 0deg, var(--green-soft) 40deg, transparent 90deg);
+  animation: orbitSpin 6s linear infinite;
+}
+
+/* 账号：二维码区进场时的扫描线与提示呼吸 */
+.qr-box::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 12%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0;
+  animation: qrScan 3.6s var(--ease-glide) infinite;
+  pointer-events: none;
+}
+
+@keyframes qrScan {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  12% {
+    opacity: 0.9;
+  }
+  88% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(180px);
+  }
+}
+
+/* 基础设置：缓存清理的确认按钮有轻推动效（真实操作前的一次抗拒反馈） */
+.button.danger:hover {
+  animation: dangerNudge 700ms var(--ease-enter);
+}
+
+@keyframes dangerNudge {
+  0%,
+  100% {
+    transform: translateY(-1px);
+  }
+  35% {
+    transform: translateY(-3px) rotate(-0.6deg);
+  }
+  70% {
+    transform: translateY(-2px) rotate(0.4deg);
+  }
+}
+
+/* ============================================================================
+ * 八、环境层：按页面类型区分氛围（不是全站一套光效）
+ * ========================================================================== */
+
+/* 内容区按当前页给不同的环境色温，淡到只影响氛围 */
+.content {
+  transition: background-color var(--t6) var(--ease-glide);
+  background-image: radial-gradient(
+    120% 60% at 50% 0%,
+    var(--page-tint, transparent) 0%,
+    transparent 62%
+  );
+  background-repeat: no-repeat;
+}
+
+.content[data-page="overview"] {
+  --page-tint: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.content[data-page="autonomy"] {
+  --page-tint: color-mix(in srgb, var(--violet) 8%, transparent);
+}
+
+.content[data-page="interaction"] {
+  --page-tint: color-mix(in srgb, var(--pink) 7%, transparent);
+}
+
+.content[data-page="memory"] {
+  --page-tint: color-mix(in srgb, var(--pink) 6%, transparent);
+}
+
+.content[data-page="security"] {
+  --page-tint: color-mix(in srgb, var(--green) 7%, transparent);
+}
+
+.content[data-page="account"] {
+  --page-tint: color-mix(in srgb, var(--cyan) 7%, transparent);
+}
+
+.content[data-page="basics"],
+.content[data-page="allconfig"] {
+  --page-tint: color-mix(in srgb, var(--orange) 6%, transparent);
+}
+
+.content[data-page="history"],
+.content[data-page="selftest"] {
+  --page-tint: color-mix(in srgb, var(--violet) 6%, transparent);
+}
+
+/* 扩展工作室：网格底噪随指针轻微偏移，做出「在工作台前」的错觉 */
+html[data-mode="extension"] .creator-grid-noise {
+  transform: translate3d(
+    calc(var(--mx-raw, 0) * 0.6px),
+    calc(var(--my-raw, 0) * 0.6px),
+    0
+  );
+  transition: transform 400ms var(--ease-glide);
+}
+
+/* ============================================================================
+ * 九、减少动态效果：保留状态与层级，只压掉位移、视差与循环
+ * ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .health-hero::after,
+  .ring-shell::before,
+  .ring-event.is-active,
+  .activity-fill::after,
+  .qr-box::after,
+  .security-hero.is-safe > span::after,
+  .profile-avatar::after,
+  .status-dot.is-online,
+  .topbar::after {
+    animation: none !important;
+  }
+
+  [data-tilt] {
+    transform: none !important;
+  }
+
+  .page-head > div:first-child,
+  .page-title,
+  .page-actions,
+  .ambient-orb-a,
+  .ambient-orb-b,
+  .ambient-orb-c {
+    transform: none !important;
+  }
+
+  [data-reveal].is-revealed > .section-head h2,
+  [data-reveal].is-revealed .page-title,
+  .error-state,
+  .list:not(:has(.skeleton-list)) .group,
+  .toast,
+  .toast.is-leaving {
+    animation: none !important;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-old(vt-layer-0),
+  ::view-transition-new(vt-layer-0) {
+    animation-duration: 1ms !important;
+  }
+}

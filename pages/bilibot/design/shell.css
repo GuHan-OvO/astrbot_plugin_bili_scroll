@@ -563,6 +563,17 @@
   background: var(--surface);
 }
 
+/* 汉堡按钮只服务于 ≤900px 的抽屉侧栏；桌面侧栏常驻，它不该出现 */
+#mobile-menu {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  #mobile-menu {
+    display: grid;
+  }
+}
+
 /* 主题切换：分段控制器，滑块跟随选中项 */
 .segmented {
   position: relative;

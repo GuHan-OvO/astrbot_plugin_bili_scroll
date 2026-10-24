@@ -315,7 +315,9 @@
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(186px, 1fr));
+  /* 164 而不是 186：内容列扣掉两侧内边距后约 1100px，6 张卡要挤进一行
+     需要 6×164 + 5×16 = 1064，否则总览会掉成 5+1 的孤行。窄屏由断点接管。 */
+  grid-template-columns: repeat(auto-fit, minmax(164px, 1fr));
   gap: var(--gap-grid);
   margin-bottom: var(--gap-section);
 }
@@ -1261,6 +1263,19 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 
 .error-state .button {
   margin-top: var(--sp-3);
+}
+
+/* 错误态里的动作组：重试 + 刷新整页 */
+.error-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--sp-3);
+}
+
+.error-actions .button {
+  margin-top: 0;
 }
 
 /* ── 双列与网格辅助 ────────────────────────────────────────────────── */

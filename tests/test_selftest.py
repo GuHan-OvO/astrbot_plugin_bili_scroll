@@ -23,7 +23,9 @@ class _FakePlugin:
 class CollectTests(unittest.TestCase):
     def test_结构完整(self):
         out = collect(_FakePlugin({"SESSDATA": "x", "BILI_JCT": "y"}))
-        for key in ("module", "metadata", "config", "data", "pages", "routes", "ok", "errors"):
+        # 存储报告挂在 storage 下：键名叫 data 会被响应信封的 unwrap 吃掉，
+        # 见 core/selftest.py 里 collect() 的注释。
+        for key in ("module", "metadata", "config", "storage", "pages", "routes", "ok", "errors"):
             self.assertIn(key, out)
         self.assertTrue(out["ok"])
         self.assertEqual(out["errors"], [])

@@ -405,6 +405,11 @@ window.addEventListener("beforeunload", (event) => {
   }
 });
 
+// 顶栏随滚动收窄（motion.css 里的 .topbar.is-scrolled）
+window.addEventListener("scroll", () => {
+  document.querySelector(".topbar")?.classList.toggle("is-scrolled", window.scrollY > 8);
+}, { passive: true });
+
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", (event) => {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", event.matches ? "#0b0b0d" : "#f5f5f7");
 });
