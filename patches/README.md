@@ -156,3 +156,25 @@ git apply --ignore-whitespace patches/private-companion-7.0.0-bili-scroll.patch
 | 根本不出现 | 陪伴还是 6.x，或 patch 没打进 `EXTERNAL_PROVIDERS` |
 | manifest 里有但界面看不到 | **正常现象**，7.0.0 前端不渲染外部 provider |
 
+## 附带：陪伴小屋茶几上的一台手机（纯装饰）
+
+`companion-lobby-phone.py` 不是补丁，是一个幂等脚本——因为 `assets/voxel-room.js` 是**单行**
+打包产物（677 KB），改动会让 diff 显示整行，patch 会变成几百 KB 且不可读。
+
+```bash
+python patches/companion-lobby-phone.py <陪伴插件根目录>
+python patches/companion-lobby-phone.py <陪伴插件根目录> --check   # 只看会改什么
+```
+
+它改三处：
+
+| 文件 | 改动 |
+|---|---|
+`pages/陪伴小屋/assets/voxel-room.js` | **生效**：茶几白块之后插入机身 + 屏幕两个方块 |
+`.../voxel-source/panels/home-room-3d.source.js` | 镜像一份（该目录不参与运行时，仅为可重现） |
+`pages/陪伴小屋/index.html` | 把 `voxel-room.js?v=` 缓存号升到预设值，否则浏览器用旧 bundle |
+
+已含该代码时三处都会跳过，可反复运行。坐标说明见脚本里的注释（手机在茶几右侧，平放）。
+
+**限制**：这是改**打包产物**，陪伴插件更新会整目录覆盖，更新后重跑本脚本即可。
+正确做法是改 source 再用上游的打包脚本重建，但那脚本没随插件发布。
