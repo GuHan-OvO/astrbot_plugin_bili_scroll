@@ -1,0 +1,166 @@
+"""自检：把「插件现在是不是真的能跑」变成一页能看的东西。
+
+只读，不写任何文件、不发任何 B站 请求（Cookie 检查是单独的显式动作）。
+所有密钥类配置只报告「有没有配 / 长度」，绝不回显值。
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+from astrbot.api import logger
+
+from .config import DATA_DIR, PLUGIN_NAME, WATCH_LOG_FILE, VERIFY_LOG_FILE
+
+PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+"""插件根目录（`core/` 的上一级）。"""
+
+# 必填配置：名字 → 人话说明
+REQUIRED_CONFIG = {
+    "SESSDATA": "B站 登录态（bili登录 扫码获取）",
+    "BILI_JCT": "B站 CSRF（与 SESSDATA 一起给出）",
+    "OWNER_BILI_NAME": "主人 B站 昵称，用于真实 @ 提及",
+    "OWNER_MID": "主人 B站 UID，与昵称配对",
+}
+
+SECRET_KEYS = {"SESSDATA", "BILI_JCT"}
+
+OPTIONAL_CONFIG = {
+    "ENABLE_PROACTIVE": "主动看片总开关（默认关）",
+    "OWNER_QQ_UMO": "QQ 推荐投递地址",
+    "ANALYSIS_DEPTH": "看多细",
+    "PC_BRIDGE_ENABLE": "借陪伴插件的人格与通道",
+}
+
+
+def _config_value(plugin, key: str) -> Any:
+    try:
+        return plugin.config.get(key, None)
+    except Exception:
+        return None
+
+
+def _is_filled(value: Any) -> bool:
+    return bool(str(value or "").strip())
+
+
+def _read_metadata() -> dict:
+    """读插件自己的 metadata.yaml；读不到就返回空（不让自检因为元数据挂掉）。"""
+    path = PLUGIN_ROOT / "metadata.yaml"
+    if not path.is_file():
+        return {}
+    try:
+        import yaml  # AstrBot 环境自带
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        logger.debug(f"[BiliBot] 自检读 metadata 失败：{exc}")
+        return {}
+
+
+def _json_list_len(path: str) -> int | None:
+    """只读列表型 JSON 的长度；文件不存在返回 0，坏了返回 None。"""
+    try:
+        if not os.path.exists(path):
+            return 0
+        import json
+
+        with open(path, encoding="utf-8") as fp:
+            data = json.load(fp)
+        return len(data) if isinstance(data, list) else None
+    except Exception:
+        return None
+
+
+def _module_info() -> dict:
+    return {
+        "plugin_name": PLUGIN_NAME,
+        "python": sys.version.split()[0],
+        "executable": sys.executable,
+        "plugin_root": str(PLUGIN_ROOT),
+        "data_dir": str(DATA_DIR),
+    }
+
+
+def _config_report(plugin) -> dict:
+    required = []
+    for key, hint in REQUIRED_CONFIG.items():
+        value = _config_value(plugin, key)
+        filled = _is_filled(value)
+        item = {"key": key, "hint": hint, "ok": filled}
+        # 密钥只报长度，不报值
+        item["detail"] = f"已配置（{len(str(value))} 字符）" if filled else "未配置"
+        required.append(item)
+
+    optional = []
+    for key, hint in OPTIONAL_CONFIG.items():
+        value = _config_value(plugin, key)
+        optional.append({"key": key, "hint": hint, "value": value if not isinstance(value, str) else (value[:40] or "（空）")})
+
+    try:
+        total = len(plugin.config.keys())
+    except Exception:
+        total = 0
+    return {"total_keys": total, "required": required, "optional": optional}
+
+
+def _data_report() -> dict:
+    watch_count = _json_list_len(WATCH_LOG_FILE)
+    verify_count = _json_list_len(VERIFY_LOG_FILE)
+    db = Path(DATA_DIR) / "bilibot.sqlite3"
+    return {
+        "watch_log": {"path": WATCH_LOG_FILE, "count": watch_count},
+        "verify_log": {"path": VERIFY_LOG_FILE, "count": verify_count},
+        "database": {"path": str(db), "exists": db.is_file(),
+                     "size": db.stat().st_size if db.is_file() else 0},
+    }
+
+
+def _pages_report() -> list[dict]:
+    """列出插件自带的页面目录（AstrBot 会把这些暴露成插件页面）。"""
+    root = PLUGIN_ROOT / "pages"
+    out: list[dict] = []
+    if not root.is_dir():
+        return out
+    for entry in sorted(root.iterdir()):
+        if entry.is_dir() and (entry / "index.html").is_file():
+            out.append({"name": entry.name, "has_index": True})
+    return out
+
+
+def collect(plugin) -> dict:
+    """汇总所有自检信息。任何一段失败都只记错误，不影响其它段。"""
+    meta = _read_metadata()
+    result: dict = {"ok": True, "errors": []}
+
+    for key, builder in (
+        ("module", lambda: _module_info()),
+        ("metadata", lambda: {
+            "name": meta.get("name"),
+            "display_name": meta.get("display_name"),
+            "version": meta.get("version"),
+            "repo": meta.get("repo", ""),
+            "author": meta.get("author"),
+        }),
+        ("config", lambda: _config_report(plugin)),
+        ("data", lambda: _data_report()),
+        ("pages", lambda: _pages_report()),
+    ):
+        try:
+            result[key] = builder()
+        except Exception as exc:  # 单段失败不拖垮整页
+            result[key] = None
+            result["errors"].append(f"{key}: {exc}")
+
+    # 路由前缀直接来自模块常量，用来核对「注册到哪条路径」
+    result["routes"] = {
+        "prefix": f"/{PLUGIN_NAME}",
+        "examples": [f"/{PLUGIN_NAME}/history", f"/{PLUGIN_NAME}/stats",
+                     f"/{PLUGIN_NAME}/selftest"],
+    }
+    result["ok"] = not result["errors"]
+    return result

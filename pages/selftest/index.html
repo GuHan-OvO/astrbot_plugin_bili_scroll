@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>自检 · 我会自己刷B站</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="head">
+    <h1>自检</h1>
+    <p class="sub">看这个插件现在到底能不能跑。只读，不会发任何 B站 请求。</p>
+    <div class="actions">
+      <button id="reload" type="button">重新检查</button>
+      <span id="stamp" class="stamp"></span>
+    </div>
+  </header>
+
+  <p id="error" class="error" hidden></p>
+
+  <main id="root" class="grid">
+    <section class="card" id="card-module">
+      <h2>模块</h2>
+      <dl id="module-list"></dl>
+    </section>
+
+    <section class="card" id="card-config">
+      <h2>配置</h2>
+      <p class="note" id="config-total"></p>
+      <ul id="config-required" class="checks"></ul>
+      <details>
+        <summary>可选配置</summary>
+        <dl id="config-optional"></dl>
+      </details>
+    </section>
+
+    <section class="card" id="card-data">
+      <h2>数据</h2>
+      <dl id="data-list"></dl>
+    </section>
+
+    <section class="card" id="card-pages">
+      <h2>页面与路由</h2>
+      <dl id="route-list"></dl>
+      <ul id="page-list" class="checks"></ul>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

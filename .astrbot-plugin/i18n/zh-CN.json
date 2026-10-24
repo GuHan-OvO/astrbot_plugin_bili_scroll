@@ -4,6 +4,10 @@
       "title": "BiliBot 控制中心",
       "description": "可视化管理回复、主动行为、作息、记忆和账号连接"
     },
+    "selftest": {
+      "title": "自检",
+      "description": "包名、配置、数据与路由的一页体检"
+    },
     "history": {
       "title": "看过的视频",
       "description": "它刷过什么、挑中什么、推荐给主人什么"

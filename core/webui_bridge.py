@@ -148,6 +148,7 @@ def register_webui(plugin_instance: Any, context: Context):
         ("extensions/refresh", "POST", handle_extension_refresh, "Refresh extension discovery"),
         ("history", "GET", handle_get_history, "BiliBot watch history list"),
         ("history/detail", "GET", handle_get_history_detail, "BiliBot watch history detail"),
+        ("selftest", "GET", handle_selftest, "BiliBot self check"),
     ]
     for endpoint, method, handler, description in routes:
         route = f"/{PLUGIN_NAME}/{endpoint}"
@@ -1211,3 +1212,17 @@ async def handle_get_history_detail(plugin: Any):
     except Exception as exc:
         logger.warning(f"[BiliBot WebUI] history detail failed: {exc}")
         return _failure("读取详情失败", 500)
+
+
+# ── 自检 ──
+
+
+async def handle_selftest(plugin: Any):
+    """一页看清楚：包名、配置填没填、数据有没有、路由挂在哪。"""
+    try:
+        from .selftest import collect
+
+        return _response(collect(plugin))
+    except Exception as exc:
+        logger.warning(f"[BiliBot WebUI] selftest failed: {exc}")
+        return _failure(f"自检失败: {exc}", 500)

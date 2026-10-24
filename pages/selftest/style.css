@@ -1,0 +1,129 @@
+/* 自检页面样式。与 history 页同一套变量，保持两个页面看起来是一家的。 */
+
+:root {
+  --bg: #f6f8fc;
+  --card: #ffffff;
+  --ink: #1b2330;
+  --muted: #6b7789;
+  --line: #e3e8f0;
+  --accent: #3b82f6;
+  --good: #16a34a;
+  --bad: #dc2626;
+  --warn: #d97706;
+  --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161d;
+    --card: #1b212b;
+    --ink: #e6ebf3;
+    --muted: #93a0b4;
+    --line: #2a3240;
+    --accent: #60a5fa;
+    --good: #34d399;
+    --bad: #f87171;
+    --warn: #fbbf24;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 16px clamp(12px, 3vw, 32px) 40px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+.head { margin-bottom: 16px; }
+.head h1 { margin: 0 0 2px; font-size: 18px; font-weight: 650; }
+.sub { margin: 0; color: var(--muted); font-size: 13px; }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+.stamp { color: var(--muted); font-size: 12px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.card {
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.card h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 12px;
+  margin: 0;
+}
+dt { color: var(--muted); font-size: 12px; }
+dd { margin: 0; font-size: 13px; word-break: break-all; }
+
+.note { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+
+.checks { list-style: none; margin: 0; padding: 0; }
+.checks li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 13px;
+}
+.checks li:last-child { border-bottom: none; }
+
+.dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  transform: translateY(-1px);
+}
+.dot.ok { background: var(--good); }
+.dot.bad { background: var(--bad); }
+
+.name { font-weight: 600; }
+.hint { color: var(--muted); font-size: 12px; }
+
+details { margin-top: 8px; }
+summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+details dl { margin-top: 8px; }
+
+.error {
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  color: var(--bad);
+  background: var(--card);
+  border: 1px solid var(--bad);
+  border-radius: var(--radius);
+}
+
+.ok-text { color: var(--good); }
+.bad-text { color: var(--bad); }
