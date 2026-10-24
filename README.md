@@ -1,4 +1,4 @@
-# 我会一直刷B站 · astrbot_plugin_bili_scroll
+# 我会自己刷B站 · astrbot_plugin_bili_scroll
 
 让它有自己的 B站 日常：每天刷一遍，挑出值得看的，看完会在评论区**真的 @ 你**。
 
@@ -52,7 +52,7 @@
 
 ## 看过的视频
 
-入口：AstrBot WebUI → 插件 → **我会一直刷B站** → 页面「看过的视频」。
+入口：AstrBot WebUI → 插件 → **我会自己刷B站** → 页面「看过的视频」。
 
 数据源是 `watch_log.json`，**只保留最近 200 条**（写入侧 `cap=200`）。想要更长的历史，需要改写入侧或另接 B站 的观看历史接口。
 
@@ -71,7 +71,7 @@
 
 ## 与陪伴联动（可选）
 
-需要 `astrbot_plugin_private_companion` **7.0.0** 及以上，并给它打一个小补丁让「我会一直刷B站」出现在陪伴小屋：
+需要 `astrbot_plugin_private_companion` **7.0.0** 及以上，并给它打一个小补丁让「我会自己刷B站」出现在陪伴小屋：
 
 ```bash
 cd <陪伴插件目录>
