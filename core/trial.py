@@ -257,3 +257,133 @@ def live_status(plugin) -> dict:
         "cooldown_remaining": _cooldown_remaining(plugin),
         "cooldown_total": LIVE_COOLDOWN_SECONDS,
     }
+
+
+# ---------------------------------------------------------------- 单独测私信 / @
+
+_TEST_ATTR = "_trial_test_state"
+TEST_COOLDOWN_SECONDS = 30
+"""两个测试按钮共用的冷却。它们都是真实写操作，连点等于刷屏。"""
+
+
+def _test_state(plugin) -> dict:
+    state = getattr(plugin, _TEST_ATTR, None)
+    if not isinstance(state, dict):
+        state = {"last_at": 0.0, "last_kind": ""}
+        setattr(plugin, _TEST_ATTR, state)
+    return state
+
+
+def test_cooldown_remaining(plugin) -> int:
+    last = float(_test_state(plugin).get("last_at") or 0)
+    if not last:
+        return 0
+    remaining = TEST_COOLDOWN_SECONDS - (time.time() - last)
+    return int(remaining) if remaining > 0 else 0
+
+
+def _owner(plugin) -> tuple[str, str]:
+    """(昵称, mid)。昵称优先 OWNER_BILI_NAME，回退 OWNER_NAME。"""
+    mid = str(plugin.config.get("OWNER_MID", "") or "").strip()
+    name = str(plugin.config.get("OWNER_BILI_NAME", "") or "").strip()
+    if not name:
+        name = str(plugin.config.get("OWNER_NAME", "") or "").strip()
+    return name, mid
+
+
+async def send_test_private(plugin) -> dict:
+    """给主人发一条测试私信。**真实写操作**。
+
+    私信没有 @ 的复杂度，能直接验证「Cookie 能用 + 私信接口通」。
+    """
+    name, mid = _owner(plugin)
+    if not mid.isdigit():
+        return {"ok": False, "kind": "private", "error": "未配置 OWNER_MID（主人 B站 UID）"}
+
+    text = "（来自自检）私信通道正常，这条是测试消息。"
+    try:
+        ok = await plugin._send_bili_private_message(int(mid), text)
+    except Exception as exc:
+        return {"ok": False, "kind": "private", "error": f"发送异常：{exc}"}
+    return {
+        "ok": bool(ok),
+        "kind": "private",
+        "target_mid": mid,
+        "target_name": name,
+        "text": text,
+        "detail": "" if ok else "发送失败：Cookie 失效、对方关闭私信，或被风控拦截",
+    }
+
+
+async def send_test_mention(plugin) -> dict:
+    """在最近看过的一个视频下，发一条带**真 @** 的测试评论。**真实写操作**。
+
+    真 @ 依赖 ``at_name_to_mid`` 映射——只往正文里拼 ``@昵称`` 是纯文本，
+    B站 不会解析成提及。这里复用 ``core/mention.py`` 的构造逻辑。
+    """
+    name, mid = _owner(plugin)
+    if not name:
+        return {
+            "ok": False,
+            "kind": "mention",
+            "error": "未配置主人 B站昵称（OWNER_BILI_NAME / OWNER_NAME）",
+        }
+
+    bvid = ""
+    for item in reversed(_watch_entries(plugin)):
+        if isinstance(item, dict) and item.get("bvid"):
+            bvid = str(item["bvid"])
+            break
+    if not bvid:
+        return {"ok": False, "kind": "mention", "error": "还没有看过的视频，先刷一轮再来测"}
+
+    try:
+        oid = await plugin._get_video_oid(bvid)
+    except Exception as exc:
+        return {"ok": False, "kind": "mention", "error": f"取 oid 失败：{exc}"}
+    if not oid:
+        return {"ok": False, "kind": "mention", "bvid": bvid, "error": f"拿不到 {bvid} 的 oid"}
+
+    from .mention import build_mention_map, compose_comment
+
+    at_map = build_mention_map(name, mid)
+    text = compose_comment("（来自自检）在，能看到这条吗？", name)
+    try:
+        result = await plugin._send_comment(oid, text, at_name_to_mid=at_map)
+    except Exception as exc:
+        return {"ok": False, "kind": "mention", "error": f"发送异常：{exc}"}
+    return {
+        "ok": bool(result),
+        "kind": "mention",
+        "bvid": bvid,
+        "oid": oid,
+        "text": text,
+        "at_map": at_map,
+        "rpid": result if isinstance(result, int) else 0,
+        "detail": ""
+        if result
+        else "发送失败：Cookie 失效、评论区关闭、含敏感词，或被风控拦截（未降级重发，避免多一条评论）",
+    }
+
+
+async def run_test_action(plugin, kind: str) -> dict:
+    """统一的测试入口：带冷却，跑完记录时间。
+
+    ``kind`` 取 ``private`` 或 ``mention``；其他值原样报错，不猜。
+    """
+    if kind not in {"private", "mention"}:
+        return {"ok": False, "kind": kind, "error": f"未知的测试类型：{kind}"}
+
+    remaining = test_cooldown_remaining(plugin)
+    if remaining > 0:
+        return {
+            "ok": False,
+            "kind": kind,
+            "error": f"冷却中，还要等 {remaining} 秒（两个测试共用 {TEST_COOLDOWN_SECONDS} 秒冷却）",
+            "retry_after": remaining,
+        }
+
+    runner = send_test_private if kind == "private" else send_test_mention
+    result = await runner(plugin)
+    _test_state(plugin)["last_at"] = time.time()
+    return result

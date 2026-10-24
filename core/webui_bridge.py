@@ -162,6 +162,7 @@ def register_webui(plugin_instance: Any, context: Context):
         ("usage/stats", "GET", handle_usage_stats, "BiliBot token usage ledger"),
         ("trial/live", "POST", handle_start_live_trial, "BiliBot really watch one video"),
         ("trial/live", "GET", handle_live_trial_status, "BiliBot live trial status"),
+        ("trial/test", "POST", handle_trial_test, "BiliBot private / mention test"),
     ]
     for endpoint, method, handler, description in routes:
         route = f"/{PLUGIN_NAME}/{endpoint}"
@@ -1293,3 +1294,19 @@ async def handle_live_trial_status(plugin: Any):
     except Exception as exc:
         logger.warning(f"[BiliBot WebUI] live trial status failed: {exc}")
         return _failure(f"读取状态失败: {exc}", 500)
+
+
+async def handle_trial_test(plugin: Any):
+    """单独测私信或真 @。body: {"kind": "private" | "mention"}。
+
+    两者都会**真的往 B站 发东西**，所以带 30 秒冷却，避免连点刷屏。
+    """
+    try:
+        from .trial import run_test_action
+
+        body = await request.json(default={})
+        kind = str((body or {}).get("kind") or "").strip().lower()
+        return _response(await run_test_action(plugin, kind))
+    except Exception as exc:
+        logger.warning(f"[BiliBot WebUI] trial test failed: {exc}")
+        return _failure(f"测试失败: {exc}", 500)

@@ -563,6 +563,8 @@ const MARKUP = `
         <span id="stamp" class="stamp"></span>
         <button id="reload" class="btn soft" type="button">重新检查</button>
         <button id="trial" class="btn primary" type="button">刷一个</button>
+        <button id="test-private" class="btn soft" type="button">测私信</button>
+        <button id="test-mention" class="btn soft" type="button">测提及</button>
       </div>
     </header>
 
@@ -629,6 +631,8 @@ export function mountSelftest(host) {
     routeList: shadow.querySelector("#route-list"),
     pageList: shadow.querySelector("#page-list"),
     trial: shadow.querySelector("#trial"),
+    testPrivate: shadow.querySelector("#test-private"),
+    testMention: shadow.querySelector("#test-mention"),
     trialCard: shadow.querySelector("#card-trial"),
     trialNote: shadow.querySelector("#trial-note"),
     trialCookie: shadow.querySelector("#trial-cookie"),
@@ -868,6 +872,74 @@ export function mountSelftest(host) {
   }
 
 
+  /* 单独测私信 / 真 @。两者都会真的往 B站 发东西，后端有 30 秒共用冷却。 */
+  const TEST_LABEL = { private: "测私信", mention: "测提及" };
+
+  async function runTest(kind) {
+    const btn = kind === "private" ? el.testPrivate : el.testMention;
+    const label = TEST_LABEL[kind];
+    btn.disabled = true;
+    btn.textContent = "发送中…";
+    el.trialCard.hidden = false;
+    markCard(el.trialCard, "idle");
+    el.trialNote.textContent =
+      kind === "private" ? "正在发私信…" : "正在最近看过的视频下发带 @ 的评论…";
+    try {
+      renderTestResult(await apiPost("trial/test", { kind }));
+    } catch (err) {
+      markCard(el.trialCard, "bad");
+      el.trialNote.textContent = `${label}失败：${err?.message || err}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+
+  function renderTestResult(res) {
+    clear(el.trialCookie);
+    clear(el.trialCandidates);
+    clear(el.trialPlan);
+
+    const cooldown = Number(res && res.retry_after) || 0;
+    if (cooldown > 0) {
+      markCard(el.trialCard, "idle");
+      el.trialNote.textContent = res.error || "冷却中";
+      return;
+    }
+
+    const ok = !!(res && res.ok);
+    const isPrivate = (res && res.kind) === "private";
+    markCard(el.trialCard, ok ? "ok" : "bad");
+    el.trialNote.textContent = ok
+      ? isPrivate
+        ? "私信已发出，去 B站 消息里看看"
+        : "带 @ 的评论已发出，等推送到达"
+      : (res && res.error) || "失败";
+
+    if (!res || res.error === undefined) return;
+
+    if (isPrivate) {
+      addRow(el.trialCookie, "收件人",
+        res.target_name ? `${res.target_name}（${res.target_mid}）` : String(res.target_mid || "—"),
+        ok ? "ok-text" : "");
+      addRow(el.trialCookie, "内容", res.text || "—");
+    } else if (res.bvid) {
+      addRow(el.trialCookie, "视频", res.bvid);
+      addRow(el.trialCookie, "oid", String(res.oid || "—"));
+      const map = res.at_map || {};
+      const mapped = Object.keys(map).length > 0;
+      addRow(el.trialCookie, "@映射",
+        mapped ? JSON.stringify(map) : "空（只能发纯文本 @，B站 不会推送）",
+        mapped ? "ok-text" : "bad-text");
+      addRow(el.trialCookie, "评论", res.text || "—");
+    }
+
+    if (!ok && res.detail) {
+      el.trialCandidates.appendChild(node("li", "hint", res.detail));
+    }
+  }
+
+
   async function runTrial() {
     el.trial.disabled = true;
     el.trial.textContent = "刷片中…";
@@ -986,6 +1058,8 @@ export function mountSelftest(host) {
 
   el.reload.addEventListener("click", load);
   el.trial.addEventListener("click", runTrial);
+  el.testPrivate.addEventListener("click", () => runTest("private"));
+  el.testMention.addEventListener("click", () => runTest("mention"));
   refreshCooldown();
 
   // 原页面会在这里改写 <meta name="theme-color">。那个 meta 属于宿主 SPA 外壳、

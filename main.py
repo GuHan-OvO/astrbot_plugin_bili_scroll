@@ -34,7 +34,7 @@ _astrbot_site_packages = os.path.join(os.path.expanduser("~"), ".astrbot", "data
 if os.path.isdir(_astrbot_site_packages) and _astrbot_site_packages not in sys.path:
     sys.path.insert(0, _astrbot_site_packages)
 
-@register("astrbot_plugin_bili_scroll","chenluQwQ, GuHan-OvO","我会自己刷B站 — 刷B站、真 @ 主人、看过的视频、陪伴联动；评论/私信/弹幕/好感度/记忆等能力一应俱全","1.8.5","")
+@register("astrbot_plugin_bili_scroll","chenluQwQ, GuHan-OvO","我会自己刷B站 — 刷B站、真 @ 主人、看过的视频、陪伴联动；评论/私信/弹幕/好感度/记忆等能力一应俱全","1.8.6","")
 class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, AffectionMixin, PersonalityMixin, BilibiliAPIMixin, BangumiMixin, WebSearchMixin, VideoMixin, ReplyMixin, ProactiveMixin, DynamicMixin, ScheduleMixin, WeeklySummaryMixin, ShareMixin, PrivateMessageMixin, LiveDanmakuMixin):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)

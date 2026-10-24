@@ -17,6 +17,10 @@ _install_astrbot_stub()
 from core.trial import (
     LIVE_COOLDOWN_SECONDS,
     MAX_CANDIDATES,
+    TEST_COOLDOWN_SECONDS,
+    run_test_action,
+    send_test_mention,
+    send_test_private,
     _state,
     live_status,
     run_trial,
@@ -223,6 +227,97 @@ class LiveTrialTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_冷却常量是正数且不太短(self):
         self.assertGreaterEqual(LIVE_COOLDOWN_SECONDS, 20, "太短挡不住连点")
+
+
+class TrialTestActionTests(unittest.IsolatedAsyncioTestCase):
+    """单独测私信 / 真 @。"""
+
+    def _plugin(self, *, rows=None, oid=12345, private_ok=True, comment_result=999):
+        plugin = _FakePlugin()
+        plugin._watch_rows = list(rows or [])
+        plugin.config.update({"OWNER_MID": "10001", "OWNER_BILI_NAME": "主人"})
+        plugin.private_calls = []
+        plugin.comment_calls = []
+
+        def _load_json(path, default):
+            return list(plugin._watch_rows)
+
+        async def _send_private(mid, text):
+            plugin.private_calls.append((mid, text))
+            return private_ok
+
+        async def _get_oid(bvid):
+            plugin.oid_bvid = bvid
+            return oid
+
+        async def _send_comment(o, text, oid_type=1, at_name_to_mid=None):
+            plugin.comment_calls.append({"oid": o, "text": text, "at": at_name_to_mid})
+            return comment_result
+
+        plugin._load_json = _load_json
+        plugin._send_bili_private_message = _send_private
+        plugin._get_video_oid = _get_oid
+        plugin._send_comment = _send_comment
+        return plugin
+
+    async def test_私信成功(self):
+        plugin = self._plugin()
+        out = await send_test_private(plugin)
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["target_mid"], "10001")
+        self.assertEqual(len(plugin.private_calls), 1)
+        self.assertEqual(plugin.private_calls[0][0], 10001)
+
+    async def test_私信缺UID直接报错不发送(self):
+        plugin = self._plugin()
+        plugin.config["OWNER_MID"] = ""
+        out = await send_test_private(plugin)
+        self.assertFalse(out["ok"])
+        self.assertIn("OWNER_MID", out["error"])
+        self.assertEqual(plugin.private_calls, [])
+
+    async def test_私信失败带提示(self):
+        plugin = self._plugin(private_ok=False)
+        out = await send_test_private(plugin)
+        self.assertFalse(out["ok"])
+        self.assertIn("Cookie", out["detail"])
+
+    async def test_提及带上真at映射(self):
+        plugin = self._plugin(rows=[{"bvid": "BV1", "title": "x"}])
+        out = await send_test_mention(plugin)
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["bvid"], "BV1")
+        self.assertEqual(out["oid"], 12345)
+        self.assertIn("10001", str(out["at_map"]), "OWNER_MID 应该进映射")
+        call = plugin.comment_calls[0]
+        self.assertEqual(call["oid"], 12345)
+        self.assertTrue(call["at"], "必须带 at_name_to_mid，否则只是纯文本 @")
+        self.assertIn("@", call["text"])
+
+    async def test_提及没有看过视频时拒绝(self):
+        plugin = self._plugin(rows=[])
+        out = await send_test_mention(plugin)
+        self.assertFalse(out["ok"])
+        self.assertIn("先刷一轮", out["error"])
+        self.assertEqual(plugin.comment_calls, [])
+
+    async def test_测完进入冷却(self):
+        plugin = self._plugin()
+        self.assertTrue((await run_test_action(plugin, "private"))["ok"])
+        second = await run_test_action(plugin, "private")
+        self.assertFalse(second["ok"])
+        self.assertIn("冷却", second["error"])
+        self.assertGreater(second["retry_after"], 0)
+        self.assertEqual(len(plugin.private_calls), 1, "冷却期不该真的再发")
+
+    async def test_未知类型不给猜(self):
+        plugin = self._plugin()
+        out = await run_test_action(plugin, "whatever")
+        self.assertFalse(out["ok"])
+        self.assertIn("未知的测试类型", out["error"])
+
+    async def test_测试冷却常量有值(self):
+        self.assertGreaterEqual(TEST_COOLDOWN_SECONDS, 10)
 
 
 if __name__ == "__main__":
