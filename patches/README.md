@@ -48,7 +48,7 @@ git apply --reverse patches/private-companion-7.0.0-bili-scroll.patch
     {
         "plugin_id": "astrbot_plugin_bilibili_ai_bot",
         "capability_id": "bili_scroll",
-        "label": "刷B站",
+        "label": "我会一直刷B站",
         "description": "定时刷 B站、挑片、在评论区 @ 主人；执行仍由该插件自己完成。",
         "furniture": {"id": "bili-scroll", "name": "B站电视台", "panel_id": "bili-scroll"},
     },
@@ -59,7 +59,7 @@ git apply --reverse patches/private-companion-7.0.0-bili-scroll.patch
 ## 验证
 
 打完 patch、重启陪伴插件后，打开「陪伴小屋」的集成/能力列表，应该出现一项
-**刷B站**，状态为 `connected`（插件侧 `ENABLE_PROACTIVE` 打开且已配置 SESSDATA 时）。
+**我会一直刷B站**，状态为 `connected`（插件侧 `ENABLE_PROACTIVE` 打开且已配置 SESSDATA 时）。
 
 状态不连通时的常见原因：
 

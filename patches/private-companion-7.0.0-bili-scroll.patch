@@ -7,7 +7,7 @@
 +    {
 +        "plugin_id": "astrbot_plugin_bilibili_ai_bot",
 +        "capability_id": "bili_scroll",
-+        "label": "刷B站",
++        "label": "我会一直刷B站",
 +        "description": "定时刷 B站、挑片、在评论区 @ 主人；执行仍由该插件自己完成。",
 +        "furniture": {"id": "bili-scroll", "name": "B站电视台", "panel_id": "bili-scroll"},
 +    },

@@ -1,6 +1,6 @@
 name: astrbot_plugin_bilibili_ai_bot
-display_name: 刷B站
-short_desc: 刷B站 + 真 @ 主人 + 看过的视频 + 陪伴联动
+display_name: 我会一直刷B站
+short_desc: 我会一直刷B站 + 真 @ 主人 + 看过的视频 + 陪伴联动
 desc: >-
   基于 chenluQwQ 的 B站 AI Bot 魔改（v1.8.0）。每天自动刷 B站、读字幕与画面挑选值得看的，
   在评论区用**真实的 @ 提及**（at_name_to_mid）叫主人，并把挑片历史做成可视化页面；
