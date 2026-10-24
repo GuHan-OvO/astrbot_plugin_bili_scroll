@@ -58,9 +58,17 @@ function inject() {
   if (!navList) return;
   injectStyle();
 
+  // 插到「基础设置」之前。找不到锚点（上游改了导航项）就退回追加到末尾，至少不会消失。
+  const anchor = navList.querySelector('[data-page="basics"]');
+
   for (const item of PAGES) {
     if (navList.querySelector(`[data-sibling-page="${item.page}"]`)) continue;
-    navList.appendChild(buildLink(item));
+    const link = buildLink(item);
+    if (anchor && anchor.parentNode === navList) {
+      navList.insertBefore(link, anchor);
+    } else {
+      navList.appendChild(link);
+    }
   }
 }
 
