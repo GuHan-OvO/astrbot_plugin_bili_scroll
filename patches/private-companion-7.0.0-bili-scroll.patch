@@ -1,16 +1,38 @@
 --- a/astrbot_host/integration_catalog.py
 +++ b/astrbot_host/integration_catalog.py
-@@ -15,6 +15,13 @@
+@@ -14,6 +14,13 @@
+         "label": "旧版陪伴核心",
          "description": "仅显示旧版插件的运行状态，旧版资料与执行仍由原插件管理。",
          "furniture": {"id": "legacy-core", "name": "陪伴核心台", "panel_id": "legacy-core"},
-     },
++    },
 +    {
 +        "plugin_id": "astrbot_plugin_bili_scroll",
 +        "capability_id": "bili_scroll",
 +        "label": "我会一直刷B站",
 +        "description": "定时刷 B站、挑片、在评论区 @ 主人；执行仍由该插件自己完成。",
 +        "furniture": {"id": "bili-scroll", "name": "B站电视台", "panel_id": "bili-scroll"},
-+    },
+     },
  )
  
- BUNDLED_EXTENSIONS: tuple[dict[str, Any], ...] = (
+--- a/astrbot_host/native_extensions/together/media_methods.py
++++ b/astrbot_host/native_extensions/together/media_methods.py
+@@ -14,7 +14,7 @@
+         getter = getattr(getattr(self, 'context', None), 'get_registered_star', None)
+         if not callable(getter):
+             return None
+-        for name in ('astrbot_plugin_bilibili_ai_bot', 'astrbot_plugin_bilibili_bot'):
++        for name in ('astrbot_plugin_bili_scroll', 'astrbot_plugin_bilibili_bot'):
+             try:
+                 metadata = getter(name)
+             except Exception:
+--- a/astrbot_host/native_extensions/live/settings-schema.json
++++ b/astrbot_host/native_extensions/live/settings-schema.json
+@@ -220,7 +220,7 @@
+   "bilibili_ai_memory_integration_enabled": {
+     "description": "联动 BiliBot 用户画像与记忆",
+     "type": "bool",
+-    "hint": "同一 AstrBot 中安装 astrbot_plugin_bilibili_ai_bot 1.3.1+ 后，按弹幕事件自带的 B站 UID 精确读取用户画像和相关记忆，并把直播互动写回 BiliBot；未安装时自动跳过",
++    "hint": "同一 AstrBot 中安装 astrbot_plugin_bili_scroll 1.3.1+ 后，按弹幕事件自带的 B站 UID 精确读取用户画像和相关记忆，并把直播互动写回 BiliBot；未安装时自动跳过",
+     "default": true
+   },
+   "bilibili_ai_memory_event_types": {
