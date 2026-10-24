@@ -24,7 +24,12 @@
 
   校验 `schema` / `plugin_id` / `enabled` / `runtime_ready`；
 
-- 通过后在「陪伴小屋」显示为已接入，并把该插件的 `pages/` 登记为面板。
+- 通过后把该插件记进后端 manifest（`/integration/manifest` 的 `providers`），
+  并把该插件的 `pages/` 目录扫进 `pages` 字段（仅元数据）。
+
+> **7.0.0 的实际限制**：小屋界面（`pages/陪伴小屋/app.js`）的家具目录是**前端硬编码的 14 项**，
+> `room_furniture_catalog()` 后端已实现但前端未接入，`panel_id` 在前端零引用。
+> 所以打完补丁后，本插件**只在后端 manifest 里可见，小屋界面上不显示**。
 
 
 
@@ -149,4 +154,5 @@ git apply --ignore-whitespace patches/private-companion-7.0.0-bili-scroll.patch
 | `degraded` | `companion_v2_status()` 返回不合法 |
 
 | 根本不出现 | 陪伴还是 6.x，或 patch 没打进 `EXTERNAL_PROVIDERS` |
+| manifest 里有但界面看不到 | **正常现象**，7.0.0 前端不渲染外部 provider |
 

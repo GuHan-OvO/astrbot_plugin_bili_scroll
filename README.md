@@ -71,15 +71,19 @@
 
 ## 与陪伴联动（可选）
 
-需要 `astrbot_plugin_private_companion` **7.0.0** 及以上，并给它打一个小补丁让「我会自己刷B站」出现在陪伴小屋：
+需要 `astrbot_plugin_private_companion` **7.0.0** 及以上，并给它打一个小补丁，让陪伴的后端能识别到这个插件：
 
 ```bash
 cd <陪伴插件目录>
-git apply --check <本仓库>/patches/private-companion-7.0.0-bili-scroll.patch
-git apply <本仓库>/patches/private-companion-7.0.0-bili-scroll.patch
+git apply --ignore-whitespace --check <本仓库>/patches/private-companion-7.0.0-bili-scroll.patch
+git apply --ignore-whitespace <本仓库>/patches/private-companion-7.0.0-bili-scroll.patch
 ```
 
 补丁说明与状态码含义见 [patches/README.md](patches/README.md)。插件侧开关是 `PC_BRIDGE_ENABLE`（默认关）。
+
+> **注意**：7.0.0 的「陪伴小屋」界面把家具目录写死在前端（`pages/陪伴小屋/app.js`），
+> 暂不渲染外部 provider。打完补丁后本插件会出现在陪伴的 `/integration/manifest` 里，
+> 但**小屋界面上看不到入口**。历史页请从 AstrBot 插件页进入。
 
 ## 与原版的关系
 
