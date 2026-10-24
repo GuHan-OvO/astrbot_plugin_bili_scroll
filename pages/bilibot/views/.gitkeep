@@ -1,0 +1,8 @@
+# 控制中心的内嵌视图
+#
+# 这里的每个模块把 `pages/<name>/` 那个独立页面改写成可以在控制中心 SPA 里
+# 直接显示的一页：Shadow DOM 隔离样式、自己接管数据请求、导出 mount<Name>(host)。
+#
+# 为什么不用 iframe：AstrBot 宿主的插件页 iframe 带
+# `sandbox="allow-scripts allow-forms allow-downloads"`，没有 allow-same-origin，
+# 也没有 allow-top-navigation——嵌套 iframe 拿不到宿主 bridge，跨页跳转也会被静默拦掉。

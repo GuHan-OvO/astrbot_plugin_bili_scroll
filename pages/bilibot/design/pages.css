@@ -177,6 +177,32 @@
   min-width: 0;
 }
 
+/* 右栏只读快照：撑满左栏高度，容器允许收缩 */
+.interest-config-observation {
+  min-width: 0;
+}
+
+.interest-config-observation .interest-snapshot {
+  height: 100%;
+  margin: 0;
+}
+
+/* 兴趣面板的字段是长文本类，单列比通用的两列更好读 */
+.interest-config-controls .config-field {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-2);
+}
+
+.interest-config-controls .config-field.is-switch {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.interest-config-controls .textarea {
+  min-height: 118px;
+}
+
 .interest-selector-row {
   display: flex;
   align-items: center;
@@ -706,6 +732,14 @@
   border-left-color: var(--accent);
 }
 
+.selected-event.phase-overdue {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 24%, transparent);
+}
+
+.selected-event.phase-overdue .selected-event-icon {
+  filter: saturate(0.72);
+}
+
 .selected-event-icon {
   display: grid;
   place-items: center;
@@ -778,6 +812,15 @@
 
 .event-row:active {
   transform: scale(0.995);
+}
+
+/* 已错过的事件行整行带暖色底，与状态标签一起构成双重指示 */
+.event-row.phase-overdue {
+  background: var(--orange-soft);
+}
+
+.event-row.phase-overdue:hover {
+  background: color-mix(in srgb, var(--orange-soft) 70%, var(--surface-muted));
 }
 
 .event-color {
@@ -2135,4 +2178,21 @@
     align-items: flex-start;
     gap: var(--sp-2);
   }
+}
+
+/* ── 内嵌页面（看过的视频 / 自检） ───────────────────────────────────
+ * 这两页由 views/*.js 用 Shadow DOM 自渲染，容器只做占位与留白，
+ * 不参与它们内部的样式（shadow 内的规则与这里有同名类也不会互相影响）。 */
+
+.embedded-page {
+  display: block;
+  min-height: 60vh;
+}
+
+.embedded-page.is-loading {
+  display: grid;
+  place-items: center;
+  min-height: 40vh;
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
 }

@@ -1,3 +1,15 @@
+// 【已停用】这个脚本不再被 index.html 引用，保留仅为对照历史实现。
+//
+// 停用原因：AstrBot 宿主的插件页 iframe 是 `sandbox="allow-scripts allow-forms
+// allow-downloads"`，**没有 allow-top-navigation**，所以这里用 <a target="_top">
+// 跳宿主路由会被浏览器静默拦掉——点了没反应。宿主 bridge 也只支持 api/files/sse，
+// 没有导航动作，因此「从控制中心跳到另一个插件页」在沙箱下不可行。
+//
+// 取代方案：把「看过的视频」「自检」做成控制中心的 SPA 内页
+// （app.js 的 NAV_ITEMS + views/history.js、views/selftest.js，Shadow DOM 隔离渲染）。
+//
+// 下面这些历史说明仍然准确，供以后参考：
+//
 // 把「看过的视频」「自检」两个兄弟页面挂进 BiliBot 控制中心的侧边栏。
 //
 // 三个关键点：
@@ -8,6 +20,7 @@
 // 3. 跳转**用 <a target="_top"> 而不是 JS 改 hash**：插件页面可能跑在 iframe 里，
 //    脚本改 window.top.location.hash 会被 sandbox 静默拦掉（不抛错也不生效）；
 //    而 target="_top" 是浏览器原生行为，由页面框架决定处理方式，不受脚本沙箱影响。
+//    ↑ 这一条当时判断错了：target="_top" 同样受 sandbox 限制，见文件顶部的停用说明。
 //
 // 落点：优先写进侧边栏预留的 `[data-nav-slot="pages"]`（带「页面」分组标题）；
 // 找不到就退回旧的插入点（`[data-page="basics"]` 之前），再找不到就追加到导航末尾。

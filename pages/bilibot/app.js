@@ -48,6 +48,11 @@ function resolvedTheme() {
 function applyTheme() {
   const theme = resolvedTheme();
   document.documentElement.dataset.theme = theme;
+  // 内嵌视图在 Shadow DOM 里，css 的 prefers-color-scheme 不会跟随手动切换，
+  // 所以把解析后的主题同步到宿主节点上（视图模块用 :host([data-theme="dark"]) 接收）。
+  document.querySelectorAll("[data-embedded-view]").forEach((node) => {
+    node.dataset.theme = theme;
+  });
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && document.documentElement.dataset.mode !== "extension") {
     meta.setAttribute("content", theme === "dark" ? "#0b0b0d" : "#f5f5f7");
@@ -133,18 +138,20 @@ const NAV_ITEMS = [
   ["memory", "memory-card", "记忆与关系", "记忆、画像、心情与好感度"],
   ["security", "shield", "安全与工具", "权限隔离、脱敏与风控"],
   ["account", "user", "账号连接", "扫码登录与主人身份"],
+  ["history", "video", "看过的视频", "它刷过的视频、评分与理由"],
+  ["selftest", "refresh", "自检", "模块、配置、数据与路由自检"],
   ["basics", "settings", "基础设置", "人设、模型与长期配置"],
   ["allconfig", "menu", "全部配置", "全部配置按大类折叠浏览"],
 ];
 
 // 侧边栏分组：只影响呈现顺序，导航真源仍是 NAV_ITEMS。
-// "pages" 是兄弟页面（看过的视频 / 自检）由 sibling-nav.js 注入的位置。
+// 「页面」组放的是内嵌视图（views/*.js 用 Shadow DOM 渲染），与其它页一样在同一外壳内切换。
 const NAV_GROUPS = [
   ["监控", ["overview"]],
   ["行为", ["autonomy", "interaction"]],
   ["数据", ["memory"]],
   ["安全与账号", ["security", "account"]],
-  ["页面", null],
+  ["页面", ["history", "selftest"]],
   ["配置", ["basics", "allconfig"]],
 ];
 
@@ -874,6 +881,7 @@ async function navigate(page) {
   const token = state.pageToken;
   stopQrPoll();
   closeMobileNav();
+  destroyEmbedded();
   renderSidebar();
   setPageChrome(page);
   content.setAttribute("aria-busy", "true");
@@ -886,6 +894,7 @@ async function navigate(page) {
     content.classList.remove("page-exit");
     content.classList.add("page-enter");
     bindContent();
+    mountEmbedded(page, token);
     requestAnimationFrame(() => requestAnimationFrame(() => content.classList.remove("page-enter")));
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   } catch (error) {
@@ -1462,7 +1471,17 @@ function bindCreatorContent() {
 }
 
 
+// 内嵌视图：这两页的界面在 views/*.js 里用 Shadow DOM 自渲染，
+// renderPage 只给出一个占位容器，真正的内容由 mountEmbedded 异步挂上去。
+const EMBEDDED_MOUNTERS = {
+  history: async (host) => (await import("./views/history.js")).mountHistory(host),
+  selftest: async (host) => (await import("./views/selftest.js")).mountSelftest(host),
+};
+
 function renderPage(page) {
+  if (EMBEDDED_MOUNTERS[page]) {
+    return `<div class="embedded-page is-loading" data-embedded-view="${page}">正在加载页面…</div>`;
+  }
   return {
     overview: renderOverview,
     interaction: renderInteraction,
@@ -1473,6 +1492,46 @@ function renderPage(page) {
     basics: renderBasics,
     allconfig: renderAllConfig,
   }[page]?.() || renderOverview();
+}
+
+// 当前挂载着的内嵌视图（同一时刻只有一个页面可见）
+let embeddedView = null;
+
+async function mountEmbedded(page, token) {
+  const host = content.querySelector("[data-embedded-view]");
+  const mount = EMBEDDED_MOUNTERS[page];
+  if (!host || !mount) return;
+  try {
+    const view = await mount(host);
+    // 模块加载期间用户可能已经切走
+    if (token !== state.pageToken) {
+      view?.destroy?.();
+      return;
+    }
+    host.classList.remove("is-loading");
+    host.dataset.theme = resolvedTheme();
+    embeddedView = view || null;
+  } catch (error) {
+    if (token !== state.pageToken) return;
+    console.error("[bilibot] 内嵌页面加载失败", error);
+    host.classList.remove("is-loading");
+    host.shadowRoot?.replaceChildren();
+    host.textContent = "";
+    const box = document.createElement("div");
+    box.className = "error-state";
+    box.textContent = `页面加载失败：${error?.message || error}`;
+    host.appendChild(box);
+  }
+}
+
+function destroyEmbedded() {
+  if (!embeddedView) return;
+  try {
+    embeddedView.destroy?.();
+  } catch (error) {
+    console.warn("[bilibot] 内嵌页面清理失败", error);
+  }
+  embeddedView = null;
 }
 
 function renderOverview() {

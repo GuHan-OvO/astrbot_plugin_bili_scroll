@@ -695,6 +695,12 @@ input[type="time"].input,
   max-width: 140px;
 }
 
+/* WebKit 的时间选择器图标默认贴左，靠 flex 推到右侧 */
+.time-input::-webkit-calendar-picker-indicator {
+  margin-left: auto;
+  opacity: 0.68;
+}
+
 ::placeholder {
   color: var(--text-tertiary);
   opacity: 1;
@@ -758,6 +764,11 @@ input[type="time"].input,
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface-muted);
+}
+
+/* 瓦片只放「标签 + 控件」，说明文字会挤掉控件的呼吸空间 */
+.config-field.is-tile .field-copy p {
+  display: none;
 }
 
 .field-stack > .config-field:first-child {
@@ -2013,6 +2024,23 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 .qr-error strong {
   font-size: var(--fs-sm);
   color: var(--text);
+}
+
+/* 二维码弹窗里的主图标是视觉主体，不能按正文图标尺寸渲染 */
+.qr-preview .gicon,
+.qr-error .gicon {
+  width: 42px;
+  height: 42px;
+  margin-bottom: var(--sp-2);
+  color: var(--violet);
+}
+
+.qr-error .gicon {
+  color: var(--red);
+}
+
+.qr-error .button {
+  margin-top: var(--sp-3);
 }
 
 .qr-status {
