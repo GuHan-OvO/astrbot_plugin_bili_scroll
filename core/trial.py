@@ -119,6 +119,13 @@ async def run_trial(plugin) -> dict:
 
 _STATE_ATTR = "_trial_live_state"
 
+LIVE_COOLDOWN_SECONDS = 300
+"""两次真刷之间的最小间隔。
+
+按钮 disabled 只挡得住「同一个页面没刷新」的情况；真正要防的是**连着刷两个视频**——
+每刷一次都是一组真实的 B站 写操作，风控是累积的。所以冷却放在后端，刷新页面也拦得住。
+"""
+
 
 def _state(plugin) -> dict:
     state = getattr(plugin, _STATE_ATTR, None)
@@ -168,16 +175,40 @@ def _latest_watched(plugin, before: int) -> dict | None:
     }
 
 
+def _cooldown_remaining(plugin, now: float | None = None) -> int:
+    """距离下次可以真刷还有多少秒。0 表示可以。"""
+    state = _state(plugin)
+    if state.get("running"):
+        return 0
+    last = float(state.get("finished_at") or 0) or float(state.get("started_at") or 0)
+    if not last:
+        return 0
+    elapsed = (time.time() if now is None else now) - last
+    remaining = LIVE_COOLDOWN_SECONDS - elapsed
+    return int(remaining) if remaining > 0 else 0
+
+
 def start_live(plugin) -> dict:
     """启动一次「真的刷一个」：后台跑一轮，最多 1 个视频。
 
     走的是主流程 ``_run_proactive``，所以会**真的取片、分析、评价、按配置互动**，
     也会真的写 ``watch_log``。耗时可能 1~3 分钟，因此这里只负责启动，
     结果通过 ``live_status`` 轮询——不然一个 HTTP 请求要挂几分钟。
+
+    三种情况会被拒：上一轮还在跑、距上次刷完不到冷却期、没有事件循环。
+    前两种都带 ``retry_after``，前端可以据此倒计时。
     """
     state = _state(plugin)
     if state.get("running"):
-        return {"started": False, "reason": "上一次还没跑完"}
+        return {"started": False, "reason": "上一次还没跑完", "retry_after": 0}
+
+    remaining = _cooldown_remaining(plugin)
+    if remaining > 0:
+        return {
+            "started": False,
+            "reason": f"冷却中，还要等 {remaining} 秒（两次真刷至少隔 {LIVE_COOLDOWN_SECONDS} 秒）",
+            "retry_after": remaining,
+        }
 
     before = len(_watch_entries(plugin))
     state.update(
@@ -204,7 +235,8 @@ def start_live(plugin) -> dict:
         asyncio.get_running_loop().create_task(runner())
     except RuntimeError as exc:
         state["running"] = False
-        return {"started": False, "reason": f"没有事件循环：{exc}"}
+        state["finished_at"] = time.time()
+        return {"started": False, "reason": f"没有事件循环：{exc}", "retry_after": 0}
     return {"started": True}
 
 
@@ -222,4 +254,6 @@ def live_status(plugin) -> dict:
         "watched": state.get("watched"),
         "error": state.get("error") or "",
         "finished_at": finished_at,
+        "cooldown_remaining": _cooldown_remaining(plugin),
+        "cooldown_total": LIVE_COOLDOWN_SECONDS,
     }

@@ -833,6 +833,41 @@ export function mountSelftest(host) {
     if (plan.note) el.trialPlan.appendChild(node("li", "hint", plan.note));
   }
 
+  /* 防连点：冷却期禁用按钮，剩余秒数放提示行（按钮文字保持 4 字以内）。 */
+  let cooldownTimer = 0;
+
+  function syncCooldown(remaining) {
+    window.clearInterval(cooldownTimer);
+    let left = Number(remaining) || 0;
+    if (left <= 0) {
+      el.trial.disabled = false;
+      return;
+    }
+    el.trial.disabled = true;
+    el.trialNote.textContent = `冷却中，还要等 ${left} 秒`;
+    cooldownTimer = window.setInterval(() => {
+      left -= 1;
+      if (left <= 0) {
+        window.clearInterval(cooldownTimer);
+        el.trial.disabled = false;
+        el.trialNote.textContent = "";
+        return;
+      }
+      el.trialNote.textContent = `冷却中，还要等 ${left} 秒`;
+    }, 1000);
+  }
+
+  /* 问后端当前是否在冷却——状态在后端，刷新页面也拦得住。 */
+  async function refreshCooldown() {
+    try {
+      const state = await apiGet("trial/live");
+      syncCooldown(state && state.cooldown_remaining);
+    } catch (err) {
+      syncCooldown(0);
+    }
+  }
+
+
   async function runTrial() {
     el.trial.disabled = true;
     el.trial.textContent = "刷片中…";
@@ -844,6 +879,7 @@ export function mountSelftest(host) {
       const started = await apiPost("trial/live");
       if (!started || !started.started) {
         el.trialNote.textContent = (started && started.reason) || "启动失败";
+        syncCooldown((started && started.retry_after) || 0);
         return;
       }
       renderLive(await pollLive());
@@ -855,6 +891,7 @@ export function mountSelftest(host) {
     } finally {
       el.trial.disabled = false;
       el.trial.textContent = "刷一个";
+      await refreshCooldown();
     }
   }
 
@@ -949,6 +986,7 @@ export function mountSelftest(host) {
 
   el.reload.addEventListener("click", load);
   el.trial.addEventListener("click", runTrial);
+  refreshCooldown();
 
   // 原页面会在这里改写 <meta name="theme-color">。那个 meta 属于宿主 SPA 外壳、
   // 由 bilibot/app.js 维护，内嵌视图不该去改它，所以这段监听直接去掉（不留空转回调）。

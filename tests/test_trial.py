@@ -14,7 +14,14 @@ from test_autonomous_ranges import _install_astrbot_stub  # noqa: E402
 
 _install_astrbot_stub()
 
-from core.trial import MAX_CANDIDATES, live_status, run_trial, start_live  # noqa: E402
+from core.trial import (
+    LIVE_COOLDOWN_SECONDS,
+    MAX_CANDIDATES,
+    _state,
+    live_status,
+    run_trial,
+    start_live,
+)  # noqa: E402
 
 
 def _video(index: int) -> dict:
@@ -190,6 +197,32 @@ class LiveTrialTests(unittest.IsolatedAsyncioTestCase):
         start_live(plugin)
         await asyncio.sleep(0.05)
         self.assertEqual(live_status(plugin)["watched"]["bvid"], "BV2")
+
+    async def test_跑完后进入冷却且再点被拒(self):
+        plugin = self._plugin(run=None)
+        start_live(plugin)
+        await asyncio.sleep(0.05)
+        state = live_status(plugin)
+        self.assertFalse(state["running"])
+        self.assertGreater(state["cooldown_remaining"], 0, "刚跑完应该还在冷却")
+
+        second = start_live(plugin)
+        self.assertFalse(second["started"])
+        self.assertIn("冷却", second["reason"])
+        self.assertGreater(second["retry_after"], 0)
+
+    async def test_冷却结束后可以再刷(self):
+        plugin = self._plugin(run=None)
+        start_live(plugin)
+        await asyncio.sleep(0.05)
+        # 把完成时间往前推，模拟冷却已过
+        _state(plugin)["finished_at"] -= LIVE_COOLDOWN_SECONDS + 1
+        self.assertEqual(live_status(plugin)["cooldown_remaining"], 0)
+        self.assertTrue(start_live(plugin)["started"])
+        await asyncio.sleep(0.05)
+
+    async def test_冷却常量是正数且不太短(self):
+        self.assertGreaterEqual(LIVE_COOLDOWN_SECONDS, 60, "太短挡不住连刷")
 
 
 if __name__ == "__main__":
