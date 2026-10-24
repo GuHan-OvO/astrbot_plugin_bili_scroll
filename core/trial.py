@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -112,3 +113,113 @@ async def run_trial(plugin) -> dict:
     result["ok"] = not result["errors"]
     result["elapsed_ms"] = int((time.monotonic() - started) * 1000)
     return result
+
+
+# ---------------------------------------------------------------- 真跑一条
+
+_STATE_ATTR = "_trial_live_state"
+
+
+def _state(plugin) -> dict:
+    state = getattr(plugin, _STATE_ATTR, None)
+    if not isinstance(state, dict):
+        state = {
+            "running": False,
+            "started_at": 0.0,
+            "finished_at": 0.0,
+            "watched": None,
+            "error": "",
+        }
+        setattr(plugin, _STATE_ATTR, state)
+    return state
+
+
+def _watch_entries(plugin) -> list:
+    """读 watch_log。失败当空列表——状态展示不值得把任务搞挂。"""
+    try:
+        from .config import WATCH_LOG_FILE
+
+        data = plugin._load_json(WATCH_LOG_FILE, [])
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _latest_watched(plugin, before: int) -> dict | None:
+    """跑完后找出新落进去的那条。没新增说明这一轮没看成。"""
+    rows = _watch_entries(plugin)
+    if len(rows) <= before:
+        return None
+    latest = rows[-1]
+    if not isinstance(latest, dict):
+        return None
+    return {
+        "bvid": latest.get("bvid", ""),
+        "title": latest.get("title", ""),
+        "up_name": latest.get("up_name", ""),
+        "score": latest.get("score"),
+        "mood": latest.get("mood"),
+        "comment": latest.get("comment", ""),
+        "review": latest.get("review", ""),
+        "score_reason": latest.get("score_reason", ""),
+        "actions": latest.get("actions", []),
+        "time": latest.get("time", ""),
+        "failed": str(latest.get("evaluation_status") or "") == "failed",
+    }
+
+
+def start_live(plugin) -> dict:
+    """启动一次「真的刷一个」：后台跑一轮，最多 1 个视频。
+
+    走的是主流程 ``_run_proactive``，所以会**真的取片、分析、评价、按配置互动**，
+    也会真的写 ``watch_log``。耗时可能 1~3 分钟，因此这里只负责启动，
+    结果通过 ``live_status`` 轮询——不然一个 HTTP 请求要挂几分钟。
+    """
+    state = _state(plugin)
+    if state.get("running"):
+        return {"started": False, "reason": "上一次还没跑完"}
+
+    before = len(_watch_entries(plugin))
+    state.update(
+        {
+            "running": True,
+            "started_at": time.time(),
+            "finished_at": 0.0,
+            "watched": None,
+            "error": "",
+        }
+    )
+
+    async def runner() -> None:
+        try:
+            await plugin._run_proactive(max_watch=1)
+        except Exception as exc:  # _run_proactive 自己会吞，这里是双保险
+            state["error"] = str(exc)
+        finally:
+            state["watched"] = _latest_watched(plugin, before)
+            state["running"] = False
+            state["finished_at"] = time.time()
+
+    try:
+        asyncio.get_running_loop().create_task(runner())
+    except RuntimeError as exc:
+        state["running"] = False
+        return {"started": False, "reason": f"没有事件循环：{exc}"}
+    return {"started": True}
+
+
+def live_status(plugin) -> dict:
+    """当前真跑状态。running 为假时 elapsed_ms 是本次总耗时。"""
+    state = _state(plugin)
+    started_at = float(state.get("started_at") or 0)
+    finished_at = float(state.get("finished_at") or 0)
+    running = bool(state.get("running"))
+    end = time.time() if running else finished_at
+    elapsed = max(0, int((end - started_at) * 1000)) if started_at else 0
+    return {
+        "running": running,
+        "elapsed_ms": elapsed,
+        "watched": state.get("watched"),
+        "error": state.get("error") or "",
+        "finished_at": finished_at,
+    }

@@ -562,7 +562,7 @@ const MARKUP = `
       <div class="bar-actions">
         <span id="stamp" class="stamp"></span>
         <button id="reload" class="btn soft" type="button">重新检查</button>
-        <button id="trial" class="btn primary" type="button">试运行</button>
+        <button id="trial" class="btn primary" type="button">刷一个</button>
       </div>
     </header>
 
@@ -835,20 +835,88 @@ export function mountSelftest(host) {
 
   async function runTrial() {
     el.trial.disabled = true;
-    el.trial.textContent = "取片中…";
+    el.trial.textContent = "刷片中…";
     el.error.hidden = true;
     el.trialCard.hidden = false;
     markCard(el.trialCard, "idle");
-    el.trialNote.textContent = "正在取片…（不会互动）";
+    el.trialNote.textContent = "正在刷 B站：取片 → 分析 → 评价 → 按配置互动。可能要一两分钟…";
     try {
-      renderTrial(await apiPost("trial"));
+      const started = await apiPost("trial/live");
+      if (!started || !started.started) {
+        el.trialNote.textContent = (started && started.reason) || "启动失败";
+        return;
+      }
+      renderLive(await pollLive());
     } catch (err) {
-      el.trialCard.hidden = true;
+      el.trialCard.hidden = false;
+      markCard(el.trialCard, "bad");
       el.error.hidden = false;
-      el.error.textContent = `试运行失败：${err?.message || err}`;
+      el.error.textContent = `刷片失败：${err?.message || err}`;
     } finally {
       el.trial.disabled = false;
-      el.trial.textContent = "试运行";
+      el.trial.textContent = "刷一个";
+    }
+  }
+
+  /* 轮询真跑状态。一次可能一两分钟，所以每 2 秒问一次，最多等 6 分钟。 */
+  async function pollLive() {
+    const deadline = Date.now() + 6 * 60 * 1000;
+    let last = null;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      const state = await apiGet("trial/live");
+      last = state;
+      if (state && !state.running) return state;
+      const secs = Math.round(((state && state.elapsed_ms) || 0) / 1000);
+      el.trialNote.textContent = `正在刷片… 已 ${secs} 秒`;
+    }
+    return last || { running: false, error: "等待超时", elapsed_ms: 0, watched: null };
+  }
+
+  /* 真跑结果：这一轮到底看了哪个视频、给了几分、动了什么手。 */
+  function renderLive(state) {
+    el.trialCard.hidden = false;
+    const secs = Math.round(((state && state.elapsed_ms) || 0) / 1000);
+    const watched = (state && state.watched) || null;
+    const failed = !!(state && state.error);
+
+    markCard(el.trialCard, failed ? "bad" : watched ? "ok" : "idle");
+    el.trialNote.textContent = failed
+      ? `刷片出错：${state.error}`
+      : watched
+        ? `刷完了，用时 ${secs} 秒`
+        : `跑完了，用时 ${secs} 秒，但这一轮没有看成任何视频（可能全部被跳过）`;
+
+    clear(el.trialCookie);
+    clear(el.trialCandidates);
+    clear(el.trialPlan);
+
+    if (!watched) return;
+
+    addRow(el.trialCookie, "视频", watched.title || watched.bvid);
+    addRow(el.trialCookie, "UP", watched.up_name);
+    addRow(
+      el.trialCookie,
+      "评分",
+      watched.failed ? "评价失败" : `${watched.score ?? "—"} / 10`,
+      watched.failed ? "bad-text" : ""
+    );
+    addRow(el.trialCookie, "心情", watched.mood);
+    addRow(el.trialCookie, "时间", watched.time);
+    addRow(
+      el.trialCookie,
+      "动作",
+      Array.isArray(watched.actions) && watched.actions.length ? watched.actions.join(" / ") : "无（未触发互动）"
+    );
+
+    for (const [label, value] of [
+      ["它说的", watched.review || watched.comment],
+      ["为什么", watched.score_reason],
+    ]) {
+      if (!value) continue;
+      const li = node("li");
+      li.appendChild(node("span", "hint", `${label}：${value}`));
+      el.trialCandidates.appendChild(li);
     }
   }
 

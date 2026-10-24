@@ -160,6 +160,8 @@ def register_webui(plugin_instance: Any, context: Context):
         ("selftest", "GET", handle_selftest, "BiliBot self check"),
         ("trial", "POST", handle_run_trial, "BiliBot dry run (no writes)"),
         ("usage/stats", "GET", handle_usage_stats, "BiliBot token usage ledger"),
+        ("trial/live", "POST", handle_start_live_trial, "BiliBot really watch one video"),
+        ("trial/live", "GET", handle_live_trial_status, "BiliBot live trial status"),
     ]
     for endpoint, method, handler, description in routes:
         route = f"/{PLUGIN_NAME}/{endpoint}"
@@ -1267,3 +1269,27 @@ async def handle_usage_stats(plugin: Any):
     except Exception as exc:
         logger.warning(f"[BiliBot WebUI] usage stats failed: {exc}")
         return _failure(f"读取用量失败: {exc}", 500)
+
+
+# ── 真跑一条 ──
+
+
+async def handle_start_live_trial(plugin: Any):
+    """启动一次真实刷片（最多 1 个视频）。耗时可能几分钟，所以立刻返回并让前端轮询。"""
+    try:
+        from .trial import start_live
+
+        return _response(start_live(plugin))
+    except Exception as exc:
+        logger.warning(f"[BiliBot WebUI] start live trial failed: {exc}")
+        return _failure(f"启动失败: {exc}", 500)
+
+
+async def handle_live_trial_status(plugin: Any):
+    try:
+        from .trial import live_status
+
+        return _response(live_status(plugin))
+    except Exception as exc:
+        logger.warning(f"[BiliBot WebUI] live trial status failed: {exc}")
+        return _failure(f"读取状态失败: {exc}", 500)

@@ -3,6 +3,7 @@
 重点守两件事：**不碰写接口**、**不把内部字段漏给前端**。
 """
 
+import asyncio
 import sys
 import unittest
 from pathlib import Path
@@ -13,7 +14,7 @@ from test_autonomous_ranges import _install_astrbot_stub  # noqa: E402
 
 _install_astrbot_stub()
 
-from core.trial import MAX_CANDIDATES, run_trial  # noqa: E402
+from core.trial import MAX_CANDIDATES, live_status, run_trial, start_live  # noqa: E402
 
 
 def _video(index: int) -> dict:
@@ -112,6 +113,83 @@ class TrialTests(unittest.IsolatedAsyncioTestCase):
         plugin = _FakePlugin()
         await run_trial(plugin)
         self.assertEqual(plugin.write_calls, [], "试运行不该触发写操作")
+
+
+class LiveTrialTests(unittest.IsolatedAsyncioTestCase):
+    """真跑一条：后台启动 + 轮询状态。"""
+
+    def _plugin(self, run=None, rows=None):
+        plugin = _FakePlugin()
+        plugin._watch_rows = list(rows or [])
+
+        async def _run_proactive(max_watch=None):
+            plugin._run_args = max_watch
+            if run:
+                await run(plugin)
+
+        plugin._run_proactive = _run_proactive
+
+        def _load_json(path, default):
+            return list(plugin._watch_rows)
+
+        plugin._load_json = _load_json
+        return plugin
+
+    async def test_启动后running为真并跑完置假(self):
+        async def run(plugin):
+            plugin._watch_rows.append(
+                {"bvid": "BV1", "title": "看过的视频", "score": 8.5, "actions": ["👍点赞"]}
+            )
+
+        plugin = self._plugin(run=run)
+        started = start_live(plugin)
+        self.assertTrue(started["started"])
+        await asyncio.sleep(0.05)
+        state = live_status(plugin)
+        self.assertFalse(state["running"])
+        self.assertEqual(state["watched"]["bvid"], "BV1")
+        self.assertEqual(state["watched"]["score"], 8.5)
+        self.assertEqual(state["watched"]["actions"], ["👍点赞"])
+        self.assertEqual(plugin._run_args, 1, "只应该刷一个视频")
+
+    async def test_重复启动被拒(self):
+        async def run(plugin):
+            await asyncio.sleep(0.1)
+
+        plugin = self._plugin(run=run)
+        self.assertTrue(start_live(plugin)["started"])
+        second = start_live(plugin)
+        self.assertFalse(second["started"])
+        self.assertIn("还没跑完", second["reason"])
+        await asyncio.sleep(0.15)
+
+    async def test_没看成任何视频时watched为空(self):
+        plugin = self._plugin(run=None)
+        start_live(plugin)
+        await asyncio.sleep(0.05)
+        state = live_status(plugin)
+        self.assertFalse(state["running"])
+        self.assertIsNone(state["watched"])
+
+    async def test_跑挂了也把状态收尾(self):
+        async def run(plugin):
+            raise RuntimeError("炸了")
+
+        plugin = self._plugin(run=run)
+        start_live(plugin)
+        await asyncio.sleep(0.05)
+        state = live_status(plugin)
+        self.assertFalse(state["running"], "异常也要把 running 复位，否则按钮永远转")
+        self.assertIn("炸了", state["error"])
+
+    async def test_只取新增的那条(self):
+        async def run(plugin):
+            plugin._watch_rows.append({"bvid": "BV2", "title": "新的", "score": 7})
+
+        plugin = self._plugin(run=run, rows=[{"bvid": "BV0", "title": "旧的"}])
+        start_live(plugin)
+        await asyncio.sleep(0.05)
+        self.assertEqual(live_status(plugin)["watched"]["bvid"], "BV2")
 
 
 if __name__ == "__main__":
