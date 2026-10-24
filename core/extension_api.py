@@ -14,7 +14,7 @@
 STATUS_SCHEMA = "companion.provider-status.v1"
 """与 PC 侧 STATUS_SCHEMA 常量一致，写错会被判无效契约。"""
 
-PLUGIN_ID = "astrbot_plugin_bilibili_ai_bot"
+PLUGIN_ID = "astrbot_plugin_bili_scroll"
 """必须与 PC 的 integration_catalog.EXTERNAL_PROVIDERS 里登记的 plugin_id 完全一致。"""
 
 

@@ -3,7 +3,7 @@
 用法（在其他插件中）：
     from astrbot.api.star import Context
     # 获取 BiliBot 实例
-    bilibot = context.get_registered_star("astrbot_plugin_bilibili_ai_bot")
+    bilibot = context.get_registered_star("astrbot_plugin_bili_scroll")
     if bilibot and hasattr(bilibot, "memory_api"):
         api = bilibot.memory_api
         # 语义搜索

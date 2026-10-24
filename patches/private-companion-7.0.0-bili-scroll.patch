@@ -5,7 +5,7 @@
          "furniture": {"id": "legacy-core", "name": "陪伴核心台", "panel_id": "legacy-core"},
      },
 +    {
-+        "plugin_id": "astrbot_plugin_bilibili_ai_bot",
++        "plugin_id": "astrbot_plugin_bili_scroll",
 +        "capability_id": "bili_scroll",
 +        "label": "我会一直刷B站",
 +        "description": "定时刷 B站、挑片、在评论区 @ 主人；执行仍由该插件自己完成。",

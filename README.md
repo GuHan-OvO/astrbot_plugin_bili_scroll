@@ -1,4 +1,4 @@
-# 我会一直刷B站 · astrbot_plugin_bilibili_ai_bot
+# 我会一直刷B站 · astrbot_plugin_bili_scroll
 
 让它有自己的 B站 日常：每天刷一遍，挑出值得看的，看完会在评论区**真的 @ 你**。
 
@@ -21,7 +21,7 @@
 
 ## 快速开始
 
-1. 把本仓库放进 AstrBot 的 `data/plugins/astrbot_plugin_bilibili_ai_bot`
+1. 把本仓库放进 AstrBot 的 `data/plugins/astrbot_plugin_bili_scroll`
 2. 重载插件
 3. 填下面几个必填配置
 4. 在 QQ 里发 `bili主动` 跑一轮

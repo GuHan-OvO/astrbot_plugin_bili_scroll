@@ -38,7 +38,7 @@ class CompanionStatusContractTests(unittest.TestCase):
         status = BiliBotExtensionApi(_FakePlugin({})).companion_v2_status()
         self.assertEqual(status["schema"], "companion.provider-status.v1")
         self.assertEqual(status["schema"], STATUS_SCHEMA)
-        self.assertEqual(status["plugin_id"], "astrbot_plugin_bilibili_ai_bot")
+        self.assertEqual(status["plugin_id"], "astrbot_plugin_bili_scroll")
         self.assertEqual(status["plugin_id"], PLUGIN_ID)
 
     def test_enabled必须是bool(self):

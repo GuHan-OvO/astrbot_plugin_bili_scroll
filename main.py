@@ -22,7 +22,7 @@ from .core import (
 )
 
 _ACTIVE_BILIBOT = None
-_BILIBOT_MAIN_TASK_NAME = "astrbot_plugin_bilibili_ai_bot.main_loop"
+_BILIBOT_MAIN_TASK_NAME = "astrbot_plugin_bili_scroll.main_loop"
 
 
 def get_bilibili_ai_bot_api():
@@ -34,7 +34,7 @@ _astrbot_site_packages = os.path.join(os.path.expanduser("~"), ".astrbot", "data
 if os.path.isdir(_astrbot_site_packages) and _astrbot_site_packages not in sys.path:
     sys.path.insert(0, _astrbot_site_packages)
 
-@register("astrbot_plugin_bilibili_ai_bot","chenluQwQ","B站 AI Bot — 自动回复评论、好感度、记忆、心情、用户画像、主动视频、动态发布、LLM工具调用","1.7.2","https://github.com/chenluQwQ/astrbot_plugin_bilibili_ai_bot")
+@register("astrbot_plugin_bili_scroll","chenluQwQ, GuHan-OvO","我会一直刷B站 — 刷B站、真 @ 主人、看过的视频、陪伴联动；评论/私信/弹幕/好感度/记忆等原版能力保留","1.8.0","")
 class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, AffectionMixin, PersonalityMixin, BilibiliAPIMixin, BangumiMixin, WebSearchMixin, VideoMixin, ReplyMixin, ProactiveMixin, DynamicMixin, ScheduleMixin, WeeklySummaryMixin, ShareMixin, PrivateMessageMixin, LiveDanmakuMixin):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -1134,7 +1134,7 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
                 self._save_json(REPLIED_FILE, replied[-2000:])
                 msg_lines.append(f"  ✅ 已回复记录：{len(replied)}→2000条")
             msg_lines.append("")
-            msg_lines.append("💡 提示：如需完全重置，手动删除 plugin_data/astrbot_plugin_bilibili_ai_bot 目录")
+            msg_lines.append("💡 提示：如需完全重置，手动删除 plugin_data/astrbot_plugin_bili_scroll 目录")
         else:
             msg_lines.append("")
             msg_lines.append("💡 /bili清理 all ← 同时压缩日志文件")

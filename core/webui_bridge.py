@@ -41,7 +41,7 @@ from .config import (
 
 from .history import find_entry, query_history
 
-PLUGIN_NAME = "astrbot_plugin_bilibili_ai_bot"
+PLUGIN_NAME = "astrbot_plugin_bili_scroll"
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "_conf_schema.json"
 PROTECTED_CONFIG_KEYS = {"SESSDATA", "BILI_JCT", "DEDE_USER_ID", "REFRESH_TOKEN"}
 

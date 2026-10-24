@@ -2,7 +2,7 @@ import os
 
 from astrbot.api.star import StarTools
 
-PLUGIN_NAME = "astrbot_plugin_bilibili_ai_bot"
+PLUGIN_NAME = "astrbot_plugin_bili_scroll"
 DATA_DIR = str(StarTools.get_data_dir(PLUGIN_NAME))
 LAYERED_DB_FILE = os.path.join(DATA_DIR, "bilibot.sqlite3")
 REPLIED_FILE = os.path.join(DATA_DIR, "replied.json")

@@ -27,9 +27,13 @@
 
 ```bash
 cd <陪伴插件仓库目录>
-git apply --check patches/private-companion-7.0.0-bili-scroll.patch   # 先干跑
-git apply patches/private-companion-7.0.0-bili-scroll.patch
+# 先干跑；若报 "patch does not apply" 或空白差异，加 --ignore-whitespace
+git apply --ignore-whitespace --check patches/private-companion-7.0.0-bili-scroll.patch
+git apply --ignore-whitespace patches/private-companion-7.0.0-bili-scroll.patch
 ```
+
+> 必须带 `--ignore-whitespace`：市场分发的 `integration_catalog.py` 与 GitHub 上的空白有细微差异，
+> 不忽略时 `git apply` 会拒绝。
 
 或者用 `patch -p1 < ...patch`。
 
@@ -46,7 +50,7 @@ git apply --reverse patches/private-companion-7.0.0-bili-scroll.patch
 
 ```python
     {
-        "plugin_id": "astrbot_plugin_bilibili_ai_bot",
+        "plugin_id": "astrbot_plugin_bili_scroll",
         "capability_id": "bili_scroll",
         "label": "我会一直刷B站",
         "description": "定时刷 B站、挑片、在评论区 @ 主人；执行仍由该插件自己完成。",

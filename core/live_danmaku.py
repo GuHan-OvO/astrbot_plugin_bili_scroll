@@ -22,7 +22,7 @@ BILI_LIVE_HISTORY_URL = (
     "https://api.live.bilibili.com/xlive/web-room/v1/dM/gethistory"
 )
 BILI_LIVE_SEND_URL = "https://api.live.bilibili.com/msg/send"
-_LIVE_TASK_NAME = "astrbot_plugin_bilibili_ai_bot.live_danmaku"
+_LIVE_TASK_NAME = "astrbot_plugin_bili_scroll.live_danmaku"
 
 
 class LiveDanmakuMixin:
