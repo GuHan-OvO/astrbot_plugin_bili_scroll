@@ -60,12 +60,16 @@ def _payload(replies=None, *, code=0, top=None, hots=None, top_replies=None, cur
 class _FakePlugin:
     """按视角返回不同 payload；reply/reply 单独一份。"""
 
-    def __init__(self, *, anon=None, auth=None, anon_seq=None, sub=None, config=None, exc=None):
+    def __init__(
+        self, *, anon=None, auth=None, anon_seq=None, sub=None, sub_auth=None, config=None, exc=None
+    ):
         self.queues = {
             "anon": list(anon_seq) if anon_seq else [anon if anon is not None else _payload()],
             "auth": [auth if auth is not None else _payload()],
         }
         self.sub = sub if sub is not None else {"code": 0, "data": {"replies": []}}
+        # 楼中楼接口同样分视角：匿名只带 buvid，登录带 SESSDATA。
+        self.sub_auth = sub_auth if sub_auth is not None else self.sub
         self.config = dict(config or {})
         self.exc = exc
         self.calls = []
@@ -93,7 +97,8 @@ class _FakePlugin:
         if self.exc:
             raise self.exc
         if "reply/reply" in url:
-            return self.sub, None
+            cookie = str((headers or {}).get("Cookie", ""))
+            return (self.sub_auth if "SESSDATA" in cookie else self.sub), None
         cookie = str((headers or {}).get("Cookie", ""))
         return self._take("auth" if "SESSDATA" in cookie else "anon"), None
 
@@ -152,6 +157,45 @@ class FindReplyTests(unittest.TestCase):
 
     def test_风控响应不算命中(self):
         self.assertEqual(find_reply({"code": -403, "data": None}, 1), (None, ""))
+
+    def test_楼中楼也能找到(self):
+        parent = _item(rpid=100)
+        parent["replies"] = [_item(rpid=8)]
+        item, bucket = find_reply(_payload([parent]), 8)
+        self.assertEqual(item["rpid"], 8)
+        self.assertEqual(bucket, "replies.sub")
+
+    def test_楼中楼可嵌套(self):
+        grandparent = _item(rpid=100)
+        middle = _item(rpid=101)
+        middle["replies"] = [_item(rpid=9)]
+        grandparent["replies"] = [middle]
+        item, bucket = find_reply(_payload([grandparent]), 9)
+        self.assertEqual(item["rpid"], 9)
+        self.assertEqual(bucket, "replies.sub")
+
+    def test_置顶评论的楼中楼也能找到(self):
+        parent = _item(rpid=100)
+        parent["replies"] = [_item(rpid=8)]
+        item, bucket = find_reply(_payload(top={"upper": parent}), 8)
+        self.assertEqual(item["rpid"], 8)
+        self.assertEqual(bucket, "top.upper.sub")
+
+    def test_楼中楼为空或结构不对不影响(self):
+        for broken in (None, [], {}, "x", 0):
+            parent = _item(rpid=100)
+            parent["replies"] = broken
+            self.assertEqual(find_reply(_payload([parent]), 8), (None, ""))
+            self.assertEqual(find_reply(_payload([parent]), 100)[1], "replies")
+
+    def test_自引用条目不递归爆栈(self):
+        parent = _item(rpid=100)
+        parent["replies"] = [parent]  # B站 不会这么返回，但解析不能因此死循环
+        self.assertEqual(find_reply(_payload([parent]), 8), (None, ""))
+
+    def test_重复条目按原顺序先命中(self):
+        payload = _payload([_item(rpid=7)], hots=[_item(rpid=7)])
+        self.assertEqual(find_reply(payload, 7)[1], "replies")
 
 
 class CheckVisibilityTests(_BaseCase, unittest.IsolatedAsyncioTestCase):
@@ -221,15 +265,93 @@ class CheckVisibilityTests(_BaseCase, unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("seek_rpid", second, "翻页必须去掉 seek_rpid，否则永远回到同一页")
         self.assertEqual(second["pagination_str"], '{"offset":"off1"}')
 
+    async def test_匿名翻页被风控不判仅自己可见(self):
+        seek = _payload(cursor={"pagination_reply": {"next_offset": "off1"}})
+        plugin = _FakePlugin(
+            anon_seq=[seek, {"code": -352, "data": None}], auth=_payload([_item(7)])
+        )
+        result = await check_visibility(plugin, 42, 7, phase="confirm")
+        self.assertEqual(result["state"], STATE_UNVERIFIED)
+        self.assertIn("-352", result["error"])
+        self.assertEqual(len(plugin.calls), 2, "匿名翻页失败后不该再换登录视角去对照")
+
+    async def test_响应结构异常不算查不到(self):
+        plugin = _FakePlugin(anon={"code": 0, "data": None}, auth=_payload([_item(7)]))
+        result = await check_visibility(plugin, 42, 7, phase="confirm")
+        self.assertEqual(result["state"], STATE_UNVERIFIED)
+        self.assertIn("payload", result["error"])
+        self.assertEqual(len(plugin.calls), 1)
+
     async def test_回复用父评论当root找人(self):
         sub = {"code": 0, "data": {"replies": [_item(7)]}}
         plugin = _FakePlugin(anon=_payload(), auth=_payload(), sub=sub)
         result = await check_visibility(
             plugin, 42, 7, kind="reply", root_rpid=555, phase="confirm"
         )
-        self.assertEqual(result["state"], STATE_SELF_ONLY)
+        self.assertEqual(result["state"], STATE_VISIBLE)
         reply_call = [c for c in plugin.calls if "reply/reply" in c["url"]][0]
         self.assertEqual(reply_call["params"]["root"], "555")
+
+    async def test_二级回复在主列表的楼中楼里命中(self):
+        parent = _item(rpid=100)
+        parent["replies"] = [_item(rpid=7)]
+        plugin = _FakePlugin(anon=_payload([parent]))
+        result = await check_visibility(
+            plugin, 42, 7, kind="reply", root_rpid=100, phase="confirm"
+        )
+        self.assertEqual(result["state"], STATE_VISIBLE)
+        self.assertEqual(result["query_path"], "wbi:replies.sub")
+        self.assertEqual(len(plugin.calls), 1, "主列表的楼中楼命中后不该再打楼中楼接口")
+
+    async def test_楼中楼匿名可见不判仅自己可见(self):
+        sub = {"code": 0, "data": {"replies": [_item(7)]}}
+        plugin = _FakePlugin(anon=_payload(), auth=_payload(), sub=sub, sub_auth=sub)
+        result = await check_visibility(
+            plugin, 42, 7, kind="reply", root_rpid=555, phase="confirm"
+        )
+        self.assertEqual(result["state"], STATE_VISIBLE)
+        self.assertEqual(result["view"], "anon")
+        self.assertEqual(result["query_path"], "sub_reply:anon")
+
+    async def test_楼中楼匿名查不到登录可见判仅自己可见(self):
+        plugin = _FakePlugin(
+            anon=_payload(),
+            auth=_payload(),
+            sub={"code": 0, "data": {"replies": []}},
+            sub_auth={"code": 0, "data": {"replies": [_item(7)]}},
+        )
+        result = await check_visibility(
+            plugin, 42, 7, kind="reply", root_rpid=555, phase="confirm"
+        )
+        self.assertEqual(result["state"], STATE_SELF_ONLY)
+        self.assertEqual(result["view"], "auth")
+        self.assertEqual(result["query_path"], "sub_reply:auth")
+
+    async def test_楼中楼两段都查不到且登录12022判删除(self):
+        plugin = _FakePlugin(
+            anon=_payload(),
+            auth=_payload(),
+            sub={"code": 0, "data": {"replies": []}},
+            sub_auth={"code": 12022, "data": None},
+        )
+        result = await check_visibility(
+            plugin, 42, 7, kind="reply", root_rpid=555, phase="confirm"
+        )
+        self.assertEqual(result["state"], STATE_DELETED)
+        self.assertEqual(result["raw_code"], 12022)
+
+    async def test_匿名楼中楼被风控不判仅自己可见(self):
+        plugin = _FakePlugin(
+            anon=_payload(),
+            auth=_payload(),
+            sub={"code": -403, "data": None},
+            sub_auth={"code": 0, "data": {"replies": [_item(7)]}},
+        )
+        result = await check_visibility(
+            plugin, 42, 7, kind="reply", root_rpid=555, phase="confirm"
+        )
+        self.assertEqual(result["state"], STATE_UNVERIFIED)
+        self.assertEqual(len([c for c in plugin.calls if "reply/reply" in c["url"]]), 1)
 
     async def test_关闭匿名视角时只用登录视角(self):
         plugin = _FakePlugin(

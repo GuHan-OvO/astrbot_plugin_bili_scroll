@@ -170,6 +170,10 @@ async def _wbi_payload(plugin, params, anonymous):
     code = payload.get("code", 0)
     if code != 0:
         return None, f"code:{code}"
+    if not isinstance(payload.get("data"), dict):
+        # code=0 但结构不对：不能说成「查了但没查到」，否则下一步的登录视角
+        # 会把它判成「仅自己可见」（同一个误判的另一个入口）。
+        return None, "payload:data"
     return payload, ""
 
 
@@ -244,32 +248,58 @@ async def probe_exists(plugin, oid, root, *, anonymous, type_id=1) -> str:
 # ── 解析与判定 ──
 
 
-def _scan_list(items, target):
+def _walk_replies(items, seen, depth=0):
+    """按原始顺序深度优先展开评论树：父在前、子按列表顺序，已访问过的节点跳过。
+
+    楼中楼（二级回复）不在顶层列表里，而是挂在每条评论的 ``replies`` 下；它可能为空、
+    可能多层嵌套（``replies`` 里还有 ``replies``），同一条也可能被置顶/热评/首页列表
+    重复引用，所以按对象 id 去重，避免重复扫描和自引用打转。
+    """
     if not isinstance(items, list):
-        return None, ""
+        return
     for item in items:
-        if isinstance(item, dict) and str(item.get("rpid")) == target:
+        if not isinstance(item, dict):
+            continue
+        key = id(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        yield item, depth
+        yield from _walk_replies(item.get("replies"), seen, depth + 1)
+
+
+def _scan_list(items, target):
+    """在一条回复列表（连同其楼中楼）里找 rpid，返回 (item|None, "")。"""
+    target = str(target)
+    for item, _depth in _walk_replies(items, set()):
+        if str(item.get("rpid")) == target:
             return item, ""
     return None, ""
 
 
 def find_reply(payload, rpid):
-    """在 replies / top / top_replies / hots 里找 rpid。置顶与热评不在 replies 里，必须一起扫。"""
+    """在 replies / top / top_replies / hots 及其楼中楼里找 rpid。
+
+    置顶与热评不在 replies 里，必须一起扫；二级回复挂在各评论的 ``replies`` 下，
+    不往子列表里递归就永远命中不了正常可见的楼中楼，只能掉到兜底分支去判。
+    """
     if not isinstance(payload, dict) or payload.get("code") != 0:
         return None, ""
     data = payload.get("data")
     if not isinstance(data, dict):
         return None, ""
     target = str(rpid)
+    seen = set()
     for bucket in ("replies", "top_replies", "hots"):
-        item, _ = _scan_list(data.get(bucket), target)
-        if item is not None:
-            return item, bucket
+        for item, depth in _walk_replies(data.get(bucket), seen):
+            if str(item.get("rpid")) == target:
+                return item, bucket if depth == 0 else f"{bucket}.sub"
     top = data.get("top")
     if isinstance(top, dict):
-        for slot, item in top.items():
-            if isinstance(item, dict) and str(item.get("rpid")) == target:
-                return item, f"top.{slot}"
+        for slot, value in top.items():
+            for item, depth in _walk_replies([value], seen):
+                if str(item.get("rpid")) == target:
+                    return item, f"top.{slot}" if depth == 0 else f"top.{slot}.sub"
     return None, ""
 
 
@@ -309,7 +339,11 @@ def _fill_raw(result, item):
 
 
 async def scan_pages(plugin, oid, rpid, *, anonymous, payload, type_id=1):
-    """seek_rpid 没命中时按 cursor 往前翻，命中即返回。翻页不带 seek_rpid。"""
+    """seek_rpid 没命中时按 cursor 往前翻，命中即返回。翻页不带 seek_rpid。
+
+    返回 ``(item, bucket, error)``。翻页请求失败时必须把 error 带回去：
+    把「翻页被风控吞了」当成「查不到」，下一步的登录视角就会判成「仅自己可见」。
+    """
     limit = _config_int(plugin, "COMMENT_VERIFY_PAGE_FALLBACK_MAX", VERIFY_PAGE_FALLBACK_MAX)
     offset = _next_offset(payload)
     for _ in range(max(0, min(limit, 5) - 1)):
@@ -319,12 +353,12 @@ async def scan_pages(plugin, oid, rpid, *, anonymous, payload, type_id=1):
             plugin, oid, rpid, anonymous=anonymous, offset=offset, type_id=type_id, seek=False
         )
         if err:
-            break
+            return None, "", err
         item, bucket = find_reply(page, rpid)
         if item is not None:
-            return item, bucket
+            return item, bucket, ""
         offset = _next_offset(page)
-    return None, ""
+    return None, "", ""
 
 
 async def check_visibility(
@@ -355,11 +389,15 @@ async def check_visibility(
 
     item, bucket = find_reply(payload, target)
     if item is None and phase != "optimistic":
-        item, bucket = await scan_pages(
+        item, bucket, page_err = await scan_pages(
             plugin, oid, target, anonymous=anonymous, payload=payload, type_id=type_id
         )
         if item is not None:
             bucket = bucket or "wbi_pages"
+        elif page_err:
+            # 匿名视角翻页失败：「匿名看不到」不成立，不能再换登录视角反推仅自己可见。
+            result["error"] = page_err
+            return result
     if item is not None:
         result["view"] = "anon" if anonymous else "auth"
         result["query_path"] = "wbi:" + (bucket or "seek")
@@ -382,9 +420,13 @@ async def check_visibility(
         else:
             auth_item, _bucket = find_reply(auth_payload, target)
             if auth_item is None:
-                auth_item, _bucket = await scan_pages(
+                auth_item, _bucket, auth_page_err = await scan_pages(
                     plugin, oid, target, anonymous=False, payload=auth_payload, type_id=type_id
                 )
+                if auth_page_err:
+                    # 登录视角翻页失败只影响「登录也看不到」这个结论；后面还有楼中楼接口
+                    # 与存在性探测兜底，所以不在这里返回，只把原因记下来。
+                    result["error"] = auth_page_err
             if auth_item is not None:
                 result["view"] = "auth"
                 _fill_raw(result, auth_item)
@@ -396,22 +438,55 @@ async def check_visibility(
                 )
                 return result
 
-    # 两个视角都没有（或只开了单视角）：用楼中楼接口探测是否还存在。
+    # 两个视角都没有（或只开了单视角）：改到楼中楼里找。
     # 二级回复的 root 是「被回复的父评论」；拿自身 rpid 当 root 永远找不到自己。
     if kind == "reply":
         root = str(root_rpid or target)
-        probe_item, probe_code = await fetch_sub_replies(
+        # 段一：匿名视角。能查到就说明它对所有人可见——原先这里一律判「仅自己可见」，
+        # 语义是反的：匿名查得到恰恰是「公开可见」的证据。
+        anon_item, anon_code = await fetch_sub_replies(
             plugin, oid, root, anonymous=True, target=target, type_id=type_id
         )
-        result["raw_code"] = probe_code
-        if probe_item is not None:
-            result["state"] = STATE_SELF_ONLY
+        result["raw_code"] = anon_code
+        if anon_item is not None:
+            result["view"] = "anon"
+            result["query_path"] = "sub_reply:anon"
+            _fill_raw(result, anon_item)
+            state = classify_item(anon_item)
+            # attr/state 位图只是信号；匿名接口确实返回了它，以「能看到」为准。
+            result["state"] = (
+                STATE_VISIBLE if state in (STATE_SELF_ONLY, STATE_UNVERIFIED) else state
+            )
             return result
-        if probe_code != CODE_DELETED:
-            return result  # 仍是 unverified
-        exists = await probe_exists(plugin, oid, root, anonymous=False, type_id=type_id)
-        result["state"] = STATE_DELETED if exists == "gone" else STATE_UNVERIFIED
-        return result
+        if anon_code not in (0, CODE_DELETED):
+            # 匿名视角查询本身失败（风控 / 网络 / 结构异常）：这不算「查不到」，
+            # 再拿登录视角反推「仅自己可见」就是同一个误判的另一个入口。
+            result["error"] = f"sub_reply:{anon_code}"
+            return result
+
+        # 段二：匿名看不到再换登录视角。登录能看到 = 仅自己可见。
+        auth_item, auth_code = await fetch_sub_replies(
+            plugin, oid, root, anonymous=False, target=target, type_id=type_id
+        )
+        if auth_code:
+            result["raw_code"] = auth_code
+        if auth_item is not None:
+            result["view"] = "auth"
+            result["query_path"] = "sub_reply:auth"
+            _fill_raw(result, auth_item)
+            state = classify_item(auth_item)
+            result["state"] = (
+                state if state in (STATE_FOLDED, STATE_INVISIBLE) else STATE_SELF_ONLY
+            )
+            return result
+
+        # 两段都查不到：登录视角的 reply/reply 对已删根评论才返回 12022，
+        # 匿名视角返回 12022 也可能是「根评论仅自己可见」，所以只认登录视角的 code。
+        if auth_code == CODE_DELETED:
+            result["state"] = STATE_DELETED
+        elif auth_code not in (0, None):
+            result["error"] = f"sub_reply:{auth_code}"
+        return result  # 说不清的仍旧留 unverified
 
     exists = await probe_exists(plugin, oid, target, anonymous=False, type_id=type_id)
     result["raw_code"] = CODE_DELETED if exists == "gone" else None
