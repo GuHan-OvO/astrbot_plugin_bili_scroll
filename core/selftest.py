@@ -62,6 +62,17 @@ def _read_metadata() -> dict:
         return {}
 
 
+_VERSION_CACHE: str | None = None
+
+
+def plugin_version() -> str:
+    """插件版本：唯一真源是 ``metadata.yaml``，读不到返回空串。"""
+    global _VERSION_CACHE
+    if _VERSION_CACHE is None:
+        _VERSION_CACHE = str(_read_metadata().get("version") or "")
+    return _VERSION_CACHE
+
+
 def _json_list_len(path: str) -> int | None:
     """只读列表型 JSON 的长度；文件不存在返回 0，坏了返回 None。"""
     try:

@@ -12,6 +12,7 @@ from astrbot.api.message_components import Image, Plain
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.provider import ProviderRequest, LLMResponse
 from .core.config import *
+from .core.selftest import plugin_version
 from .core import (
     UtilsMixin, LLMMixin, VisionMixin, MemoryMixin,
     AffectionMixin, PersonalityMixin, BilibiliAPIMixin,
@@ -594,7 +595,7 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
         runtime_priorities = runtime_status.get("event_priorities", {})
         runtime_actions = runtime_status.get("action_states", {})
         lines = [
-            "📺 BiliBot 1.7.2 状态","━━━━━━━━━━━━",f"🍪 {info}",
+            f"📺 BiliBot {plugin_version() or '未知版本'} 状态","━━━━━━━━━━━━",f"🍪 {info}",
             f"{'🟢 运行中' if self._running else '🔴 未运行'}",
             f"🧠 记忆:{mc}条 | 💎永久:{pmc}条 | 👤档案:{pc}个",
             f"   📊 今日:{sum(1 for m in self._memory if m.get('level')=='today')} | 近期:{sum(1 for m in self._memory if m.get('level')=='recent')} | 长期:{sum(1 for m in self._memory if m.get('level')=='long_term')} | 老化:{sum(1 for m in self._memory if m.get('aged'))}",

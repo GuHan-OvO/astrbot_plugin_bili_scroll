@@ -1191,7 +1191,7 @@ def _query_bool(name: str):
 
 
 async def handle_get_history(plugin: Any):
-    """「它刷过的视频」列表：过滤 + 分页。数据源 watch_log.json（写入侧 cap=200）。"""
+    """「它刷过的视频」列表：过滤 + 分页。数据源 watch_log.json，读取时合并按月归档。"""
     try:
         entries = load_watch_entries(plugin)
         payload = query_history(
