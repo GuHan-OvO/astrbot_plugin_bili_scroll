@@ -190,4 +190,6 @@ AstrBot WebUI 里本插件自带一个页面：
 
 ## 许可
 
-MIT。早期版本参考过 [chenluQwQ/astrbot_plugin_bilibili_ai_bot](https://github.com/chenluQwQ/astrbot_plugin_bilibili_ai_bot) 的实现，现为独立分支，`metadata.yaml` 的 `repo` 已清空，不跟随上游更新。
+本项目以 [GNU Affero General Public License v3.0 or later](LICENSE)（AGPL-3.0-or-later）许可发布，即许可第 3 版或（由你选择）任何更新版本；Copyright (C) 2026 GuHan-OvO。
+
+早期版本参考过 [chenluQwQ/astrbot_plugin_bilibili_ai_bot](https://github.com/chenluQwQ/astrbot_plugin_bilibili_ai_bot) 的实现，现为独立分支，`metadata.yaml` 的 `repo` 已清空，不跟随上游更新。
