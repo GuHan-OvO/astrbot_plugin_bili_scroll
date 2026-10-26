@@ -105,6 +105,15 @@ class WatchLogArchiveTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["actions"], ["👍点赞"])
 
+    def test_归档写入幂等(self):
+        plugin = _DiskPlugin()
+        watch_log.append_watch_entry(plugin, _entry("2026-10-01 10:00", "BV1"), cap=1)
+        watch_log.append_watch_entry(plugin, _entry("2026-10-02 10:00", "BV2"), cap=1)
+        # 人为重复写同一条，模拟异常重试或手工恢复
+        watch_log._archive_entries(plugin, [_entry("2026-10-01 10:00", "BV1")])
+        archived = plugin._load_json(str(self.archive / "2026-10.json"), [])
+        self.assertEqual([row["bvid"] for row in archived], ["BV1"])
+
     def test_按bvid更新主文件(self):
         plugin = _DiskPlugin()
         watch_log.append_watch_entry(plugin, _entry("2026-10-01 10:00", "BV1"), cap=10)

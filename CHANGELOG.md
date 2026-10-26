@@ -3,6 +3,22 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 已清空，不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v1.8.9 — 2026-10-27
+
+### 归档写入幂等
+
+- `_archive_entries` 按月追加时按 `(time, bvid)` 去重：异常重试或手工恢复同一份 watch_log 时，
+  归档文件不会越攒越大。读取侧本来就去重，这里补的是冷数据本身的幂等。
+- 去重键抽成 `_entry_key()`，归档与 `load_watch_entries()` 共用，避免两处规则漂移。
+
+### 删掉废弃的 @register
+
+- 本机内核 `Star.__init_subclass__` 已自动注册插件类（实测 `star_map` 有该类、`star_cls_type` 指向它），
+  加载器随后又用 `metadata.yaml` 覆盖 name/author/desc/version/repo；所以 `@register` 既不生效、
+  又让版本号出现两处（删前 `main.py` 是 1.8.7、`metadata.yaml` 是 1.8.8）。
+- 删掉装饰器与 `register` 的 import；文件头 docstring 里残留的 `1.7.2` 一并清掉。
+- 之后版本号只改 `metadata.yaml` 一处。
+
 ## v1.8.8 — 2026-10-27
 
 ### 评论复核改成 rpid 定点 + 双视角 + 两时点

@@ -39,6 +39,11 @@ def entry_month(entry) -> str:
     return "unknown"
 
 
+def _entry_key(entry) -> tuple[str, str]:
+    """去重键：同一 (time, bvid) 视为同一条记录。"""
+    return (str(entry.get("time") or ""), str(entry.get("bvid") or ""))
+
+
 def _archive_entries(plugin, entries):
     grouped = {}
     for item in entries:
@@ -53,7 +58,19 @@ def _archive_entries(plugin, entries):
         existing = plugin._load_json(path, [])
         if not isinstance(existing, list):
             existing = []
-        existing.extend(items)
+        # 归档是冷数据，写入必须幂等：同一 (time, bvid) 不重复落盘，
+        # 异常重试或手工恢复都不会让归档越攒越大。
+        seen = {_entry_key(row) for row in existing if isinstance(row, dict)}
+        fresh = []
+        for item in items:
+            key = _entry_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            fresh.append(item)
+        if not fresh:
+            continue
+        existing.extend(fresh)
         plugin._save_json(path, existing)
 
 
@@ -95,7 +112,7 @@ def load_watch_entries(plugin, *, months=None):
 
     buckets = {}
     for item in rows:
-        key = (str(item.get("time") or ""), str(item.get("bvid") or ""))
+        key = _entry_key(item)
         buckets[key] = item  # 主文件排在最后，覆盖归档里的同名旧条目
     return [buckets[key] for key in sorted(buckets)]
 
