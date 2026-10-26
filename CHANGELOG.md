@@ -18,6 +18,7 @@
   又让版本号出现两处（删前 `main.py` 是 1.8.7、`metadata.yaml` 是 1.8.8）。
 - 删掉装饰器与 `register` 的 import；文件头 docstring 里残留的 `1.7.2` 一并清掉。
 - 之后版本号只改 `metadata.yaml` 一处。
+- 状态命令里的版本号也改成读 `metadata.yaml`（原先硬编码 `1.7.2`），以后只需改一处。
 
 ## v1.8.8 — 2026-10-27
 
