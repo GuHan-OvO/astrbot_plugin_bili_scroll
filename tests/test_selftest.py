@@ -64,6 +64,30 @@ class CollectTests(unittest.TestCase):
         mid = next(i for i in out["config"]["required"] if i["key"] == "OWNER_MID")
         self.assertTrue(mid["ok"])
 
+    def test_最近异常只报未通过可见性复核的(self):
+        import json
+        import os
+        import tempfile
+
+        import core.selftest as selftest
+
+        rows = [
+            {"time": "t1", "rpid": 1, "state": "visible"},
+            {"time": "t2", "rpid": 2, "state": "self_only", "phase": "confirm"},
+        ]
+        before = selftest.VERIFY_LOG_FILE
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "verify.json")
+            with open(path, "w", encoding="utf-8") as fp:
+                json.dump(rows, fp)
+            selftest.VERIFY_LOG_FILE = path
+            try:
+                out = selftest._recent_verify()
+            finally:
+                selftest.VERIFY_LOG_FILE = before
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["rpid"], 2)
+
     def test_数据报告字段齐全(self):
         out = collect(_FakePlugin({}))
         # 键名是 storage 而不是 data：data 会被响应信封的 unwrap 吃掉，见 core/selftest.py 里的说明

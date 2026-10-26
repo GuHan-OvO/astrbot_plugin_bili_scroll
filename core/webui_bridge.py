@@ -40,6 +40,7 @@ from .config import (
 )
 
 from .history import find_entry, query_history
+from .watch_log import load_watch_entries
 
 PLUGIN_NAME = "astrbot_plugin_bili_scroll"
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "_conf_schema.json"
@@ -1192,7 +1193,7 @@ def _query_bool(name: str):
 async def handle_get_history(plugin: Any):
     """「它刷过的视频」列表：过滤 + 分页。数据源 watch_log.json（写入侧 cap=200）。"""
     try:
-        entries = _load_json(plugin, WATCH_LOG_FILE, [])
+        entries = load_watch_entries(plugin)
         payload = query_history(
             entries,
             offset=_query_int("offset", 0),
@@ -1218,7 +1219,7 @@ async def handle_get_history_detail(plugin: Any):
     """单条详情：评论原话、展开理由、动作明细。"""
     try:
         bvid = str(request.query.get("bvid", "") or "").strip()
-        entries = _load_json(plugin, WATCH_LOG_FILE, [])
+        entries = load_watch_entries(plugin)
         item = find_entry(entries, bvid)
         if item is None:
             return _failure("没有这条记录", 404)

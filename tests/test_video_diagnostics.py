@@ -18,6 +18,7 @@ from core.video_diagnostics import (
     get_call_diagnostic, set_call_diagnostic, safe_detail, media_failure,
 )
 import core.proactive as proactive_module
+import core.watch_log as watch_log_module
 
 
 class EvaluationBot(ProactiveProbe, LLMMixin):
@@ -135,8 +136,12 @@ class VideoDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         async def download(_):
             set_call_diagnostic(reason="HTTP 403")
             return None
+        # vision_key / dead-reason probes are part of _analyze_video_media now; the stub
+        # must answer them or the flow never reaches the download stage this test asserts.
         bot = types.SimpleNamespace(config={"VIDEO_VISION_PROVIDER_ID": "vision"},
-            _get_video_vision_client=lambda: None, _detect_video_format=lambda _: "none", _download_video=download)
+            _get_video_vision_client=lambda: None, _detect_video_format=lambda _: "none",
+            _video_direct_key=lambda *a: ("", "", "", ""), _video_vision_dead_reason=lambda *_: None,
+            _download_video=download)
         info = {"bvid": "BVtest"}
         await VideoMixin._analyze_video_media(bot, info)
         self.assertEqual(info["_media_diagnostics"][0]["reason"], "HTTP 403")
@@ -171,7 +176,12 @@ class VideoDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             names = ("WATCH_LOG_FILE", "COMMENTED_FILE", "EXTERNAL_MEMORY_FILE", "PROACTIVE_LOG_FILE", "OWNER_RECOMMEND_LOG_FILE")
             paths = {name: str(Path(directory) / (name + ".json")) for name in names}
-            with patch.multiple(proactive_module, **paths):
+            archive = str(Path(directory) / "archive")
+            with patch.multiple(proactive_module, **paths), patch.multiple(
+                watch_log_module,
+                WATCH_LOG_FILE=paths["WATCH_LOG_FILE"],
+                archive_dir=lambda: archive,
+            ):
                 if flow == "special":
                     await bot._run_special_follow_inner()
                 else:

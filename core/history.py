@@ -2,9 +2,8 @@
 
 纯函数，不读文件、不碰插件实例 —— 便于单测，也让 ``webui_bridge`` 只负责搬数据。
 
-数据来源是 ``watch_log.json``（``core/config.py`` 的 ``WATCH_LOG_FILE``），
-写入侧只保留最近 200 条（``proactive.py`` 的 ``cap=200``），所以「历史」的上限就是 200，
-要更久得改写入侧或接 B站 的观看历史接口。
+数据来源是 ``core/watch_log.py``：主文件保留最近窗口，更早的条目按月归档在
+``data/watch_log_archive/YYYY-MM.json``。调用方用 ``load_watch_entries()`` 取全量再传进来。
 """
 
 from __future__ import annotations

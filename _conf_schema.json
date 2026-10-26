@@ -283,6 +283,72 @@
     "default": true,
     "hint": "识别「+vx」「加群」等引流内容并跳过，不给广告当免费扩音器。"
   },
+  "COMMENT_VERIFY_ENABLED": {
+    "description": "【评论复核】发出后按 rpid 定点回查是否真的可见",
+    "type": "bool",
+    "default": true,
+    "hint": "只读查询，不改评论。带 @ 的 30 秒后确认，普通评论 90 秒后乐观确认，10 分钟后再做双视角判定。关闭后完全不查。"
+  },
+  "COMMENT_VERIFY_DELAY_SECONDS": {
+    "description": "【评论复核】首次乐观确认延迟（秒）",
+    "type": "int",
+    "default": 90,
+    "hint": "这一步只确认「已经可见」；查不到不算失败，也不会据此下结论。",
+    "condition": {
+      "COMMENT_VERIFY_ENABLED": true
+    }
+  },
+  "COMMENT_VERIFY_AT_DELAY_SECONDS": {
+    "description": "【评论复核】带 @ 的评论首次确认延迟（秒）",
+    "type": "int",
+    "default": 30,
+    "hint": "带 @ 的评论最怕「以为发出去了」，比普通评论更早确认；实际取它与首次延迟的较小值。",
+    "condition": {
+      "COMMENT_VERIFY_ENABLED": true
+    }
+  },
+  "COMMENT_VERIFY_CONFIRM_DELAY_SECONDS": {
+    "description": "【评论复核】判定被吞的延迟（秒）",
+    "type": "int",
+    "default": 600,
+    "hint": "阿瓦隆审核通常 7~8 分钟，太早判定会把「还在审」误报成「被吞」。",
+    "condition": {
+      "COMMENT_VERIFY_ENABLED": true
+    }
+  },
+  "COMMENT_VERIFY_ANONYMOUS": {
+    "description": "【评论复核】用匿名视角对照判断「仅自己可见」",
+    "type": "bool",
+    "default": true,
+    "hint": "匿名查不到、登录查得到才是仅自己可见；关掉就只做单视角，分不清被删和被屏蔽。",
+    "condition": {
+      "COMMENT_VERIFY_ENABLED": true
+    }
+  },
+  "COMMENT_VERIFY_MAX_CONCURRENCY": {
+    "description": "【评论复核】同时在途的复核任务上限",
+    "type": "int",
+    "default": 3,
+    "hint": "别把它当压力测试；过多会增加风控面。",
+    "condition": {
+      "COMMENT_VERIFY_ENABLED": true
+    }
+  },
+  "COMMENT_VERIFY_PAGE_FALLBACK_MAX": {
+    "description": "【评论复核】seek_rpid 没命中时最多翻几页",
+    "type": "int",
+    "default": 3,
+    "hint": "含第一页；只在定位失败的异常路径上才会翻页。",
+    "condition": {
+      "COMMENT_VERIFY_ENABLED": true
+    }
+  },
+  "WATCH_LOG_ACTIVE_CAP": {
+    "description": "【观影日志】主文件保留条数，更早的按月归档",
+    "type": "int",
+    "default": 500,
+    "hint": "归档文件在 data/watch_log_archive/YYYY-MM.json；卡片墙读取的是归档+主文件的全量。"
+  },
   "COMMENT_CONTEXT_ENABLED": {
     "description": "【自主查询】自主查询总开关",
     "type": "bool",
@@ -876,6 +942,15 @@
       "ENABLE_PROACTIVE": true
     },
     "hint": "所有来源合计的每日看片上限；填 0 表示只受每轮数量限制。"
+  },
+  "PROACTIVE_FAV_FOLDERS": {
+    "description": "【主动看片·来源】收藏夹投喂池（media_id 或收藏夹链接）",
+    "type": "list",
+    "default": [],
+    "hint": "主人往这些收藏夹里塞视频，Bot 会优先看。支持纯数字 media_id，也支持带 fid= 的收藏夹链接；留空不启用。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
   },
   "PROACTIVE_FOLLOW_UIDS": {
     "description": "【主动看片·来源】特别关注的UP主UID列表",

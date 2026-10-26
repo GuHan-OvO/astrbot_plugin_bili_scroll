@@ -4,6 +4,7 @@ import re
 import time
 import hashlib
 import uuid
+from urllib.parse import urlencode
 import aiohttp
 from .network import plugin_http_session
 from .verify import schedule_verify
@@ -192,10 +193,17 @@ class BilibiliAPIMixin:
         try:
             ik, sk = await self._get_wbi_keys()
             mk = self._get_mixin_key(ik + sk)
-            params["wts"] = int(time.time())
-            params = dict(sorted(params.items()))
-            params["w_rid"] = hashlib.md5(("&".join(f"{k}={v}" for k, v in params.items()) + mk).encode()).hexdigest()
-            return params
+            # B站 wbi：先过滤参数值里的 !'()*，加 wts 后按键排序，再用 urlencode 拼串签名。
+            # 不能直接按原值拼串：参数值含 JSON（如 pagination_str）时签名与服务端不一致，接口返回 -403。
+            clean = {
+                k: "".join(ch for ch in str(v) if ch not in "!'()*")
+                for k, v in params.items()
+            }
+            clean["wts"] = int(time.time())
+            clean = dict(sorted(clean.items()))
+            query = urlencode(clean)
+            clean["w_rid"] = hashlib.md5((query + mk).encode()).hexdigest()
+            return clean
         except Exception as e:
             logger.warning(f"[BiliBot] WBI 签名失败，将以未签名参数请求（接口大概率返回 -352）: {e}")
             return params
@@ -262,7 +270,14 @@ class BilibiliAPIMixin:
                 data={"oid": oid, "type": reply_type, "root": rpid, "parent": rpid, "message": msg, "csrf": self.config.get("BILI_JCT", "")},
             )
             if d["code"] == 0:
-                return True
+                try:
+                    reply_rpid = int((d.get("data") or {}).get("rpid") or 0)
+                except (TypeError, ValueError, AttributeError):
+                    reply_rpid = 0
+                # 回复也是一条公开评论：成功后就按它自己的 rpid 排一次可见性复核。
+                if reply_rpid:
+                    schedule_verify(self, oid, reply_rpid, kind="reply")
+                return reply_rpid or True
             elif d["code"] == -101:
                 logger.error("[BiliBot] SESSDATA 失效！")
             elif d["code"] == -111:
@@ -304,9 +319,12 @@ class BilibiliAPIMixin:
                     rpid = int((d.get("data") or {}).get("rpid") or 0)
                 except (TypeError, ValueError, AttributeError):
                     rpid = 0
-                # 带 @ 的那条最需要确认「真的可见」，成功后就排一次延迟复核
-                if rpid and at_name_to_mid:
-                    schedule_verify(self, oid, rpid)
+                # 所有成功发出的评论都复核，不只看带 @ 的：普通评论也会被折叠或吞掉。
+                # 带 @ 的 30 秒更早确认一次，普通评论 90 秒。
+                if rpid:
+                    schedule_verify(
+                        self, oid, rpid, kind="comment", has_at=bool(at_name_to_mid)
+                    )
                 # 返回 rpid（真值）或 True：调用方原本就只判真假，行为不变
                 return rpid or True
             if code == -101:

@@ -755,8 +755,20 @@ export function mountSelftest(host) {
     const broken = watch.count === null || verify.count === null;
     markCard(cards.data, broken ? "bad" : "ok");
 
-    addRow(el.dataList, "看过的视频", watch.count === null ? "文件损坏" : `${watch.count} 条`);
+    addRow(
+      el.dataList,
+      "看过的视频",
+      watch.count === null ? "文件损坏" : `${watch.total ?? watch.count} 条`
+    );
     addRow(el.dataList, "复核记录", verify.count === null ? "文件损坏" : `${verify.count} 条`);
+    const verifyRecent = data.verify_recent || [];
+    addRow(
+      el.dataList,
+      "最近异常",
+      verifyRecent.length
+        ? verifyRecent.map((row) => `${row.state} ${row.rpid}`).join("；")
+        : "无"
+    );
     addRow(el.dataList, "数据库", db.exists ? `存在（${Math.round((db.size || 0) / 1024)} KB）` : "尚未创建");
     addRow(el.dataList, "页面目录", `${(pages || []).length} 个`);
   }

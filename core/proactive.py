@@ -23,6 +23,7 @@ from .video_discovery import EXPLORATION_QUERIES, prepare_discovery_queries
 from .mention import build_mention_map, compose_comment
 from .pc_bridge import share_via_pc
 from .dedup import dedupe_by_bvid, dedupe_similar_titles
+from .watch_log import append_watch_entry, update_watch_entry
 from .security.redact import wrap_untrusted
 from .content_protocol import (
     ContentProtocolError, PROACTIVE_COMMENT_SCHEMA_PROMPT,
@@ -184,6 +185,9 @@ class ProactiveMixin:
         for pool_raw in pools:
             pool, ids, raw = self._resolve_video_pool_spec(pool_raw)
             parts.append(self._format_resolved_video_pool(pool, ids, raw))
+        fav_ids = self._parse_fav_folders(self.config.get("PROACTIVE_FAV_FOLDERS", []))
+        if fav_ids:
+            parts.append("收藏夹:" + ",".join(fav_ids))
         return "、".join(parts)
 
     # ── 口味偏好系统 ──
@@ -558,19 +562,19 @@ class ProactiveMixin:
 
     @staticmethod
     def _proactive_source_quotas(total):
-        """平均分配关注、搜索、视频池配额，余数按此优先级补给。"""
+        """平均分配收藏夹、关注、搜索、视频池配额，余数按此优先级补给。"""
+        order = ("fav", "follow", "search", "pool")
         total = max(0, int(total or 0))
-        base, remainder = divmod(total, 3)
+        base, remainder = divmod(total, len(order))
         return {
-            "follow": base + (1 if remainder >= 1 else 0),
-            "search": base + (1 if remainder >= 2 else 0),
-            "pool": base,
+            source: base + (1 if remainder > index else 0)
+            for index, source in enumerate(order)
         }
 
     @classmethod
     def _proactive_batch_source_quotas(cls, batch_count, existing_counts=None):
         """结合当天已看来源，为当前批次补齐日内均衡配额。"""
-        order = ("follow", "search", "pool")
+        order = ("fav", "follow", "search", "pool")
         counts = {
             source: max(0, int((existing_counts or {}).get(source, 0) or 0))
             for source in order
@@ -589,6 +593,7 @@ class ProactiveMixin:
     @staticmethod
     def _proactive_log_source(source):
         return {
+            "fav": "fav",
             "follow": "follow",
             "following": "follow",
             "special_follow": "follow",
@@ -831,7 +836,7 @@ class ProactiveMixin:
 
     def _merge_proactive_source_candidates(self, candidates, quotas, target):
         """先兑现各来源配额，再按关注、搜索、视频池顺序补足空缺。"""
-        order = ("follow", "search", "pool")
+        order = ("fav", "follow", "search", "pool")
         indexes = {source: 0 for source in order}
         selected = []
         seen = set()
@@ -1070,6 +1075,66 @@ UP主：{video.get('up_name', '')}
             logger.info(f"[BiliBot] 🧹 候选去重：{before} → {len(all_videos)}")
         logger.info(f"[BiliBot] 📦 视频池合计: {len(all_videos)} 个（来源: {', '.join(resolved_sources)}）")
         return all_videos
+
+    @staticmethod
+    def _parse_fav_folders(raw):
+        """收藏夹配置解析：支持 media_id 数字，也支持带 fid=/media_id= 的分享链接。"""
+        ids = []
+        for item in raw or []:
+            text = str(item or "").strip()
+            if not text:
+                continue
+            if text.isdigit():
+                ids.append(text)
+                continue
+            match = re.search(r"(?:fid|media_id)=(\d+)", text)
+            if match:
+                ids.append(match.group(1))
+        ordered = []
+        for value in ids:
+            if value not in ordered:
+                ordered.append(value)
+        return ordered
+
+    async def _get_fav_pool_videos(self):
+        """主人投喂池：读取指定收藏夹的视频，作为优先级最高的候选来源。"""
+        media_ids = self._parse_fav_folders(self.config.get("PROACTIVE_FAV_FOLDERS", []))
+        if not media_ids:
+            return []
+        videos = []
+        for media_id in media_ids:
+            try:
+                d, _ = await self._http_get(
+                    "https://api.bilibili.com/x/v3/fav/resource/list",
+                    params={"media_id": media_id, "pn": 1, "ps": 20, "platform": "web"},
+                )
+            except Exception as exc:
+                logger.warning(f"[BiliBot] 收藏夹 {media_id} 拉取失败：{exc}")
+                continue
+            if not isinstance(d, dict) or d.get("code") != 0:
+                logger.warning(f"[BiliBot] 收藏夹 {media_id} 返回异常：{(d or {}).get('code')}")
+                continue
+            medias = (d.get("data") or {}).get("medias") or []
+            for item in medias:
+                if not isinstance(item, dict) or int(item.get("attr") or 0):
+                    continue  # attr 非 0 是失效视频
+                bvid = str(item.get("bvid") or "").strip()
+                if not bvid:
+                    continue
+                upper = item.get("upper") or {}
+                videos.append({
+                    "bvid": bvid,
+                    "title": item.get("title", ""),
+                    "desc": item.get("intro", ""),
+                    "up_name": upper.get("name", ""),
+                    "up_mid": upper.get("mid", 0),
+                    "pubdate": item.get("pubtime", 0),
+                    "pic": item.get("cover", ""),
+                    "view": int((item.get("cnt_info") or {}).get("play", 0) or 0),
+                    "tname": "",
+                })
+            logger.info(f"[BiliBot] ⭐收藏夹 {media_id}：{len(medias)} 个视频")
+        return dedupe_by_bvid(videos)
 
     # ── 评价 & 评论 ──
     async def _owner_recommendation_context(self, query_text):
@@ -1442,7 +1507,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             else 0
         )
         candidate_target = daily_watch + max(3, prefilter_extra)
-        today_source_counts = {"follow": 0, "search": 0, "pool": 0}
+        today_source_counts = {"fav": 0, "follow": 0, "search": 0, "pool": 0}
         for entry in today_watched:
             source = self._proactive_log_source(entry.get("source"))
             if source:
@@ -1452,10 +1517,12 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             today_source_counts,
         )
         logger.info(
-            "[BiliBot] 🧭 今日已看来源=%s/%s/%s | 本轮配额：关注=%s 搜索=%s 视频池=%s",
+            "[BiliBot] 🧭 今日已看来源=%s/%s/%s/%s | 本轮配额：收藏夹=%s 关注=%s 搜索=%s 视频池=%s",
+            today_source_counts["fav"],
             today_source_counts["follow"],
             today_source_counts["search"],
             today_source_counts["pool"],
+            source_quotas["fav"],
             source_quotas["follow"],
             source_quotas["search"],
             source_quotas["pool"],
@@ -1495,6 +1562,13 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                     follow_candidates.append(self._tag_video_source(video, "follow", "following"))
                     logger.info(f"[BiliBot] 🔔 今日更新：{video['up_name']} - {video['title']}")
 
+        # 收藏夹投喂池：主人往指定收藏夹塞的视频优先看，保持收藏夹顺序。
+        fav_candidates = [
+            self._tag_video_source(video, "fav")
+            for video in await self._get_fav_pool_videos()
+            if video.get("bvid") not in watched_bvids
+        ]
+
         # 视频池候选：保留现有热门/推荐/排行/最新等地址池配置。
         pool_videos = await self._get_pool_videos(min_pubdate_hot)
         pool_candidates = [
@@ -1507,6 +1581,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
         # 搜索候选：轮到搜索或其他来源不足时，结合观看证据与探索方向选词。
         need_search_candidates = (
             source_quotas["search"] > 0
+            or len(fav_candidates) < source_quotas["fav"]
             or len(follow_candidates) < source_quotas["follow"]
             or len(pool_candidates) < source_quotas["pool"]
         )
@@ -1530,6 +1605,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             taste_tids = list(self.FALLBACK_TIDS)
             logger.info("[BiliBot] 🎯 口味数据不足，使用兜底分区")
         candidates = {
+            "fav": fav_candidates,
             "follow": follow_candidates,
             "search": search_candidates,
             "pool": pool_candidates,
@@ -1541,14 +1617,16 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
         )
         selected_counts = {
             source: sum(1 for video in unique[:daily_watch] if video.get("_source") == source)
-            for source in ("follow", "search", "pool")
+            for source in ("fav", "follow", "search", "pool")
         }
         logger.info(
-            "[BiliBot] 📊 来源候选：关注=%s 搜索=%s 视频池=%s | 前%s项分布=%s/%s/%s | 总候选=%s",
+            "[BiliBot] 📊 来源候选：收藏夹=%s 关注=%s 搜索=%s 视频池=%s | 前%s项分布=%s/%s/%s/%s | 总候选=%s",
+            len(fav_candidates),
             len(follow_candidates),
             len(search_candidates),
             len(pool_candidates),
             daily_watch,
+            selected_counts["fav"],
             selected_counts["follow"],
             selected_counts["search"],
             selected_counts["pool"],
@@ -1580,7 +1658,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                 continue
             if hasattr(self, "_set_cross_platform_activity"):
                 self._set_cross_platform_activity("proactive", "正在分析视频", title=video.get("title", ""), up_name=video.get("up_name", ""))
-            source_note = {"follow": "关注", "search": "搜索", "pool": "视频池"}.get(video.get("_source", ""), "候选")
+            source_note = {"fav": "收藏夹", "follow": "关注", "search": "搜索", "pool": "视频池"}.get(video.get("_source", ""), "候选")
             logger.info(f"[BiliBot] 🎬 [{watch_count + 1}/{daily_watch}] [{source_note}] {video['title']} by {video.get('up_name', '')}")
             oid = video.get("oid") or await self._get_video_oid(bvid) or 0
             vi = await self._get_video_info(oid) if oid else None
@@ -1611,7 +1689,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                 watch_log[-1]["content_analyzed"] = analysis_info.get("analysis_basis") != "metadata"
                 watch_log[-1]["analysis_basis"] = analysis_info.get("analysis_basis", "legacy")
                 watch_log[-1]["discovery_mode"] = "explore" if video.get("_exploration") else "interest"
-                watch_log = self._append_json_list(WATCH_LOG_FILE, watch_log.pop(), cap=200)
+                watch_log = append_watch_entry(self, watch_log.pop())
                 watched_bvids.add(bvid)
                 watch_count += 1
                 continue
@@ -1631,8 +1709,8 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             interaction_failed = False
             # 先落账再互动：互动段若抛未捕获异常，至少「看过什么 + 分数 + 感想」已经写进
             # watch_log，用户不会完全看不到这一轮发生了什么。互动结果在下面补回同一条。
-            watch_log = self._append_json_list(
-                WATCH_LOG_FILE,
+            watch_log = append_watch_entry(
+                self,
                 {
                     "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     "bvid": bvid,
@@ -1657,7 +1735,6 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                     "analysis_basis": analysis_info.get("analysis_basis", "legacy"),
                     "actions": [],
                 },
-                cap=200,
             )
             if oid:
                 # 交互前快速校验 Cookie
@@ -1881,7 +1958,12 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                 and str(watch_log[-1].get("bvid")) == str(bvid)
             ):
                 watch_log[-1].update(actions=actions, recommended_at=recommended_at)
-                self._save_json(WATCH_LOG_FILE, watch_log[-200:])
+                if not update_watch_entry(
+                    self,
+                    watch_log[-1].get("bvid", ""),
+                    {"actions": actions, "recommended_at": recommended_at},
+                ):
+                    append_watch_entry(self, watch_log[-1])
             else:
                 watch_log = self._append_json_list(
                     WATCH_LOG_FILE,
@@ -1910,7 +1992,6 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                         "actions": actions,
                         "recommended_at": recommended_at,
                     },
-                    cap=200,
                 )
             recommended_by_private_message = "✉️私信推荐给主人" in actions
             recommended_by_comment = any(
@@ -2141,7 +2222,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                     "content_analyzed": analysis_info.get("analysis_basis") != "metadata",
                     "analysis_basis": analysis_info.get("analysis_basis", "legacy"),
                 })
-                watch_log = self._append_json_list(WATCH_LOG_FILE, watch_log.pop(), cap=200)
+                watch_log = append_watch_entry(self, watch_log.pop())
                 watched_bvids.add(bvid)
                 watch_count += 1
                 continue
@@ -2235,7 +2316,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                 "source": "special_follow",
             }
             watch_log.append(log_entry)
-            watch_log = self._append_json_list(WATCH_LOG_FILE, watch_log.pop(), cap=200)
+            watch_log = append_watch_entry(self, watch_log.pop())
 
             memory_text = (
                 f"[{log_entry['time']}] 特别关注看了视频《{video.get('title', '')}》"

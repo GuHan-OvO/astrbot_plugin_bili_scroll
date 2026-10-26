@@ -108,13 +108,52 @@ def _config_report(plugin) -> dict:
     return {"total_keys": total, "required": required, "optional": optional}
 
 
-def _data_report() -> dict:
+def _recent_verify(limit: int = 5) -> list[dict]:
+    """最近几条没通过可见性复核的记录，只报状态与 rpid，不报评论正文。"""
+    try:
+        if not os.path.exists(VERIFY_LOG_FILE):
+            return []
+        import json
+
+        with open(VERIFY_LOG_FILE, encoding="utf-8") as fp:
+            rows = json.load(fp)
+    except Exception:
+        return []
+    if not isinstance(rows, list):
+        return []
+    bad = [
+        {
+            "time": row.get("time", ""),
+            "rpid": row.get("rpid"),
+            "state": row.get("state", ""),
+            "phase": row.get("phase", ""),
+        }
+        for row in rows
+        if isinstance(row, dict) and row.get("state") not in (None, "", "visible")
+    ]
+    return bad[-limit:]
+
+
+def _watch_total(plugin):
+    """归档 + 主文件的总条数；没有插件实例时返回 None。"""
+    if plugin is None:
+        return None
+    try:
+        from .watch_log import watch_entry_count
+
+        return watch_entry_count(plugin)
+    except Exception:
+        return None
+
+
+def _data_report(plugin=None) -> dict:
     watch_count = _json_list_len(WATCH_LOG_FILE)
     verify_count = _json_list_len(VERIFY_LOG_FILE)
     db = Path(DATA_DIR) / "bilibot.sqlite3"
     return {
-        "watch_log": {"path": WATCH_LOG_FILE, "count": watch_count},
+        "watch_log": {"path": WATCH_LOG_FILE, "count": watch_count, "total": _watch_total(plugin)},
         "verify_log": {"path": VERIFY_LOG_FILE, "count": verify_count},
+        "verify_recent": _recent_verify(),
         "database": {"path": str(db), "exists": db.is_file(),
                      "size": db.stat().st_size if db.is_file() else 0},
     }
@@ -154,7 +193,7 @@ def collect(plugin) -> dict:
             "author": meta.get("author"),
         }),
         ("config", lambda: _config_report(plugin)),
-        ("storage", lambda: _data_report()),
+        ("storage", lambda: _data_report(plugin)),
         ("pages", lambda: _pages_report()),
     ):
         try:
