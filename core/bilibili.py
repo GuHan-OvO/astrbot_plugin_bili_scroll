@@ -276,7 +276,10 @@ class BilibiliAPIMixin:
                     reply_rpid = 0
                 # 回复也是一条公开评论：成功后就按它自己的 rpid 排一次可见性复核。
                 if reply_rpid:
-                    schedule_verify(self, oid, reply_rpid, kind="reply")
+                    schedule_verify(
+                        self, oid, reply_rpid, kind="reply",
+                        type_id=reply_type, root_rpid=rpid,
+                    )
                 return reply_rpid or True
             elif d["code"] == -101:
                 logger.error("[BiliBot] SESSDATA 失效！")
@@ -323,7 +326,8 @@ class BilibiliAPIMixin:
                 # 带 @ 的 30 秒更早确认一次，普通评论 90 秒。
                 if rpid:
                     schedule_verify(
-                        self, oid, rpid, kind="comment", has_at=bool(at_name_to_mid)
+                        self, oid, rpid, kind="comment",
+                        has_at=bool(at_name_to_mid), type_id=oid_type,
                     )
                 # 返回 rpid（真值）或 True：调用方原本就只判真假，行为不变
                 return rpid or True

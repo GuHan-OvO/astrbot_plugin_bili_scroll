@@ -49,8 +49,8 @@ VERIFY_CONFIRM_DELAY_SECONDS = 600
 
 VERIFY_LOG_CAP = 200
 
-VERIFY_PAGE_FALLBACK_MAX = 3
-"""seek_rpid 未命中时最多往前翻几页（含第一页）。"""
+VERIFY_PAGE_FALLBACK_MAX = 2
+"""seek_rpid 未命中时最多翻到第几页（含第一页）。默认 2，避免异常路径上反复打请求。"""
 
 VERIFY_CONCURRENCY = 3
 """同时在途的复核任务上限，控制风控面。"""
@@ -134,7 +134,7 @@ def build_view_headers(plugin, anonymous: bool) -> dict:
     return headers
 
 
-def _page_params(oid, rpid, offset, type_id):
+def _page_params(oid, rpid, offset, type_id, *, seek=True):
     params = {
         "oid": oid,
         "type": type_id,
@@ -142,7 +142,9 @@ def _page_params(oid, rpid, offset, type_id):
         "pagination_str": json.dumps({"offset": offset}, separators=(",", ":")),
         "web_location": WEB_LOCATION,
     }
-    if rpid is not None:
+    # seek_rpid 的语义是「定位到这条评论所在分页」，翻页时必须去掉，
+    # 否则服务端每次都重新定位回同一页，pagination offset 形同虚设。
+    if seek and rpid is not None:
         params["seek_rpid"] = str(rpid)
     return params
 
@@ -171,8 +173,8 @@ async def _wbi_payload(plugin, params, anonymous):
     return payload, ""
 
 
-async def fetch_seek(plugin, oid, rpid, *, anonymous, offset="", type_id=1):
-    params = _page_params(oid, rpid, offset, type_id)
+async def fetch_seek(plugin, oid, rpid, *, anonymous, offset="", type_id=1, seek=True):
+    params = _page_params(oid, rpid, offset, type_id, seek=seek)
     return await _wbi_payload(plugin, params, anonymous)
 
 
@@ -189,8 +191,13 @@ def _next_offset(payload) -> str:
     return str(reply.get("next_offset") or "")
 
 
-async def fetch_sub_replies(plugin, oid, root, *, anonymous, max_pages: int = 2, type_id=1):
-    """楼中楼查询：返回 (item|None, code)。用于二级回复与存在性探测。"""
+async def fetch_sub_replies(plugin, oid, root, *, anonymous, target=None, max_pages: int = 2, type_id=1):
+    """楼中楼查询：在 root 的回复列表里找 target，返回 (item|None, code)。
+
+    ``target`` 不给时按 root 自身找——那只是存在性探测，靠 code 判断，
+    不能用它来找「我发的那条回复」（回复的 root 是父评论，不是它自己）。
+    """
+    want = str(target or root)
     code = None
     for page in range(1, max(1, min(5, int(max_pages))) + 1):
         params = {
@@ -216,15 +223,17 @@ async def fetch_sub_replies(plugin, oid, root, *, anonymous, max_pages: int = 2,
             return None, code
         data = payload.get("data")
         replies = data.get("replies") if isinstance(data, dict) else None
-        item, _bucket = _scan_list(replies, str(root))
+        item, _bucket = _scan_list(replies, want)
         if item is not None:
             return item, code
     return None, code
 
 
-async def probe_exists(plugin, oid, root, *, anonymous) -> str:
-    """用 ``reply/reply`` 探测根评论还在不在：exists / gone / unknown。"""
-    _item, code = await fetch_sub_replies(plugin, oid, root, anonymous=anonymous, max_pages=1)
+async def probe_exists(plugin, oid, root, *, anonymous, type_id=1) -> str:
+    """用 ``reply/reply`` 探测评论还在不在：exists / gone / unknown。"""
+    _item, code = await fetch_sub_replies(
+        plugin, oid, root, anonymous=anonymous, max_pages=1, type_id=type_id
+    )
     if code == CODE_DELETED:
         return "gone"
     if code == 0:
@@ -300,13 +309,15 @@ def _fill_raw(result, item):
 
 
 async def scan_pages(plugin, oid, rpid, *, anonymous, payload, type_id=1):
-    """seek_rpid 没命中时按 cursor 往前翻，命中即返回。"""
+    """seek_rpid 没命中时按 cursor 往前翻，命中即返回。翻页不带 seek_rpid。"""
     limit = _config_int(plugin, "COMMENT_VERIFY_PAGE_FALLBACK_MAX", VERIFY_PAGE_FALLBACK_MAX)
     offset = _next_offset(payload)
     for _ in range(max(0, min(limit, 5) - 1)):
         if not offset:
             break
-        page, err = await fetch_seek(plugin, oid, rpid, anonymous=anonymous, offset=offset, type_id=type_id)
+        page, err = await fetch_seek(
+            plugin, oid, rpid, anonymous=anonymous, offset=offset, type_id=type_id, seek=False
+        )
         if err:
             break
         item, bucket = find_reply(page, rpid)
@@ -316,8 +327,14 @@ async def scan_pages(plugin, oid, rpid, *, anonymous, payload, type_id=1):
     return None, ""
 
 
-async def check_visibility(plugin, oid, rpid, *, kind="comment", phase="optimistic") -> dict:
-    """跑一次可见性判定。``phase=optimistic`` 时查不到只记 pending，不下结论。"""
+async def check_visibility(
+    plugin, oid, rpid, *, kind="comment", phase="optimistic", type_id=1, root_rpid=0
+) -> dict:
+    """跑一次可见性判定。``phase=optimistic`` 时查不到只记 pending，不下结论。
+
+    ``type_id`` 是评论区类型（视频=1、动态=17），必须与发送时一致；
+    ``root_rpid`` 只对二级回复有意义：它指向被回复的父评论，用来在楼中楼里找自己。
+    """
     target = str(rpid)
     anonymous = _config_bool(plugin, "COMMENT_VERIFY_ANONYMOUS", True)
     result = {
@@ -331,14 +348,16 @@ async def check_visibility(plugin, oid, rpid, *, kind="comment", phase="optimist
         "error": "",
     }
 
-    payload, err = await fetch_seek(plugin, oid, target, anonymous=anonymous)
+    payload, err = await fetch_seek(plugin, oid, target, anonymous=anonymous, type_id=type_id)
     if err:
         result["error"] = err
         return result
 
     item, bucket = find_reply(payload, target)
     if item is None and phase != "optimistic":
-        item, bucket = await scan_pages(plugin, oid, target, anonymous=anonymous, payload=payload)
+        item, bucket = await scan_pages(
+            plugin, oid, target, anonymous=anonymous, payload=payload, type_id=type_id
+        )
         if item is not None:
             bucket = bucket or "wbi_pages"
     if item is not None:
@@ -355,17 +374,19 @@ async def check_visibility(plugin, oid, rpid, *, kind="comment", phase="optimist
     # 匿名不可见：换登录视角再查，差异即「仅自己可见」。
     # 关掉匿名视角时只剩单视角，分不清「被删」和「被屏蔽」，只做存在性探测。
     if anonymous:
-        auth_payload, auth_err = await fetch_seek(plugin, oid, target, anonymous=False)
+        auth_payload, auth_err = await fetch_seek(
+            plugin, oid, target, anonymous=False, type_id=type_id
+        )
         if auth_err:
             result["error"] = auth_err
         else:
             auth_item, _bucket = find_reply(auth_payload, target)
             if auth_item is None:
                 auth_item, _bucket = await scan_pages(
-                    plugin, oid, target, anonymous=False, payload=auth_payload
+                    plugin, oid, target, anonymous=False, payload=auth_payload, type_id=type_id
                 )
             if auth_item is not None:
-                result["view"] = "both"
+                result["view"] = "auth"
                 _fill_raw(result, auth_item)
                 state = classify_item(auth_item)
                 result["state"] = (
@@ -375,20 +396,24 @@ async def check_visibility(plugin, oid, rpid, *, kind="comment", phase="optimist
                 )
                 return result
 
-    # 两个视角都没有（或只开了单视角）：用楼中楼接口探测根评论是否还存在
+    # 两个视角都没有（或只开了单视角）：用楼中楼接口探测是否还存在。
+    # 二级回复的 root 是「被回复的父评论」；拿自身 rpid 当 root 永远找不到自己。
     if kind == "reply":
-        probe_item, probe_code = await fetch_sub_replies(plugin, oid, target, anonymous=True)
+        root = str(root_rpid or target)
+        probe_item, probe_code = await fetch_sub_replies(
+            plugin, oid, root, anonymous=True, target=target, type_id=type_id
+        )
         result["raw_code"] = probe_code
         if probe_item is not None:
             result["state"] = STATE_SELF_ONLY
             return result
         if probe_code != CODE_DELETED:
             return result  # 仍是 unverified
-        exists = await probe_exists(plugin, oid, target, anonymous=False)
+        exists = await probe_exists(plugin, oid, root, anonymous=False, type_id=type_id)
         result["state"] = STATE_DELETED if exists == "gone" else STATE_UNVERIFIED
         return result
 
-    exists = await probe_exists(plugin, oid, target, anonymous=False)
+    exists = await probe_exists(plugin, oid, target, anonymous=False, type_id=type_id)
     result["raw_code"] = CODE_DELETED if exists == "gone" else None
     result["state"] = STATE_DELETED if exists == "gone" else STATE_UNVERIFIED
     return result
@@ -452,7 +477,10 @@ async def _throttle_oid(oid):
 # ── 调度 ──
 
 
-async def verify_later(plugin, oid, rpid, *, delay=None, kind="comment", has_at=False, confirm_delay=None):
+async def verify_later(
+    plugin, oid, rpid, *, delay=None, kind="comment", has_at=False, confirm_delay=None,
+    type_id=1, root_rpid=0,
+):
     """等 ``delay`` 秒后复核一次；仍是 pending 就再等到确认时点。返回最终状态。"""
     if delay is None:
         delay = _config_int(plugin, "COMMENT_VERIFY_DELAY_SECONDS", VERIFY_DELAY_SECONDS)
@@ -466,7 +494,9 @@ async def verify_later(plugin, oid, rpid, *, delay=None, kind="comment", has_at=
     try:
         await asyncio.sleep(max(0, delay))
         await _throttle_oid(oid)
-        first = await check_visibility(plugin, oid, rpid, kind=kind, phase="optimistic")
+        first = await check_visibility(
+            plugin, oid, rpid, kind=kind, phase="optimistic", type_id=type_id, root_rpid=root_rpid
+        )
         entry = _entry(oid, rpid, kind, has_at, "optimistic", first, time.monotonic() - started)
         _record(plugin, entry)
         _report(entry)
@@ -475,7 +505,9 @@ async def verify_later(plugin, oid, rpid, *, delay=None, kind="comment", has_at=
 
         await asyncio.sleep(max(0, confirm_delay))
         await _throttle_oid(oid)
-        second = await check_visibility(plugin, oid, rpid, kind=kind, phase="confirm")
+        second = await check_visibility(
+            plugin, oid, rpid, kind=kind, phase="confirm", type_id=type_id, root_rpid=root_rpid
+        )
         entry = _entry(oid, rpid, kind, has_at, "confirm", second, time.monotonic() - started)
         _record(plugin, entry)
         _report(entry)
@@ -487,7 +519,9 @@ async def verify_later(plugin, oid, rpid, *, delay=None, kind="comment", has_at=
         return STATE_UNVERIFIED
 
 
-def schedule_verify(plugin, oid, rpid, *, delay=None, kind="comment", has_at=False) -> bool:
+def schedule_verify(
+    plugin, oid, rpid, *, delay=None, kind="comment", has_at=False, type_id=1, root_rpid=0
+) -> bool:
     """排一次后台复核。没有 rpid / 没有事件循环 / 并发满时安静跳过。"""
     global _inflight
     if not rpid or not verify_enabled(plugin):
@@ -509,7 +543,10 @@ def schedule_verify(plugin, oid, rpid, *, delay=None, kind="comment", has_at=Fal
         return False
     _inflight += 1
     task = loop.create_task(
-        verify_later(plugin, oid, rpid_int, delay=delay, kind=kind, has_at=has_at)
+        verify_later(
+            plugin, oid, rpid_int, delay=delay, kind=kind, has_at=has_at,
+            type_id=type_id, root_rpid=root_rpid,
+        )
     )
     task.add_done_callback(_release_slot)
     return True

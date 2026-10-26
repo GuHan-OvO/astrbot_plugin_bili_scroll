@@ -74,9 +74,17 @@ def _archive_entries(plugin, entries):
         plugin._save_json(path, existing)
 
 
+def _active_cap(plugin) -> int:
+    """主文件保留条数：配置优先，配置缺失或非法时用默认值。"""
+    try:
+        return max(1, int(plugin.config.get("WATCH_LOG_ACTIVE_CAP", WATCH_LOG_ACTIVE_CAP)))
+    except (AttributeError, TypeError, ValueError):
+        return WATCH_LOG_ACTIVE_CAP
+
+
 def append_watch_entry(plugin, entry, *, cap=None):
     """追加一条观看记录，并把溢出部分按月归档。返回主文件当前内容。"""
-    limit = max(1, int(cap or WATCH_LOG_ACTIVE_CAP))
+    limit = max(1, int(cap)) if cap is not None else _active_cap(plugin)
     rows = plugin._load_json(WATCH_LOG_FILE, [])
     if not isinstance(rows, list):
         rows = []

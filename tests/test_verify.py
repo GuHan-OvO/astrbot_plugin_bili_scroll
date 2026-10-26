@@ -206,6 +206,31 @@ class CheckVisibilityTests(_BaseCase, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["state"], STATE_VISIBLE)
         self.assertEqual(len(plugin.calls), 2)
 
+    async def test_type会透传(self):
+        plugin = _FakePlugin(anon=_payload([_item(7)]))
+        await check_visibility(plugin, 42, 7, type_id=17)
+        self.assertEqual(plugin.calls[0]["params"]["type"], 17)
+
+    async def test_翻页不带seek_rpid(self):
+        seek = _payload(cursor={"pagination_reply": {"next_offset": "off1"}})
+        page = _payload([_item(7)])
+        plugin = _FakePlugin(anon_seq=[seek, page])
+        result = await check_visibility(plugin, 42, 7, phase="confirm")
+        self.assertEqual(result["state"], STATE_VISIBLE)
+        second = plugin.calls[1]["params"]
+        self.assertNotIn("seek_rpid", second, "翻页必须去掉 seek_rpid，否则永远回到同一页")
+        self.assertEqual(second["pagination_str"], '{"offset":"off1"}')
+
+    async def test_回复用父评论当root找人(self):
+        sub = {"code": 0, "data": {"replies": [_item(7)]}}
+        plugin = _FakePlugin(anon=_payload(), auth=_payload(), sub=sub)
+        result = await check_visibility(
+            plugin, 42, 7, kind="reply", root_rpid=555, phase="confirm"
+        )
+        self.assertEqual(result["state"], STATE_SELF_ONLY)
+        reply_call = [c for c in plugin.calls if "reply/reply" in c["url"]][0]
+        self.assertEqual(reply_call["params"]["root"], "555")
+
     async def test_关闭匿名视角时只用登录视角(self):
         plugin = _FakePlugin(
             anon=_payload(),
@@ -332,6 +357,41 @@ class SendIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, 777)
         scheduled.assert_called_once()
         self.assertEqual(scheduled.call_args.kwargs.get("kind"), "reply")
+
+    async def test_发送评论透传type(self):
+        from core.bilibili import BilibiliAPIMixin
+        from core.utils import UtilsMixin
+
+        class Bot(UtilsMixin, BilibiliAPIMixin):
+            def __init__(self):
+                self.config = {"BILI_JCT": "jct"}
+
+            async def _http_post(self, url, headers=None, data=None, **kwargs):
+                return {"code": 0, "data": {"rpid": 901}}, None
+
+        bot = Bot()
+        with patch("core.bilibili.schedule_verify") as scheduled:
+            await bot._send_comment(42, "动态评论", oid_type=17)
+        self.assertEqual(scheduled.call_args.kwargs.get("type_id"), 17)
+
+    async def test_发送回复透传父评论(self):
+        from core.bilibili import BilibiliAPIMixin
+        from core.utils import UtilsMixin
+
+        class Bot(UtilsMixin, BilibiliAPIMixin):
+            def __init__(self):
+                self.config = {"BILI_JCT": "jct"}
+
+            async def _http_post(self, url, headers=None, data=None, **kwargs):
+                return {"code": 0, "data": {"rpid": 902}}, None
+
+        bot = Bot()
+        with patch("core.bilibili.schedule_verify") as scheduled:
+            await bot._send_reply(42, 555, 1, "回复")
+        kwargs = scheduled.call_args.kwargs
+        self.assertEqual(kwargs.get("kind"), "reply")
+        self.assertEqual(kwargs.get("root_rpid"), 555)
+        self.assertEqual(kwargs.get("type_id"), 1)
 
     async def test_发送失败不排复核(self):
         from core.bilibili import BilibiliAPIMixin

@@ -335,10 +335,10 @@
     }
   },
   "COMMENT_VERIFY_PAGE_FALLBACK_MAX": {
-    "description": "【评论复核】seek_rpid 没命中时最多翻几页",
+    "description": "【评论复核】seek_rpid 没命中时最多翻到第几页",
     "type": "int",
-    "default": 3,
-    "hint": "含第一页；只在定位失败的异常路径上才会翻页。",
+    "default": 2,
+    "hint": "含第一页；只在定位失败的异常路径上才会翻页，翻页不带 seek_rpid。",
     "condition": {
       "COMMENT_VERIFY_ENABLED": true
     }

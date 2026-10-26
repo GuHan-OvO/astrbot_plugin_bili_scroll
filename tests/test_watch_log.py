@@ -20,8 +20,9 @@ from core import watch_log  # noqa: E402
 class _DiskPlugin:
     """真实读写临时目录，复刻 UtilsMixin 的两个持久化方法。"""
 
-    def __init__(self, fail_archive=False):
+    def __init__(self, fail_archive=False, config=None):
         self.fail_archive = fail_archive
+        self.config = dict(config or {})
 
     def _load_json(self, path, default=None):
         try:
@@ -113,6 +114,15 @@ class WatchLogArchiveTests(unittest.TestCase):
         watch_log._archive_entries(plugin, [_entry("2026-10-01 10:00", "BV1")])
         archived = plugin._load_json(str(self.archive / "2026-10.json"), [])
         self.assertEqual([row["bvid"] for row in archived], ["BV1"])
+
+    def test_配置的cap被读取(self):
+        plugin = _DiskPlugin(config={"WATCH_LOG_ACTIVE_CAP": 2})
+        for i in range(3):
+            watch_log.append_watch_entry(
+                plugin, _entry(f"2026-10-0{i + 1} 10:00", f"BV{i}")
+            )
+        self.assertEqual(len(plugin._load_json(self.active, [])), 2)
+        self.assertTrue(self.archive.exists())
 
     def test_按bvid更新主文件(self):
         plugin = _DiskPlugin()
