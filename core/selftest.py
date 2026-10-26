@@ -119,8 +119,12 @@ def _config_report(plugin) -> dict:
     return {"total_keys": total, "required": required, "optional": optional}
 
 
-def _recent_verify(limit: int = 5) -> list[dict]:
-    """最近几条没通过可见性复核的记录，只报状态与 rpid，不报评论正文。"""
+_ANOMALY_STATES = ("self_only", "folded", "invisible", "deleted")
+"""复核日志里真算「不对」的状态。``pending`` 是正常中间态、``unverified`` 是没查成，都不列。"""
+
+
+def _verify_rows() -> list:
+    """读复核日志；不存在或坏掉一律当空（自检不能因为日志坏了而挂）。"""
     try:
         if not os.path.exists(VERIFY_LOG_FILE):
             return []
@@ -130,19 +134,36 @@ def _recent_verify(limit: int = 5) -> list[dict]:
             rows = json.load(fp)
     except Exception:
         return []
-    if not isinstance(rows, list):
-        return []
-    bad = [
+    return rows if isinstance(rows, list) else []
+
+
+def _pick_verify_rows(states, limit: int = 5) -> list[dict]:
+    """按状态挑最近几条，只报状态与 rpid，不报评论正文。"""
+    picked = [
         {
             "time": row.get("time", ""),
             "rpid": row.get("rpid"),
             "state": row.get("state", ""),
             "phase": row.get("phase", ""),
         }
-        for row in rows
-        if isinstance(row, dict) and row.get("state") not in (None, "", "visible")
+        for row in _verify_rows()
+        if isinstance(row, dict) and row.get("state") in states
     ]
-    return bad[-limit:]
+    return picked[-limit:]
+
+
+def _recent_verify(limit: int = 5) -> list[dict]:
+    """最近几条**确认不正常**的复核记录（仅自己可见 / 折叠 / 不可见 / 已删）。
+
+    ``pending`` 是 90 秒那次的正常中间态（10 分钟确认后会再写一条），``unverified`` 是接口层
+    没查成；把它们当成「异常」会让自检页常年挂着并不代表出问题的行。
+    """
+    return _pick_verify_rows(_ANOMALY_STATES, limit)
+
+
+def _recent_unverified(limit: int = 5) -> list[dict]:
+    """最近几条「没查成」的复核记录（风控 / 网络 / 结构异常 / 说不清）。"""
+    return _pick_verify_rows(("unverified",), limit)
 
 
 def _watch_total(plugin):
@@ -165,6 +186,7 @@ def _data_report(plugin=None) -> dict:
         "watch_log": {"path": WATCH_LOG_FILE, "count": watch_count, "total": _watch_total(plugin)},
         "verify_log": {"path": VERIFY_LOG_FILE, "count": verify_count},
         "verify_recent": _recent_verify(),
+        "verify_unverified": _recent_unverified(),
         "database": {"path": str(db), "exists": db.is_file(),
                      "size": db.stat().st_size if db.is_file() else 0},
     }

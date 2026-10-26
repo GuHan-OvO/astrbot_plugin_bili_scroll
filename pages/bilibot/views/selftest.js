@@ -743,6 +743,21 @@ export function mountSelftest(host) {
     }
   }
 
+  // 复核状态 → 中文；未知状态原样显示（别吞掉后端新加的状态）
+  const VERIFY_STATE_LABELS = {
+    visible: "可见",
+    self_only: "仅自己可见",
+    folded: "被折叠",
+    invisible: "前端不渲染",
+    deleted: "已删除",
+    pending: "待确认",
+    unverified: "未查成",
+  };
+
+  function verifyStateText(state) {
+    return VERIFY_STATE_LABELS[state] || state || "—";
+  }
+
   function renderData(data, pages) {
     clear(el.dataList);
     if (!data) {
@@ -766,7 +781,17 @@ export function mountSelftest(host) {
       el.dataList,
       "最近异常",
       verifyRecent.length
-        ? verifyRecent.map((row) => `${row.state} ${row.rpid}`).join("；")
+        ? verifyRecent.map((row) => `${verifyStateText(row.state)} ${row.rpid}`).join("；")
+        : "无"
+    );
+    // pending 是正常中间态、unverified 是没查成，都不算异常；这里单列一行，
+    // 免得常态噪声把「最近异常」里真出问题的行淹掉。
+    const verifyUnverified = data.verify_unverified || [];
+    addRow(
+      el.dataList,
+      "未查成",
+      verifyUnverified.length
+        ? verifyUnverified.map((row) => `${verifyStateText(row.state)} ${row.rpid}`).join("；")
         : "无"
     );
     addRow(el.dataList, "数据库", db.exists ? `存在（${Math.round((db.size || 0) / 1024)} KB）` : "尚未创建");

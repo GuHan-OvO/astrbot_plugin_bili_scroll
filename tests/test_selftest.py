@@ -64,7 +64,7 @@ class CollectTests(unittest.TestCase):
         mid = next(i for i in out["config"]["required"] if i["key"] == "OWNER_MID")
         self.assertTrue(mid["ok"])
 
-    def test_最近异常只报未通过可见性复核的(self):
+    def test_最近异常只报真异常_未查成单列(self):
         import json
         import os
         import tempfile
@@ -72,8 +72,13 @@ class CollectTests(unittest.TestCase):
         import core.selftest as selftest
 
         rows = [
-            {"time": "t1", "rpid": 1, "state": "visible"},
-            {"time": "t2", "rpid": 2, "state": "self_only", "phase": "confirm"},
+            {"time": "t1", "rpid": 1, "state": "visible", "phase": "confirm"},
+            {"time": "t2", "rpid": 2, "state": "pending", "phase": "optimistic"},
+            {"time": "t3", "rpid": 3, "state": "unverified", "phase": "confirm"},
+            {"time": "t4", "rpid": 4, "state": "self_only", "phase": "confirm"},
+            {"time": "t5", "rpid": 5, "state": "deleted", "phase": "confirm"},
+            {"time": "t6", "rpid": 6, "state": "folded", "phase": "confirm"},
+            {"time": "t7", "rpid": 7, "state": "invisible", "phase": "confirm"},
         ]
         before = selftest.VERIFY_LOG_FILE
         with tempfile.TemporaryDirectory() as directory:
@@ -82,11 +87,14 @@ class CollectTests(unittest.TestCase):
                 json.dump(rows, fp)
             selftest.VERIFY_LOG_FILE = path
             try:
-                out = selftest._recent_verify()
+                recent = selftest._recent_verify()
+                unverified = selftest._recent_unverified()
             finally:
                 selftest.VERIFY_LOG_FILE = before
-        self.assertEqual(len(out), 1)
-        self.assertEqual(out[0]["rpid"], 2)
+        # pending 是 90 秒的正常中间态、unverified 是没查成，都不该混进「最近异常」
+        self.assertEqual([row["rpid"] for row in recent], [4, 5, 6, 7])
+        self.assertEqual([row["rpid"] for row in unverified], [3])
+        self.assertEqual(unverified[0]["state"], "unverified")
 
     def test_数据报告字段齐全(self):
         out = collect(_FakePlugin({}))
@@ -94,6 +102,8 @@ class CollectTests(unittest.TestCase):
         storage = out["storage"]
         self.assertIn("watch_log", storage)
         self.assertIn("verify_log", storage)
+        self.assertIn("verify_recent", storage)
+        self.assertIn("verify_unverified", storage)
         self.assertIn("database", storage)
         # 未跑过时 watch_log 计数应为 0 而不是 None
         self.assertIn(storage["watch_log"]["count"], (0, None))

@@ -444,6 +444,7 @@ async def check_visibility(
         root = str(root_rpid or target)
         # 段一：匿名视角。能查到就说明它对所有人可见——原先这里一律判「仅自己可见」，
         # 语义是反的：匿名查得到恰恰是「公开可见」的证据。
+        # 这里固定走两段、不受 COMMENT_VERIFY_ANONYMOUS 影响：单视角分不清「公开可见」和「仅自己可见」。
         anon_item, anon_code = await fetch_sub_replies(
             plugin, oid, root, anonymous=True, target=target, type_id=type_id
         )
@@ -523,6 +524,15 @@ def _record(plugin, entry):
         logger.debug(f"[BiliBot] 写复核日志失败：{exc}")
 
 
+_STATE_HINTS = {
+    STATE_SELF_ONLY: "仅自己可见：匿名查不到、登录查得到",
+    STATE_FOLDED: "被折叠",
+    STATE_INVISIBLE: "接口返回了但前端不渲染",
+    STATE_DELETED: "已不可见：根评论没了",
+    STATE_UNVERIFIED: "没查成（风控 / 网络 / 结构异常或说不清），不据此下结论",
+}
+
+
 def _report(entry):
     state = entry["state"]
     if state == STATE_VISIBLE:
@@ -530,9 +540,11 @@ def _report(entry):
     elif state == STATE_PENDING:
         logger.debug(f"[BiliBot] 评论复核待确认：rpid={entry['rpid']}，10 分钟后再判")
     else:
+        # self_only 是「有结论」，unverified 是「没查成」，别用同一句话糊过去
         logger.warning(
             f"[BiliBot] 评论复核未确认可见：oid={entry['oid']} rpid={entry['rpid']} "
-            f"→ {state}（{entry['phase']}，{entry.get('error') or '—'}）"
+            f"→ {state}（{_STATE_HINTS.get(state) or '未知状态'}；{entry['phase']}，"
+            f"{entry.get('error') or '—'}）"
         )
 
 

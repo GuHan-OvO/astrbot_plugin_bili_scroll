@@ -575,11 +575,30 @@ class BilibiliAPIMixin:
         return []
 
     async def _get_hot_comments(self, oid, limit=10):
+        """取热评正文（含楼中楼预览）喂给 LLM。
+
+        只打一次列表接口、不额外翻页；``replies`` 里挂的是二级回复的预览，
+        也就是楼中楼里真正在对话的那部分，丢掉会让 LLM 看不到评论区上下文。
+        """
+
+        def _texts(items, depth=0):
+            out = []
+            if not isinstance(items, list) or depth > 3:
+                return out
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                content = item.get("content")
+                message = str((content if isinstance(content, dict) else {}).get("message") or "").strip()
+                if message:
+                    out.append(message[:100])
+                out.extend(_texts(item.get("replies"), depth + 1))
+            return out
+
         try:
             d, _ = await self._http_get("https://api.bilibili.com/x/v2/reply/main", params={"oid": oid, "type": 1, "mode": 3, "ps": limit})
             if d["code"] == 0:
-                replies = d.get("data", {}).get("replies", []) or []
-                return [r.get("content", {}).get("message", "")[:100] for r in replies if r.get("content", {}).get("message")]
+                return _texts(d.get("data", {}).get("replies", []) or [])
         except Exception:
             pass
         return []

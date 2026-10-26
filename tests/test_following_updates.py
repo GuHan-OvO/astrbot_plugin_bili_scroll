@@ -112,5 +112,29 @@ class FollowingUpdatesTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(results[0]["text"], "仍应返回")
 
 
+    async def test_热评正文含楼中楼预览(self):
+        class Client(self.module.BilibiliAPIMixin):
+            async def _http_get(self, *_args, **_kwargs):
+                return {
+                    "code": 0,
+                    "data": {
+                        "replies": [
+                            {
+                                "rpid": 1,
+                                "content": {"message": "顶层一"},
+                                "replies": [{"rpid": 2, "content": {"message": "楼中楼一"}}],
+                            },
+                            {"rpid": 3, "content": {"message": ""}},
+                            {"rpid": 4, "content": {"message": "顶层二"}},
+                            {"rpid": 5, "content": {"message": "  空白  "}, "replies": None},
+                        ]
+                    },
+                }, None
+
+        texts = await Client()._get_hot_comments(42, limit=5)
+        # 顶层 + 楼中楼预览按原顺序展开；空文本与前后空白按 strip 后判断
+        self.assertEqual(texts, ["顶层一", "楼中楼一", "顶层二", "空白"])
+
+
 if __name__ == "__main__":
     unittest.main()

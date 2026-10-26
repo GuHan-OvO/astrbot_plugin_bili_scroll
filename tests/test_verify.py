@@ -7,7 +7,7 @@ import asyncio
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -531,6 +531,28 @@ class SendIntegrationTests(unittest.IsolatedAsyncioTestCase):
             result = await bot._send_comment(42, "有敏感词")
         self.assertFalse(result)
         scheduled.assert_not_called()
+
+
+class ReportTests(unittest.TestCase):
+    def _warning_messages(self, state, error=""):
+        fake = MagicMock()
+        with patch.object(verify, "logger", fake):
+            verify._report(
+                {"oid": 42, "rpid": 7, "state": state, "phase": "confirm", "error": error}
+            )
+        return [call.args[0] for call in fake.warning.call_args_list]
+
+    def test_仅自己可见与未查成措辞不同(self):
+        # 只报 state 名分不清「有结论」和「没查成」，两种都要能一眼看出来
+        self_only = self._warning_messages(STATE_SELF_ONLY)[0]
+        unverified = self._warning_messages(STATE_UNVERIFIED, "code:-403")[0]
+        self.assertIn("仅自己可见", self_only)
+        self.assertIn("没查成", unverified)
+        self.assertNotEqual(self_only, unverified)
+
+    def test_通过与待确认不打warning(self):
+        for state in (STATE_VISIBLE, STATE_PENDING):
+            self.assertEqual(self._warning_messages(state), [])
 
 
 if __name__ == "__main__":
