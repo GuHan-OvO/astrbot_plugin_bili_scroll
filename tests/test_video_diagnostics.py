@@ -36,6 +36,52 @@ class EvaluationBot(ProactiveProbe, LLMMixin):
         self.context.llm_generate.return_value = types.SimpleNamespace(completion_text=text)
 
 
+class VideoFrameCountTests(unittest.IsolatedAsyncioTestCase):
+    """每段送几帧必须跟着档位走，而不是写死 5。"""
+
+    async def _count_for(self, depth):
+        bot = VideoMixin()
+        bot.config = {"ANALYSIS_DEPTH": depth}
+        bot._extract_video_frames = AsyncMock(return_value=[])
+        with tempfile.TemporaryDirectory() as directory:
+            clip = Path(directory) / "seg0.mp4"
+            clip.write_bytes(b"video")
+            await bot._analyze_single_segment(
+                str(clip), {"title": "t", "bvid": "BVtest"}, "none", "provider", None, "model",
+            )
+        return bot._extract_video_frames.await_args.kwargs["count"]
+
+    async def test_标准档保持原版5帧(self):
+        self.assertEqual(await self._count_for("standard"), 5)
+
+    async def test_无限制档每段12帧(self):
+        self.assertEqual(await self._count_for("unlimited"), 12)
+
+    async def test_帧数为0时跳过截帧(self):
+        bot = VideoMixin()
+        bot.config = {"ANALYSIS_DEPTH": "subtitle_only", "MEDIA_MAX_FRAMES": 0}
+        bot._extract_video_frames = AsyncMock(return_value=[])
+        with tempfile.TemporaryDirectory() as directory:
+            clip = Path(directory) / "seg0.mp4"
+            clip.write_bytes(b"video")
+            self.assertIsNone(await bot._analyze_single_segment(
+                str(clip), {"title": "t", "bvid": "BVtest"}, "none", "provider", None, "model",
+            ))
+        bot._extract_video_frames.assert_not_called()
+
+    def test_切片段数跟着档位走(self):
+        bot = VideoMixin()
+        bot.config = {"ANALYSIS_DEPTH": "unlimited", "VIDEO_SEGMENT_MINUTES": 5}
+        self.assertEqual(bot._segment_limits(), (300, 360))
+        # 非自定义档忽略单项配置（档位值覆盖），这正是 deep/无限制档原先失效的地方
+        bot.config = {"ANALYSIS_DEPTH": "standard", "VIDEO_SEGMENT_MINUTES": 5,
+                      "VIDEO_SEGMENT_MAX_COUNT": 4}
+        self.assertEqual(bot._segment_limits(), (300, 10))
+        bot.config = {"ANALYSIS_DEPTH": "custom", "VIDEO_SEGMENT_MINUTES": 3,
+                      "VIDEO_SEGMENT_MAX_COUNT": 7}
+        self.assertEqual(bot._segment_limits(), (180, 7))
+
+
 class VideoDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
     async def test_schema_reason_shape_and_no_model_prose(self):
         bot = EvaluationBot()

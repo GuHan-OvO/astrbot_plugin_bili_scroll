@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import tempfile
 
+from .analysis_depth import frames_per_segment as depth_frames_per_segment
 from .config import TEMP_VIDEO_DIR, VIDEO_INSPECTION_LOG_FILE
 from .security.redact import wrap_untrusted
 
@@ -157,13 +158,17 @@ class VideoInspectionMixin:
                 return {**await ask(content), "mode": "video"}
             except (ValueError, TypeError):
                 pass
-        frames = await self._extract_video_frames(clip, count=12)
+        # 定向核查比"看视频"更依赖画面证据，档位只让它变多、不让它变少：
+        # 下限仍是原来的 12 帧，deep/unlimited 档会额外加量。
+        frame_count = max(12, depth_frames_per_segment(self.config))
+        frames = await self._extract_video_frames(clip, count=frame_count)
         if not frames:
             return {"finding": "uncertain", "evidence": "未获得可用画面", "moments": [], "mode": "failed"}
         content = []
         for frame in frames:
             index = int(Path(frame).stem.split("_")[-1])
-            content.append({"type": "text", "text": f"下面这张画面约在片段内{duration * (index + 1) / 13:.2f}秒："})
+            at_seconds = duration * (index + 1) / (frame_count + 1)
+            content.append({"type": "text", "text": f"下面这张画面约在片段内{at_seconds:.2f}秒："})
             encoded = base64.b64encode(Path(frame).read_bytes()).decode()
             content.append({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + encoded}})
         content.append({"type": "text", "text": prompt + "\n本次只有稀疏抽帧，没有音频。不能判断说了什么或宣称完整看过片段；声音问题没有可见文字证据时必须uncertain。"})

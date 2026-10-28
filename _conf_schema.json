@@ -852,9 +852,9 @@
     "description": "【视频】看视频的详细程度",
     "type": "string",
     "default": "standard",
-    "options": ["subtitle_only", "lean", "standard", "deep", "custom"],
-    "labels": ["只看字幕", "省 token", "标准", "看更细", "自定义"],
-    "hint": "标准=与旧版行为完全一致。选其它档会覆盖视觉策略/分段数/帧数/预算/两处字数；要逐项调就选「自定义」。"
+    "options": ["subtitle_only", "lean", "standard", "deep", "unlimited", "custom"],
+    "labels": ["只看字幕", "省 token", "标准", "看更细", "无限制", "自定义"],
+    "hint": "标准=与旧版行为完全一致。选其它档会覆盖视觉策略/分段数/帧数/预算/两处字数；要逐项调就选「自定义」。「无限制」= 一定看画面、全片不砍段（最多 360 段）、每段 12 帧、字幕与结果不截断，单条视频成本最高。"
   },
   "ANALYSIS_SUBTITLE_CHARS": {
     "description": "【视频】字幕最多送多少字",

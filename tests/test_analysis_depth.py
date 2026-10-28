@@ -18,6 +18,7 @@ from core.analysis_depth import (  # noqa: E402
     CUSTOM_DEPTH,
     DEFAULT_DEPTH,
     DEPTH_PRESETS,
+    frames_per_segment,
     resolve,
     result_chars,
     subtitle_chars,
@@ -39,15 +40,27 @@ class PresetTests(unittest.TestCase):
         self.assertEqual(p["token_budget_daily"], 50000)
         self.assertEqual(p["visual_policy"], "when_text_insufficient")
 
-    def test_四档齐全且字段一致(self):
-        for name in ("subtitle_only", "lean", "standard", "deep"):
+    def test_各档齐全且字段一致(self):
+        expected = {
+            "visual_policy", "segment_max_count", "max_frames", "frames_per_segment",
+            "token_budget_daily", "subtitle_chars", "result_chars",
+        }
+        for name in ("subtitle_only", "lean", "standard", "deep", "unlimited"):
             self.assertIn(name, DEPTH_PRESETS)
-            self.assertEqual(
-                set(DEPTH_PRESETS[name]),
-                {"visual_policy", "segment_max_count", "max_frames", "token_budget_daily",
-                 "subtitle_chars", "result_chars"},
-                name,
-            )
+            self.assertEqual(set(DEPTH_PRESETS[name]), expected, name)
+
+    def test_无限制档每项都不低且一定看画面(self):
+        top = DEPTH_PRESETS["unlimited"]
+        deep = DEPTH_PRESETS["deep"]
+        std = DEPTH_PRESETS["standard"]
+        self.assertEqual(top["visual_policy"], "always")
+        self.assertGreater(top["segment_max_count"], deep["segment_max_count"])
+        self.assertGreaterEqual(top["frames_per_segment"], deep["frames_per_segment"])
+        self.assertGreater(top["token_budget_daily"], deep["token_budget_daily"])
+        self.assertGreater(top["subtitle_chars"], deep["subtitle_chars"])
+        self.assertGreater(top["result_chars"], deep["result_chars"])
+        # 不能靠调参悄悄退回标准档的覆盖
+        self.assertGreater(top["frames_per_segment"], std["frames_per_segment"])
 
     def test_只看字幕档永不做视觉(self):
         self.assertEqual(DEPTH_PRESETS["subtitle_only"]["visual_policy"], "never")
@@ -98,6 +111,7 @@ class ResolveTests(unittest.TestCase):
         self.assertEqual(out["subtitle_chars"], 4321)
         self.assertEqual(out["result_chars"], 2222)
         self.assertEqual(out["max_frames"], 3)
+        self.assertEqual(out["frames_per_segment"], 3, "自定义档每段帧数应跟随 MEDIA_MAX_FRAMES")
         self.assertEqual(out["token_budget_daily"], 70000)
         self.assertEqual(out["segment_max_count"], 4)
         self.assertEqual(out["visual_policy"], "always")
@@ -142,6 +156,11 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(visual_policy(cfg), "never")
         self.assertEqual(subtitle_chars(cfg), DEPTH_PRESETS["subtitle_only"]["subtitle_chars"])
         self.assertEqual(result_chars(cfg), DEPTH_PRESETS["subtitle_only"]["result_chars"])
+
+    def test_每段帧数便捷函数(self):
+        self.assertEqual(frames_per_segment({"ANALYSIS_DEPTH": "unlimited"}), 12)
+        self.assertEqual(frames_per_segment({"ANALYSIS_DEPTH": "standard"}), 5)
+        self.assertEqual(frames_per_segment({"ANALYSIS_DEPTH": "subtitle_only"}), 0)
 
 
 if __name__ == "__main__":

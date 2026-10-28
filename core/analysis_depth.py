@@ -26,6 +26,7 @@ DEPTH_PRESETS: dict[str, dict] = {
         "visual_policy": "never",
         "segment_max_count": 0,
         "max_frames": 0,
+        "frames_per_segment": 0,
         "token_budget_daily": 20000,
         "subtitle_chars": 6000,
         "result_chars": 3000,
@@ -34,6 +35,7 @@ DEPTH_PRESETS: dict[str, dict] = {
         "visual_policy": "when_text_insufficient",
         "segment_max_count": 3,
         "max_frames": 4,
+        "frames_per_segment": 4,
         "token_budget_daily": 20000,
         "subtitle_chars": 1500,
         "result_chars": 1200,
@@ -43,6 +45,7 @@ DEPTH_PRESETS: dict[str, dict] = {
         "visual_policy": "when_text_insufficient",
         "segment_max_count": 10,
         "max_frames": 8,
+        "frames_per_segment": 5,
         "token_budget_daily": 50000,
         "subtitle_chars": 1500,
         "result_chars": 1600,
@@ -51,9 +54,22 @@ DEPTH_PRESETS: dict[str, dict] = {
         "visual_policy": "always",
         "segment_max_count": 20,
         "max_frames": 16,
+        "frames_per_segment": 8,
         "token_budget_daily": 150000,
         "subtitle_chars": 6000,
         "result_chars": 3000,
+    },
+    # 无限制：不看预算、不砍段数、字幕与结果都不截断。
+    # 段数 360 覆盖 30 小时（B站单视频远达不到），等价于"全片都分析"；
+    # 帧数受单次请求的图片数量限制，固定 12 帧/段（=每 25 秒一帧，300 秒一段时）。
+    "unlimited": {
+        "visual_policy": "always",
+        "segment_max_count": 360,
+        "max_frames": 64,
+        "frames_per_segment": 12,
+        "token_budget_daily": 2000000,
+        "subtitle_chars": 20000,
+        "result_chars": 8000,
     },
 }
 
@@ -95,6 +111,8 @@ def _read_custom(config) -> dict:
             out[name] = _clamp_int(raw, low=200, high=20000, fallback=int(default))
         else:  # result_chars
             out[name] = _clamp_int(raw, low=200, high=8000, fallback=int(default))
+    # 自定义档没有独立键：每段帧数沿用 MEDIA_MAX_FRAMES（0 = 不抽帧）
+    out["frames_per_segment"] = out["max_frames"]
     return out
 
 
@@ -119,6 +137,11 @@ def resolve(config) -> dict:
 
 def visual_policy(config) -> str:
     return resolve(config)["visual_policy"]
+
+
+def frames_per_segment(config) -> int:
+    """每段送多少帧给视觉模型（已由 resolve 保证是 0~64 的整数）。"""
+    return int(resolve(config)["frames_per_segment"])
 
 
 def subtitle_chars(config) -> int:

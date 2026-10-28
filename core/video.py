@@ -10,6 +10,7 @@ from astrbot.api import logger
 from .network import download_proxy_args, redact_proxy_error
 from .video_inspection import VideoInspectionMixin
 from .config import VIDEO_MEMORY_FILE, TEMP_VIDEO_DIR, EXTERNAL_MEMORY_FILE
+from .analysis_depth import frames_per_segment as depth_frames_per_segment
 from .analysis_depth import resolve as resolve_analysis_depth
 
 
@@ -483,6 +484,22 @@ class VideoMixin(VideoInspectionMixin):
             return False
         return policy == "always" or not joint.get("subtitle")
 
+    def _segment_limits(self):
+        """切片长度只认配置，段数上限跟着档位走。
+
+        段数原先直接读 ``VIDEO_SEGMENT_MAX_COUNT``，deep 档设的 20 段、
+        无限制档设的 360 段都落不了地；这里统一由档位决定，只有 custom 档
+        才回到配置单项值（_read_custom 已把该键读进 segment_max_count）。
+        """
+        segment_min = self.config.get("VIDEO_SEGMENT_MINUTES", 0)
+        if segment_min:
+            segment_sec = max(60, int(segment_min) * 60)
+        else:
+            # 兼容旧配置键（秒）
+            segment_sec = int(self.config.get("VIDEO_SEGMENT_SEC", 300))
+        max_segments = max(1, int(resolve_analysis_depth(self.config)["segment_max_count"] or 1))
+        return segment_sec, max_segments
+
     # ── 视频分析 ──
     async def _analyze_video_with_vision(self, video_info):
         try:
@@ -588,13 +605,7 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
         segments = []
         try:
             # 切片（短视频返回单段，长视频返回多段）
-            segment_min = self.config.get("VIDEO_SEGMENT_MINUTES", 0)
-            if segment_min:
-                segment_sec = max(60, int(segment_min) * 60)
-            else:
-                # 兼容旧配置键（秒）
-                segment_sec = int(self.config.get("VIDEO_SEGMENT_SEC", 300))
-            max_segments = max(1, int(self.config.get("VIDEO_SEGMENT_MAX_COUNT", 10)))
+            segment_sec, max_segments = self._segment_limits()
             segments = await self._slice_video_segments(video_path, segment_sec=segment_sec, max_segments=max_segments)
             if not segments:
                 media_failure(video_info, "slice", "切片未返回可用文件", self.config)
@@ -730,7 +741,12 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
                 media_failure(video_info, "frames", "片段文件不存在，无法截帧", self.config)
                 logger.warning(f"[BiliBot] 片段文件不存在，无法截帧{label}: {seg_path}")
                 return None
-            frames = await self._extract_video_frames(seg_path, count=5)
+            frames_per_seg = depth_frames_per_segment(self.config)
+            if frames_per_seg <= 0:
+                media_failure(video_info, "frames", "当前档位每段帧数为 0，跳过截帧", self.config)
+                logger.info(f"[BiliBot] 当前档位帧数为 0，跳过截帧{label}")
+                return None
+            frames = await self._extract_video_frames(seg_path, count=frames_per_seg)
             if not frames:
                 media_failure(video_info, "frames", "没有提取到视频画面", self.config)
                 return None
