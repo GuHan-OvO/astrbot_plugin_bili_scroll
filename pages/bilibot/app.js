@@ -1980,6 +1980,18 @@ function renderScheduleRing(events) {
   const now = new Date();
   const nowMinute = now.getHours() * 60 + now.getMinutes();
   const nowAngle = nowMinute / 1440 * 360;
+  // 「当前时间」指针直接用极坐标算三个点，不依赖 rotate/transform-origin：
+  // 图形关于半径对称、尖端朝内，几何上必定指向圆心。
+  const pointerApex = pointForMinute(nowMinute, 130, 180);
+  const pointerLeft = pointForMinute(nowMinute - 26, 158, 180);
+  const pointerRight = pointForMinute(nowMinute + 26, 158, 180);
+
+  const pointerPath = [
+    `M${pointerApex[0].toFixed(1)} ${pointerApex[1].toFixed(1)}`,
+    `L${pointerLeft[0].toFixed(1)} ${pointerLeft[1].toFixed(1)}`,
+    `L${pointerRight[0].toFixed(1)} ${pointerRight[1].toFixed(1)}`,
+    "Z",
+  ].join(" ");
   const ordered = events
     .map((event, index) => ({ event, index, minute: minutesOf(event.time) }))
     .filter((item) => item.minute !== null)
@@ -2003,9 +2015,9 @@ function renderScheduleRing(events) {
       <defs>${Object.entries(EVENT_STYLES).map(([key, item]) => `<linearGradient id="grad-${key}" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${item.gradient[0]}"/><stop offset="1" stop-color="${item.gradient[1]}"/></linearGradient>`).join("")}</defs>
       <circle class="ring-track" cx="180" cy="180" r="132" />${ticks}${labels}${sleepArc}
       ${ordered.map(({ event, index }, orderIndex) => ringEventArc(event, index, orderIndex)).join("")}
-      <g class="now-pointer" transform="rotate(${nowAngle} 180 180)" aria-label="当前时间 ${currentClockText()}">
-        <path class="now-pointer-needle" d="M180 40 L180 78" />
-        <circle class="now-pointer-cap" cx="180" cy="38" r="3.4" />
+      <g class="now-pointer" aria-label="当前时间 ${currentClockText()}">
+        <path class="now-pointer-arrow" d="${pointerPath}" />
+
       </g>
     </svg>
     <button class="ring-center" type="button" aria-label="显示当前时间">${center}</button>

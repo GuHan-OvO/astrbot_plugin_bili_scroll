@@ -586,19 +586,21 @@
   outline: none;
 }
 
-/* 当前时间指针：旧实现是浮在环外侧、指向外的一枚三角，和「指在环上」没有视觉关系，
-   看着像掉在图上的碎片。改成跨过环带的竖直指针 + 外端点，读作「现在就在这个位置」。 */
-.now-pointer-needle {
+/* 当前时间指针：整组只做 rotate(nowAngle 180 180)，所以图形必须关于 x=180 对称、
+   尖端朝内，旋转后才是「沿半径指向圆心」的。旧实现尖端朝外、又偏离环带，
+   看着像掉在图上的碎片；改成朝内三角后方向语义才立得住。 */
+.now-pointer-arrow {
+  fill: var(--accent);
   stroke: #fff;
-  stroke-width: 2.6;
-  stroke-linecap: round;
-  opacity: 0.92;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  opacity: 0.95;
 }
 
 .now-pointer-cap {
   fill: var(--accent);
   stroke: #fff;
-  stroke-width: 1.2;
+  stroke-width: 1;
 }
 
 .now-pointer {
