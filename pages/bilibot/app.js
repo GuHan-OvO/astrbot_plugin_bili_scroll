@@ -142,7 +142,7 @@ const NAV_ITEMS = [
   ["account", "user", "账号连接", "扫码登录与主人身份"],
   ["history", "video", "看过的视频", "它刷过的视频、评分与理由"],
   ["selftest", "refresh", "自检", "模块、配置、数据与路由自检"],
-  ["models", "lightning", "模型配置", "每个功能用哪个模型"],
+  ["models", "lightning", "模型配置", "各项功能所使用的模型"],
   ["basics", "settings", "基础设置", "人设、模型与长期配置"],
   ["allconfig", "menu", "全部配置", "全部配置按大类折叠浏览"],
 ];
@@ -902,7 +902,7 @@ async function refreshPageData(page) {
     state.interest = interest || {};
   } else if (page === "basics") {
     state.cache = await apiGet("cache/stats") || {};
-    // 基础设置页也含模型项：清单没到就渲染成文本框，宁可先朴素也别给空下拉
+    // 基础设置页同样包含模型项：清单未就绪时回退为文本输入框，避免出现空白下拉
     if (!state.modelOptions) await loadModelOptions();
   } else if (page === "models") {
     await loadModelOptions();
@@ -1161,9 +1161,9 @@ function optionLabel(key, option) {
   return OPTION_LABELS[key]?.[option] || option;
 }
 
-// 需要从 AstrBot 已配置模型里选的下拉项。静态集合是首屏兜底：model-options
-// 还没回来时也要能渲染成下拉，否则会先闪一下文本框再变成下拉。
-// 能力归类以接口返回的 config_keys 为准，这张表只决定「哪些键走模型下拉」。
+// 模型选择项：这些键渲染为下拉，候选项来自 GET model-options。
+// 保留静态集合是因为首屏渲染可能早于接口响应；此时仍需识别哪些配置项
+// 属于模型选择，接口返回后再依据 config_keys 归类能力。
 const MODEL_SELECT_KEYS = new Set([
   "LLM_PROVIDER_ID",
   "SUMMARY_PROVIDER_ID",
@@ -1184,8 +1184,7 @@ function modelItemsFor(key) {
 function modelOptionText(item) {
   const parts = [item.model || item.id];
   if (item.dim) parts.push(`${item.dim} 维`);
-  if (item.enabled === false) parts.push("未启用");
-  else if (item.loaded === false) parts.push("未加载");
+  if (item.loaded === false) parts.push("未加载");
   return parts.join(" · ");
 }
 
@@ -1195,7 +1194,8 @@ function renderModelSelect(key, label) {
   const emptyLabel = (state.modelOptions?.config_keys?.[key] || "chat") === "embedding"
     ? "（用下面的独立接口）"
     : "（用 AstrBot 默认）";
-  // 当前值已被删除时保留成一个可见选项，别让下拉静默显示成默认值把配置改掉
+  // 当前值对应的模型已不存在时，保留为可见选项，避免下拉静默回落到默认项
+  // 从而导致已保存的配置被意外改写
   const stale = value && !items.some((item) => item.id === value)
     ? `<option value="${esc(value)}" selected>⚠ ${esc(value)}（已不存在）</option>`
     : "";
@@ -2345,14 +2345,14 @@ function renderModels() {
   const head = pageHead(
     "MODELS",
     "模型配置",
-    "每个功能用哪个模型；候选项全部取自 AstrBot 面板里已配置的模型，留空就用默认。",
+    "各项功能所使用的模型。候选项来自 AstrBot 中已启用的模型，留空时使用默认模型。",
     button("重新读取", "refresh", "refresh", "soft"),
   );
   const options = state.modelOptions;
   if (!options) {
     return state.modelOptionsError
       ? `${head}${renderErrorState("模型清单读取失败", state.modelOptionsError)}`
-      : `${head}<section class="card empty-search">${icon("refresh")}<strong>正在读取模型清单</strong><span>稍等一下，正在问 AstrBot 要已配置的模型。</span></section>`;
+      : `${head}<section class="card empty-search">${icon("refresh")}<strong>正在读取模型清单</strong><span>正在获取 AstrBot 中已启用的模型。</span></section>`;
   }
 
   const configKeys = options.config_keys || {};
@@ -2367,13 +2367,13 @@ function renderModels() {
 
   return `${head}
     <section class="card section-card">
-      ${sectionHead("模型来源", "数字来自 AstrBot 面板已配置的提供商；被禁用的也会列出来并标注「未启用」。", "lightning")}
+      ${sectionHead("模型来源", "数量来自 AstrBot 中已启用的模型提供商。", "lightning")}
       <div class="settings-summary">${counts}<span>默认对话模型 <b>${esc(options.default_chat || "未设置")}</b></span></div>
     </section>
-    ${renderConfigSection("对话模型", "回复、总结、生成、计划、视觉与联网判断分别用哪个模型。", chatKeys, "message")}
-    ${renderConfigSection("向量模型", "记忆向量化用哪个模型；选了宿主模型后，下面独立的 Embedding 接口就不再生效。", embedKeys, "memory-card")}
+    ${renderConfigSection("对话模型", "回复、总结、生成、计划、视觉与联网判断分别使用的模型。", chatKeys, "message")}
+    ${renderConfigSection("向量模型", "记忆向量化所使用的模型。选中宿主向量模型后，下方独立的 Embedding 接口不再生效。", embedKeys, "memory-card")}
     ${independentKeys.length ? `<details class="settings-group card"><summary><span class="section-icon">${icon("controller")}</span><div><strong>独立 Embedding 接口（兜底）</strong><small>${independentKeys.length} 项 · 仅在向量模型留空时使用</small></div>${icon("arrow-right")}</summary><div class="settings-group-body"><div class="settings-group-inner">${renderFields(independentKeys)}</div></div></details>` : ""}
-    ${unknownKeys ? `<div class="settings-summary"><span>有 ${unknownKeys} 个模型项在当前版本里不存在，已跳过</span></div>` : ""}
+    ${unknownKeys ? `<div class="settings-summary"><span>当前版本缺少 ${unknownKeys} 个模型配置项，已跳过</span></div>` : ""}
   `;
 }
 

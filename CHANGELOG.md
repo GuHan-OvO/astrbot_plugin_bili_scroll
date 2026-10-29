@@ -5,46 +5,53 @@
 
 ## v1.9.0 — 2026-10-30
 
-### 模型选择改为从 AstrBot 已配置的模型里拉取
+### 模型选择改为读取 AstrBot 已启用的模型
 
-- 新增 `GET model-options`：把 AstrBot 面板里已配置的对话 / 向量 / 重排序 / 语音合成 /
-  语音识别模型整理成清单下发。7 个 `*_PROVIDER_ID` 与新增的 `EMBED_PROVIDER_ID`
-  从手填字符串变成下拉。
-- **禁用的模型也要能选**：`context.get_all_*()` 只返回已启用的提供商（`ProviderManager.load_provider`
-  在 `enable` 为假时直接 return），所以清单同时读 `provider_manager.providers_config`，
-  禁用的项标注「未启用」照常可选。
-- **密钥不外泄**：`provider_config` 里的 `key` / `embedding_api_key` / `rerank_api_key`
-  是明文，本接口每条只出 `id / model / provider_type / enabled / loaded`（向量模型多一个 `dim`），
-  测试用递归扫描兜住这条约束。
-- chat 条目自身没有 `provider_type`（类型记在 `provider_sources` 上），按
-  `provider_source_id` 回填，否则按能力过滤会得到 0 条。
+- 新增 `GET model-options`：将 AstrBot 中已启用的对话 / 向量 / 重排序 / 语音合成 /
+  语音识别模型整理为清单下发。7 个 `*_PROVIDER_ID` 与新增的 `EMBED_PROVIDER_ID`
+  由手工填写改为下拉选择。
+- **仅导出已启用的模型**：未启用的 provider 不会被 AstrBot 加载，选中后无法调用，
+  因此不进入候选。`context.get_all_*()` 只返回已启用的提供商，故清单同时读取
+  `provider_manager.providers_config`，以补齐「已启用但尚未加载」的条目。
+- **密钥不外泄**：`provider_config` 中的 `key` / `embedding_api_key` / `rerank_api_key`
+  为明文，本接口每条仅输出 `id / model / provider_type / enabled / loaded`
+  （向量模型额外输出 `dim`），并由测试以递归扫描校验该约束。
+- chat 条目自身不含 `provider_type`（类型记录在 `provider_sources` 中），需按
+  `provider_source_id` 回填，否则按能力过滤将得到空列表。
 
 ### 新增「模型配置」页
 
 - 侧边栏「配置」组新增入口，页内按对话 / 向量等能力分区，每项一个下拉。
-- 视图是 SPA 内页面而非独立目录：宿主侧栏对每个插件只取 `pages[0]`，新开目录不会出现在侧边栏。
-- 当前值已被删除时保留成「⚠ xxx（已不存在）」选项，不让下拉静默回落到默认值把配置改掉。
-- 基础设置页里的模型项同样变成下拉；模型清单还没回来时退回文本框，避免出现空白下拉。
+- 该视图为 SPA 内页面而非独立目录：宿主侧栏对每个插件仅取 `pages[0]`，
+  新建目录不会出现在侧边栏中。
+- 当前值对应的模型已不存在时，保留为「⚠ xxx（已不存在）」选项，避免下拉静默回落
+  至默认项而使已保存的配置被改写。
+- 基础设置页中的模型项同样渲染为下拉；模型清单未就绪时回退为文本输入框，
+  避免出现空白下拉。
 
 ### 向量模型可选用宿主提供商
 
-- 新增配置项 `EMBED_PROVIDER_ID`：留空仍是原来的独立 Embedding 接口，行为不变。
-- 选了宿主模型后 `_get_embedding` 先走 `EmbeddingProvider.get_embedding`，失败再回退独立接口。
-- 注意：换向量模型会让已存记忆的向量维度变化，旧向量无法比对，需要重新向量化（已写进配置项的 hint）。
+- 新增配置项 `EMBED_PROVIDER_ID`：留空时仍使用原有的独立 Embedding 接口，行为不变。
+- 选择宿主模型后，`_get_embedding` 优先调用 `EmbeddingProvider.get_embedding`，
+  失败时回退至独立接口。
+- 注意：更换向量模型会改变已存记忆的向量维度，旧向量无法比对，需重新向量化
+  （已写入该配置项的 hint）。
 
-### 配置分组收敛成一套口径
+### 配置分组收敛为单一来源
 
-- 新增 `GET config/groups`。此前同一份 schema 被三套口径解释（`config.js` 45 组、
-  `app.js` 18 组、`app.js` 11 组），改一处就和另一处对不上。现在统一由后端下发 8 个功能域
-  （基础与账号 / 模型与能力 / 回复与互动 / 主动与日常 / 私信与分享 / 人格与记忆 / 安全 / 其它）。
-- 模型选择项在 schema 里的前缀不统一（`LLM_PROVIDER_ID` 挂在【人设】、
-  `SCHEDULE_PLAN_PROVIDER_ID` 挂在【自主安排】），单靠前缀分组会让「模型」页一半是空的，
-  所以这 8 个键显式归入模型组。
+- 新增 `GET config/groups`。此前同一份 schema 由三套分组口径解释（`config.js` 45 组、
+  `app.js` 18 组、`app.js` 11 组），任一处调整都会与其余两处产生偏差。现统一由后端下发
+  8 个功能域（基础与账号 / 模型与能力 / 回复与互动 / 主动与日常 / 私信与分享 /
+  人格与记忆 / 安全 / 其它）。
+- 模型选择项在 schema 中的前缀并不统一（`LLM_PROVIDER_ID` 位于【人设】、
+  `SCHEDULE_PLAN_PROVIDER_ID` 位于【自主安排】），仅按前缀分组会导致模型分组内容缺失，
+  故这 8 个键显式归入模型组。
 
 ### 测试
 
-- 新增 `tests/test_model_options.py`（8 条）与 `tests/test_config_groups.py`（10 条），
-  覆盖禁用项可见、类型回填、合并、密钥零泄漏、单 provider 异常隔离、真实 schema 全键有归属。
+- 新增 `tests/test_model_options.py`（9 条）与 `tests/test_config_groups.py`（10 条），
+  覆盖启用状态过滤、类型回填、运行时合并、密钥零泄漏、单 provider 异常隔离、
+  真实 schema 全键归位。
 
 ## v1.8.12 — 2026-10-27
 

@@ -1,18 +1,18 @@
 """配置分组真源。
 
-历史包袱：同一份 ``_conf_schema.json`` 被三套互不相同的分组口径解释过 ——
+历史情况：同一份 ``_conf_schema.json`` 曾被三套互不一致的分组口径解释 ——
 
-* ``pages/config/config.js:57-65`` 按 ``description`` 的 ``【…】`` 前缀分 45 组；
-* ``pages/bilibot/app.js:2321`` 的 ``ALL_CONFIG_GROUPS`` 是 18 组；
-* ``pages/bilibot/app.js:2240`` 的 ``BASIC_GROUP_ORDER`` 是 11 组。
+* ``pages/config/config.js:57-65`` 按 ``description`` 的 ``【…】`` 前缀分出 45 组；
+* ``pages/bilibot/app.js:2321`` 的 ``ALL_CONFIG_GROUPS`` 为 18 组；
+* ``pages/bilibot/app.js:2240`` 的 ``BASIC_GROUP_ORDER`` 为 11 组。
 
-于是「基础配置」和「全部配置」两个视图对同一批键给出不同归属，改一处就会
-和另一处对不上。本模块把它们收敛成**一套**定义，由 ``GET config/groups``
-下发给前端，前端只负责渲染。
+这使「基础配置」与「全部配置」两个视图对同一批键的归属不一致，任一处调整都会
+与另一处产生偏差。本模块将其统一为**唯一**定义，由 ``GET config/groups`` 下发，
+前端仅负责渲染。
 
-分组规则：取 ``description`` 的 ``【…】`` 前缀，按 ``GROUP_DEFINITIONS``
-里的 ``prefixes`` 做**最长前缀匹配**（所以 ``高级·视觉`` 命中「高级·视觉」
-而不是「高级」），未命中任何前缀的进 ``other``。没有前缀的键同样进 ``other``。
+分组规则：取 ``description`` 的 ``【…】`` 前缀，在 ``GROUP_DEFINITIONS`` 的
+``prefixes`` 中做**最长前缀匹配**（例如 ``主动看片·来源`` 命中 ``主动看片``）；
+未命中任何前缀的配置项归入 ``other``，无前缀者亦归入 ``other``。
 """
 from __future__ import annotations
 
@@ -23,23 +23,23 @@ from .model_options import MODEL_CONFIG_KEYS
 
 _GROUP_RE = re.compile(r"^【([^】]+)】")
 
-# 模型选择项在 schema 里的前缀并不统一（LLM_PROVIDER_ID 挂在【人设】、
-# SCHEDULE_PLAN_PROVIDER_ID 挂在【自主安排】、其余散在【高级·视觉】【联网搜索】），
-# 只按前缀分组会让「模型」页一半是空的。所以这些键显式归入 model 组，
-# 优先级高于前缀规则 —— 这也是「模型与人设分开」这个细分的实际含义。
+# 模型选择项在 schema 中的前缀并不统一（LLM_PROVIDER_ID 位于【人设】、
+# SCHEDULE_PLAN_PROVIDER_ID 位于【自主安排】、其余分散于【高级·视觉】【联网搜索】），
+# 仅按前缀分组会导致模型分组内容缺失。故这些键显式归入 model 组，
+# 优先级高于前缀规则；这也正是「模型与人设分离」这一细分的实际含义。
 KEY_OVERRIDES: dict[str, str] = {key: "model" for key in MODEL_CONFIG_KEYS}
 
 GROUP_DEFINITIONS: tuple[dict[str, Any], ...] = (
     {
         "id": "base",
         "label": "基础与账号",
-        "hint": "登录态、代理和兼容开关；平时基本不用动。",
+        "hint": "登录状态、网络代理与兼容性开关，通常无需调整。",
         "prefixes": ("账号", "网络代理", "兼容"),
     },
     {
         "id": "model",
         "label": "模型与能力",
-        "hint": "各类模型的选择与接入；每项都优先用 AstrBot 已配置的模型。",
+        "hint": "各类模型的选择与接入，优先使用 AstrBot 中已启用的模型。",
         "prefixes": (
             "高级",
             "总结模型",
@@ -57,7 +57,7 @@ GROUP_DEFINITIONS: tuple[dict[str, Any], ...] = (
     {
         "id": "proactive",
         "label": "主动与日常",
-        "hint": "自己刷视频、看番、直播、发动态、写总结和安排作息。",
+        "hint": "主动刷视频、追番、直播互动、动态发布、总结与作息安排。",
         "prefixes": (
             "主动行为",
             "主动看片",
@@ -94,7 +94,7 @@ GROUP_DEFINITIONS: tuple[dict[str, Any], ...] = (
     {
         "id": "security",
         "label": "安全",
-        "hint": "工具白名单、拉黑和恶意输入告警。",
+        "hint": "工具白名单、自动拉黑与恶意输入告警。",
         "prefixes": ("安全与工具", "拉黑", "恶意告警", "特别关注"),
     },
 )

@@ -1,21 +1,24 @@
-"""把 AstrBot 已配置的模型整理成前端可直接渲染的清单。
+"""把 AstrBot 已启用的模型整理成前端可直接渲染的清单。
 
-BiliBot 的模型选择项（``*_PROVIDER_ID``）以前只能手填字符串，用户必须自己
-去面板里抄 provider id。这里把宿主侧的 provider 统一导出，供配置页做成下拉。
+BiliBot 的模型选择项（``*_PROVIDER_ID``）原先需要手工填写 provider id，
+使用方须自行到面板核对。本模块将宿主侧的 provider 统一导出，供配置页渲染下拉。
 
-两条数据来源缺一不可：
+数据来源有两处，用途不同：
 
-* ``context.get_all_providers()`` 等只返回 **已启用** 的 provider ——
-  ``ProviderManager.load_provider`` 在 ``enable`` 为假时直接 return，
-  禁用项永远不会被实例化；
-* ``provider_manager.providers_config`` 是配置真源，含禁用项与未加载项，
-  但 chat 条目的 ``provider_type`` 往往是空串（类型在 ``provider_sources`` 里），
-  必须按 ``provider_source_id`` 回填，否则按能力过滤会得到 0 条。
+* ``context.get_all_providers()`` 等只返回 **已启用** 且已实例化的 provider
+  （``ProviderManager.load_provider`` 在 ``enable`` 为假时直接返回）；
+* ``provider_manager.providers_config`` 是配置真源，用于补齐「已启用但未加载」
+  的条目。该列表中 chat 条目的 ``provider_type`` 通常为空串（类型记录在
+  ``provider_sources`` 中），须按 ``provider_source_id`` 回填，否则按能力
+  过滤将得到空列表。
 
-**安全约束**：``provider_config`` 里的 ``key`` / ``embedding_api_key`` /
-``rerank_api_key`` 是明文（``manager._resolve_env_key_list`` 会把 ``$ENV``
-解析后写回同一个字典），所以本模块只挑 ``id / model / provider_type /
-enabled / loaded`` 几个字段，任何情况下都不把 provider 配置原文带出去。
+**只导出已启用的模型**：未启用的 provider 不会被 AstrBot 加载，选中后无法调用，
+因此不进入候选。
+
+**安全约束**：``provider_config`` 中的 ``key`` / ``embedding_api_key`` /
+``rerank_api_key`` 为明文（``manager._resolve_env_key_list`` 会把 ``$ENV``
+解析后写回同一字典），本模块仅导出 ``id / model / provider_type /
+enabled / loaded`` 五个字段，不得输出 provider 配置原文。
 """
 from __future__ import annotations
 
@@ -156,7 +159,7 @@ def _instance_items(context: Any) -> dict[str, list[dict]]:
 
 
 def _config_items(context: Any) -> dict[str, list[dict]]:
-    """取配置里声明的全部 provider（含禁用 / 未加载）。"""
+    """取配置中已启用但尚未加载的 provider（用于补齐实例列表的缺口）。"""
     buckets: dict[str, list[dict]] = {cap: [] for cap, _ in CAPABILITIES}
     manager = getattr(context, "provider_manager", None)
     entries = getattr(manager, "providers_config", None) or []
@@ -173,12 +176,15 @@ def _config_items(context: Any) -> dict[str, list[dict]]:
     for entry in entries:
         if not isinstance(entry, dict):
             continue
+        if not entry.get("enable", True):
+            # 未启用的模型不会被加载，选中也无法调用，不纳入候选。
+            continue
         pid = str(entry.get("id") or "").strip()
         if not pid:
             continue
         provider_type = str(entry.get("provider_type") or "").strip()
         if not provider_type:
-            # chat 条目自身不带类型，类型记在 provider_source 上。
+            # chat 条目自身不带类型，类型记录在 provider_source 上。
             provider_type = source_types.get(str(entry.get("provider_source_id") or "").strip(), "")
         capability = _TYPE_TO_CAPABILITY.get(provider_type, "chat")
         if capability not in buckets:
@@ -188,7 +194,7 @@ def _config_items(context: Any) -> dict[str, list[dict]]:
                 pid,
                 _model_of(None, entry),
                 provider_type,
-                enabled=bool(entry.get("enable", True)),
+                enabled=True,
                 loaded=False,
             )
         )
@@ -209,7 +215,7 @@ def _default_chat_provider(context: Any) -> str:
 
 
 def collect_model_options(context: Any) -> dict:
-    """汇总宿主侧模型清单。
+    """汇总宿主侧已启用的模型清单。
 
     返回结构（前端契约，改动需同步 ``docs/frontend-spec-model-config.md``）::
 
@@ -219,8 +225,9 @@ def collect_model_options(context: Any) -> dict:
           "default_chat": "<provider id 或空串>"
         }
 
-    每项 ``item`` 只含 ``id / model / provider_type / enabled / loaded``
-    （向量模型可能多一个 ``dim``）；**不含任何密钥字段**。
+    每项 ``item`` 仅含 ``id / model / provider_type / enabled / loaded``
+    （向量模型可能附加 ``dim``）；``enabled`` 恒为真，保留该字段是为了让前端
+    契约稳定。响应中不含任何密钥字段。
     """
     loaded = _instance_items(context)
     declared = _config_items(context)
@@ -235,16 +242,16 @@ def collect_model_options(context: Any) -> dict:
             if existing is None:
                 merged[item["id"]] = item
             else:
-                # 同一 id 同时出现在配置与实例里：以实例的模型名为准，
-                # 但保留配置里的启用状态（禁用项不可能被实例化）。
+                # 同一 id 同时出现在配置与实例中：模型名以实例为准
+                # （实例反映实际加载的模型），并标记为已加载。
                 existing["loaded"] = True
                 if item["model"]:
                     existing["model"] = item["model"]
                 if item.get("dim"):
                     existing["dim"] = item["dim"]
         items = list(merged.values())
-        # 能用的排前面，其次按 id 稳定排序，避免每次刷新顺序抖动。
-        items.sort(key=lambda one: (not one["enabled"], one["id"]))
+        # 按 id 稳定排序，保证每次刷新顺序一致。
+        items.sort(key=lambda one: one["id"])
         groups.append({"capability": capability, "label": label, "items": items})
 
     return {

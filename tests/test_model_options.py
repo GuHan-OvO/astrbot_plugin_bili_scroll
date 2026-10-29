@@ -100,8 +100,8 @@ def _walk_keys(node):
 
 
 class CollectModelOptionsTests(unittest.TestCase):
-    def test_未启用的模型也要出现在清单里(self):
-        # providers_config 含禁用项，实例列表没有它（load_provider 跳过 enable=false）
+    def test_未启用的模型不进入候选(self):
+        # 未启用的 provider 不会被 AstrBot 加载，选中后也无法调用，故不纳入候选
         ctx = _Ctx(
             chat_insts=[_Provider("启用中的模型", "glm-5")],
             providers_config=[
@@ -112,11 +112,20 @@ class CollectModelOptionsTests(unittest.TestCase):
         )
         payload = collect_model_options(ctx)
         ids = [item["id"] for item in _items(payload, "chat")]
-        self.assertIn("停用的模型", ids)
         self.assertIn("启用中的模型", ids)
-        stopped = next(item for item in _items(payload, "chat") if item["id"] == "停用的模型")
-        self.assertFalse(stopped["enabled"])
-        self.assertFalse(stopped["loaded"])
+        self.assertNotIn("停用的模型", ids)
+
+    def test_已启用但尚未加载的模型仍进入候选(self):
+        # 实例列表只含已加载项；配置里已启用但未加载的需由 providers_config 补齐
+        ctx = _Ctx(
+            providers_config=[
+                {"id": "已启用未加载", "enable": True, "model": "m", "provider_source_id": "s1"},
+            ],
+            provider_sources_config=[{"id": "s1", "provider_type": "chat_completion"}],
+        )
+        items = _items(collect_model_options(ctx), "chat")
+        self.assertEqual([item["id"] for item in items], ["已启用未加载"])
+        self.assertFalse(items[0]["loaded"])
 
     def test_chat条目按provider_source回填类型(self):
         # 真实配置里 chat 条目的 provider_type 是空串，类型记在 source 上
