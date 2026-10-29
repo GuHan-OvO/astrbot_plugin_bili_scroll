@@ -586,20 +586,19 @@
   outline: none;
 }
 
-.now-pointer-halo {
-  fill: var(--accent);
-  opacity: 0.14;
-}
-
-.now-pointer-cone {
-  fill: var(--accent);
-}
-
-.now-pointer-highlight {
+/* 当前时间指针：旧实现是浮在环外侧、指向外的一枚三角，和「指在环上」没有视觉关系，
+   看着像掉在图上的碎片。改成跨过环带的竖直指针 + 外端点，读作「现在就在这个位置」。 */
+.now-pointer-needle {
   stroke: #fff;
-  stroke-width: 1.4;
+  stroke-width: 2.6;
   stroke-linecap: round;
-  opacity: 0.9;
+  opacity: 0.92;
+}
+
+.now-pointer-cap {
+  fill: var(--accent);
+  stroke: #fff;
+  stroke-width: 1.2;
 }
 
 .now-pointer {

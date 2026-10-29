@@ -2004,9 +2004,8 @@ function renderScheduleRing(events) {
       <circle class="ring-track" cx="180" cy="180" r="132" />${ticks}${labels}${sleepArc}
       ${ordered.map(({ event, index }, orderIndex) => ringEventArc(event, index, orderIndex)).join("")}
       <g class="now-pointer" transform="rotate(${nowAngle} 180 180)" aria-label="当前时间 ${currentClockText()}">
-        <path class="now-pointer-halo" d="M180 39 L165 9 Q180 4 195 9 Z" />
-        <path class="now-pointer-cone" d="M180 36 L171 12 Q180 8 189 12 Z" />
-        <path class="now-pointer-highlight" d="M180 33 L176 14" />
+        <path class="now-pointer-needle" d="M180 40 L180 78" />
+        <circle class="now-pointer-cap" cx="180" cy="38" r="3.4" />
       </g>
     </svg>
     <button class="ring-center" type="button" aria-label="显示当前时间">${center}</button>
