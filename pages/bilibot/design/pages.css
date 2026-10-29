@@ -592,9 +592,9 @@
 .now-pointer-arrow {
   fill: var(--accent);
   stroke: #fff;
-  stroke-width: 1.2;
+  stroke-width: 1;
   stroke-linejoin: round;
-  opacity: 0.95;
+  opacity: 0.92;
 }
 
 .now-pointer-cap {

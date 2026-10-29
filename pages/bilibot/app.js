@@ -1982,9 +1982,9 @@ function renderScheduleRing(events) {
   const nowAngle = nowMinute / 1440 * 360;
   // 「当前时间」指针直接用极坐标算三个点，不依赖 rotate/transform-origin：
   // 图形关于半径对称、尖端朝内，几何上必定指向圆心。
-  const pointerApex = pointForMinute(nowMinute, 130, 180);
-  const pointerLeft = pointForMinute(nowMinute - 26, 158, 180);
-  const pointerRight = pointForMinute(nowMinute + 26, 158, 180);
+  const pointerApex = pointForMinute(nowMinute, 135, 180);
+  const pointerLeft = pointForMinute(nowMinute - 17, 149, 180);
+  const pointerRight = pointForMinute(nowMinute + 17, 149, 180);
 
   const pointerPath = [
     `M${pointerApex[0].toFixed(1)} ${pointerApex[1].toFixed(1)}`,
