@@ -934,6 +934,7 @@ async function navigate(page) {
     content.dataset.page = page;
     bindContent();
     mountEmbedded(page, token);
+    playEnterSequence();
     // 新页从顶部开始：在快照捕获前改滚动位置，避免转场结束后才跳一下
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   };
@@ -2654,6 +2655,19 @@ function decorateMotion(root = content) {
   root.querySelectorAll(".metric-card, .capability-card").forEach((node) => node.setAttribute("data-tilt", ""));
 }
 
+// 页面入场编排：重新挂一次类名让 CSS 时间轴从头播，播完撤掉，
+// 避免常驻的 animation 影响后续 transform / 快照。
+let enterTimer = 0;
+
+function playEnterSequence() {
+  window.clearTimeout(enterTimer);
+  content.classList.remove("is-entering");
+  if (prefersReducedMotion()) return;
+  void content.offsetWidth; // 强制回流，否则同名类连续两次添加不会重播
+  content.classList.add("is-entering");
+  enterTimer = window.setTimeout(() => content.classList.remove("is-entering"), 1200);
+}
+
 // 滚动叙事：顶栏形变、页头视差、环境层位移、回到顶部按钮，全部读同一组变量
 let scrollFrame = 0;
 const scrollTopButton = () => document.querySelector("#scroll-top");
@@ -3383,6 +3397,8 @@ function init() {
     app.classList.remove("is-booting");
     setPageChrome(state.currentPage);
     renderCurrentPage();
+    // 首屏也要走一次入场编排，否则只有切页才有动效
+    playEnterSequence();
     updateSaveDock();
     // 内嵌视图在 token 还新鲜时就取回来（插件页资源带 60 秒有效期的 asset_token）
     preloadEmbeddedModules();

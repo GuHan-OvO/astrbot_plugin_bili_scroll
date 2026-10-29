@@ -1426,3 +1426,99 @@ html[data-mode="extension"] .creator-grid-noise {
     animation-duration: 1ms !important;
   }
 }
+
+/* ============================================================================
+ * 页面入场编排（红队轮）：红队体检发现全站 52 个动画元素里 29 个是同一个
+ * listItemIn，页面切换后只有 View Transition 的层间推进，层内没有任何次序。
+ * 这里按「角色」而不是「元素」编排：页头 → 区块 → 网格卡片，越靠后越短。
+ * 与 VT 叠加时幅度刻意压小，避免和层位移打架。
+ * ========================================================================== */
+@keyframes sectionEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+}
+
+@keyframes blockEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.996);
+  }
+}
+
+#content.is-entering > * {
+  animation: sectionEnter var(--t4) var(--ease-enter) backwards;
+  animation-delay: calc(var(--enter-step, 0) * 42ms + 60ms);
+}
+
+#content.is-entering > *:nth-child(1) { --enter-step: 0; }
+#content.is-entering > *:nth-child(2) { --enter-step: 1; }
+#content.is-entering > *:nth-child(3) { --enter-step: 2; }
+#content.is-entering > *:nth-child(4) { --enter-step: 3; }
+#content.is-entering > *:nth-child(5) { --enter-step: 4; }
+#content.is-entering > *:nth-child(6) { --enter-step: 5; }
+#content.is-entering > *:nth-child(n + 7) { --enter-step: 6; }
+
+/* 首屏网格内部再错一层：卡片比它所在的区块再晚 90ms 进来 */
+#content.is-entering .metrics-grid > *,
+#content.is-entering .capability-grid > *,
+#content.is-entering .behavior-grid > * {
+  animation: blockEnter var(--t4) var(--ease-enter) backwards;
+  animation-delay: calc(var(--enter-step, 0) * 34ms + 150ms);
+}
+
+#content.is-entering .metrics-grid > *:nth-child(1),
+#content.is-entering .capability-grid > *:nth-child(1),
+#content.is-entering .behavior-grid > *:nth-child(1) { --enter-step: 0; }
+#content.is-entering .metrics-grid > *:nth-child(2),
+#content.is-entering .capability-grid > *:nth-child(2),
+#content.is-entering .behavior-grid > *:nth-child(2) { --enter-step: 1; }
+#content.is-entering .metrics-grid > *:nth-child(3),
+#content.is-entering .capability-grid > *:nth-child(3),
+#content.is-entering .behavior-grid > *:nth-child(3) { --enter-step: 2; }
+#content.is-entering .metrics-grid > *:nth-child(4),
+#content.is-entering .capability-grid > *:nth-child(4),
+#content.is-entering .behavior-grid > *:nth-child(4) { --enter-step: 3; }
+#content.is-entering .metrics-grid > *:nth-child(5),
+#content.is-entering .capability-grid > *:nth-child(5),
+#content.is-entering .behavior-grid > *:nth-child(5) { --enter-step: 4; }
+#content.is-entering .metrics-grid > *:nth-child(n + 6),
+#content.is-entering .capability-grid > *:nth-child(n + 6),
+#content.is-entering .behavior-grid > *:nth-child(n + 6) { --enter-step: 5; }
+
+/* ============================================================================
+ * 命中区下限（红队轮）：实测 allconfig 的删除按钮只有 19×26、行为滑杆 22px 高，
+ * 触摸设备上根本点不准。只放宽可点范围，不动视觉尺寸。
+ * ========================================================================== */
+.time-remove {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.number-stepper button {
+  min-width: 34px;
+  min-height: 34px;
+}
+
+.plan-mode-switch button,
+.capability-settings {
+  min-height: 34px;
+}
+
+/* 滑杆：给上下留出 10px 命中区，轨道本身靠 background-clip 保持在内容盒里 */
+.behavior-range {
+  height: auto;
+  min-height: 44px;
+  padding-block: 10px;
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #content.is-entering > *,
+  #content.is-entering .metrics-grid > *,
+  #content.is-entering .capability-grid > *,
+  #content.is-entering .behavior-grid > * {
+    animation: none !important;
+  }
+}
