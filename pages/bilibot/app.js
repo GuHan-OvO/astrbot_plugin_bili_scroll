@@ -2019,7 +2019,7 @@ function renderActivityControl() {
   const value = clamp(num(currentValue("AUTONOMOUS_ACTIVITY_LEVEL"), 55), 0, 100);
   return `<section class="activity-panel activity-enter ${value >= 100 ? "is-max" : ""}">
     <div class="activity-copy"><span>TODAY'S ACTIVITY</span><h2><b id="activity-value">${value}</b><small>%</small></h2><p id="activity-label">${activityLabel(value)}状态 · 事件更频繁，活动时间也更长</p></div>
-    <div class="activity-slider-wrap"><div class="activity-track" style="--activity:${value}%"><span class="activity-fill"></span><input id="activity-slider" class="activity-slider" data-config-key="AUTONOMOUS_ACTIVITY_LEVEL" type="range" min="0" max="100" step="1" value="${value}" aria-label="今日基础活跃度" /></div><div class="activity-scale"><span>低迷</span><span>平稳</span><span>活跃</span><span>高能</span></div></div>
+    <div class="activity-slider-wrap"><input id="activity-slider" class="activity-slider" data-config-key="AUTONOMOUS_ACTIVITY_LEVEL" type="range" min="0" max="100" step="1" value="${value}" aria-label="今日基础活跃度" /><div class="activity-track" style="--activity:${value}%"><span class="activity-fill"></span></div><div class="activity-scale"><span>低迷</span><span>平稳</span><span>活跃</span><span>高能</span></div></div>
   </section>`;
 }
 

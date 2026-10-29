@@ -1513,6 +1513,20 @@ html[data-mode="extension"] .creator-grid-noise {
   padding-block: 10px;
   background-clip: content-box;
 }
+/* 活跃度滑杆：轨道只有 26px 且 overflow:hidden，input 原本在轨道内部命中区被裁掉。
+   把 input 移到轨道外，上下各外扩 8px 拿到 42px 命中区，垂直中心与轨道对齐。 */
+.activity-slider-wrap {
+  position: relative;
+}
+
+.activity-slider {
+  position: absolute;
+  inset: -8px 0 auto;
+  width: 100%;
+  height: 42px;
+  margin: 0;
+  z-index: 2;
+}
 
 @media (prefers-reduced-motion: reduce) {
   #content.is-entering > *,
