@@ -39,7 +39,9 @@ from .config import (
     WATCH_LOG_FILE,
 )
 
+from .config_groups import build_groups
 from .history import find_entry, query_history
+from .model_options import collect_model_options
 from .watch_log import load_watch_entries
 
 PLUGIN_NAME = "astrbot_plugin_bili_scroll"
@@ -135,6 +137,8 @@ def register_webui(plugin_instance: Any, context: Context):
         ("persona/state", "GET", handle_get_persona_state, "BiliBot persona state"),
         ("interest/status", "GET", handle_get_interest_status, "BiliBot video interest status"),
         ("config/schema", "GET", handle_get_config_schema, "BiliBot configuration schema"),
+        ("config/groups", "GET", handle_get_config_groups, "BiliBot configuration groups"),
+        ("model-options", "GET", handle_get_model_options, "Models configured in AstrBot"),
         ("config", "GET", handle_get_config, "Read BiliBot configuration"),
         ("config", "POST", handle_save_config, "Save BiliBot configuration"),
         ("account/info", "GET", handle_account_info, "Bilibili account status"),
@@ -914,6 +918,27 @@ async def handle_get_config_schema(plugin: Any):
         return _response(_load_schema())
     except Exception as exc:
         logger.exception(f"[BiliBot WebUI] schema failed: {exc}")
+        return _failure(str(exc), 500)
+
+
+async def handle_get_config_groups(plugin: Any):
+    """配置分组真源：把 45/18/11 三套口径收敛成一套下发给前端。"""
+    try:
+        return _response(build_groups(_load_schema()))
+    except Exception as exc:
+        logger.exception(f"[BiliBot WebUI] config groups failed: {exc}")
+        return _failure(str(exc), 500)
+
+
+async def handle_get_model_options(plugin: Any):
+    """AstrBot 里已配置的模型清单，供配置页的模型下拉使用。
+
+    返回体只含 id / model / provider_type / enabled / loaded，**不含任何密钥**。
+    """
+    try:
+        return _response(collect_model_options(plugin.context))
+    except Exception as exc:
+        logger.exception(f"[BiliBot WebUI] model options failed: {exc}")
         return _failure(str(exc), 500)
 
 

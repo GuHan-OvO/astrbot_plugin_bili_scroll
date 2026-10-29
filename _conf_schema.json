@@ -2258,6 +2258,12 @@
     "default": [],
     "hint": "这些UID永远不会被自动拉黑（主人UID已自动包含，无需重复填）"
   },
+  "EMBED_PROVIDER_ID": {
+    "description": "【高级·记忆】向量模型（选 AstrBot 已配置的 Embedding 提供商）",
+    "type": "string",
+    "default": "",
+    "hint": "留空则用下面的独立 Embedding 接口。选了宿主模型后，下面的 Key / 接口地址 / 模型名都不再生效；换模型会让已存记忆的向量维度变化、旧向量无法比对，需要重新向量化。"
+  },
   "EMBED_API_KEY": {
     "description": "【高级·记忆】Embedding API Key（记忆向量化用）",
     "type": "string",

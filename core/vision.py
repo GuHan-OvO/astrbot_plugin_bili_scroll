@@ -82,7 +82,47 @@ class VisionMixin:
             )
         return self._embed_client
 
+    def _embed_provider(self):
+        """按 ``EMBED_PROVIDER_ID`` 取 AstrBot 已配置的向量模型。
+
+        取不到就返回 None，由调用方回退到插件自建的 Embedding 接口 —— 两套
+        配置各管一条路，避免选了宿主模型却因为没填 Key 而整体不可用。
+        """
+        provider_id = str(self.config.get("EMBED_PROVIDER_ID", "") or "").strip()
+        if not provider_id:
+            return None
+        getter = getattr(self.context, "get_provider_by_id", None)
+        if not callable(getter):
+            logger.debug("[BiliBot] 当前 Context 不支持按 id 取模型，使用独立 Embedding 接口")
+            return None
+        try:
+            provider = getter(provider_id)
+        except Exception as exc:
+            logger.debug(f"[BiliBot] 读取向量模型 {provider_id} 失败：{exc}")
+            return None
+        if provider is None:
+            logger.warning(
+                f"[BiliBot] EMBED_PROVIDER_ID={provider_id} 在 AstrBot 里找不到，回退独立 Embedding 接口"
+            )
+            return None
+        if not callable(getattr(provider, "get_embedding", None)):
+            logger.warning(
+                f"[BiliBot] EMBED_PROVIDER_ID={provider_id} 不是向量模型，回退独立 Embedding 接口"
+            )
+            return None
+        return provider
+
     async def _get_embedding(self, text):
+        provider = self._embed_provider()
+        if provider is not None:
+            try:
+                vector = await provider.get_embedding(text)
+                if vector:
+                    return list(vector)
+            except Exception as e:
+                logger.warning(
+                    f"[BiliBot] 宿主向量模型调用失败，本次回退独立接口: {redact_proxy_error(e, self.config)}"
+                )
         client = self._get_embed_client()
         if not client:
             return None

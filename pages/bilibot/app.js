@@ -112,6 +112,8 @@ const state = {
   security: {},
   cache: {},
   availableTools: [],
+  modelOptions: null,
+  modelOptionsError: "",
   toolSearch: "",
   toolPickerSelection: new Set(),
   settingsSearch: "",
@@ -140,6 +142,7 @@ const NAV_ITEMS = [
   ["account", "user", "账号连接", "扫码登录与主人身份"],
   ["history", "video", "看过的视频", "它刷过的视频、评分与理由"],
   ["selftest", "refresh", "自检", "模块、配置、数据与路由自检"],
+  ["models", "lightning", "模型配置", "每个功能用哪个模型"],
   ["basics", "settings", "基础设置", "人设、模型与长期配置"],
   ["allconfig", "menu", "全部配置", "全部配置按大类折叠浏览"],
 ];
@@ -152,7 +155,7 @@ const NAV_GROUPS = [
   ["数据", ["memory"]],
   ["安全与账号", ["security", "account"]],
   ["页面", ["history", "selftest"]],
-  ["配置", ["basics", "allconfig"]],
+  ["配置", ["models", "basics", "allconfig"]],
 ];
 
 
@@ -899,6 +902,10 @@ async function refreshPageData(page) {
     state.interest = interest || {};
   } else if (page === "basics") {
     state.cache = await apiGet("cache/stats") || {};
+    // 基础设置页也含模型项：清单没到就渲染成文本框，宁可先朴素也别给空下拉
+    if (!state.modelOptions) await loadModelOptions();
+  } else if (page === "models") {
+    await loadModelOptions();
   }
 }
 
@@ -1154,6 +1161,50 @@ function optionLabel(key, option) {
   return OPTION_LABELS[key]?.[option] || option;
 }
 
+// 需要从 AstrBot 已配置模型里选的下拉项。静态集合是首屏兜底：model-options
+// 还没回来时也要能渲染成下拉，否则会先闪一下文本框再变成下拉。
+// 能力归类以接口返回的 config_keys 为准，这张表只决定「哪些键走模型下拉」。
+const MODEL_SELECT_KEYS = new Set([
+  "LLM_PROVIDER_ID",
+  "SUMMARY_PROVIDER_ID",
+  "GENERATION_PROVIDER_ID",
+  "SCHEDULE_PLAN_PROVIDER_ID",
+  "VIDEO_VISION_PROVIDER_ID",
+  "IMAGE_VISION_PROVIDER_ID",
+  "WEB_SEARCH_JUDGE_PROVIDER_ID",
+  "EMBED_PROVIDER_ID",
+]);
+
+function modelItemsFor(key) {
+  const capability = state.modelOptions?.config_keys?.[key] || "chat";
+  const group = (state.modelOptions?.groups || []).find((item) => item.capability === capability);
+  return group?.items || [];
+}
+
+function modelOptionText(item) {
+  const parts = [item.model || item.id];
+  if (item.dim) parts.push(`${item.dim} 维`);
+  if (item.enabled === false) parts.push("未启用");
+  else if (item.loaded === false) parts.push("未加载");
+  return parts.join(" · ");
+}
+
+function renderModelSelect(key, label) {
+  const value = String(currentValue(key) ?? "");
+  const items = modelItemsFor(key);
+  const emptyLabel = (state.modelOptions?.config_keys?.[key] || "chat") === "embedding"
+    ? "（用下面的独立接口）"
+    : "（用 AstrBot 默认）";
+  // 当前值已被删除时保留成一个可见选项，别让下拉静默显示成默认值把配置改掉
+  const stale = value && !items.some((item) => item.id === value)
+    ? `<option value="${esc(value)}" selected>⚠ ${esc(value)}（已不存在）</option>`
+    : "";
+  const body = items
+    .map((item) => `<option value="${esc(item.id)}" ${item.id === value ? "selected" : ""}>${esc(modelOptionText(item))}</option>`)
+    .join("");
+  return `<select class="input" data-config-key="${key}" data-model-select aria-label="${esc(label)}"><option value="">${esc(emptyLabel)}</option>${stale}${body}</select>`;
+}
+
 function renderControl(key, field = {}, compact = false) {
   const value = currentValue(key);
   const type = field.type || "string";
@@ -1161,6 +1212,7 @@ function renderControl(key, field = {}, compact = false) {
   if (type === "bool") {
     return `<label class="switch-control"><input data-config-key="${key}" type="checkbox" ${value ? "checked" : ""} /><span class="switch-track"><i></i></span><span class="sr-only">切换${esc(label)}</span></label>`;
   }
+  if (MODEL_SELECT_KEYS.has(key) && state.modelOptions) return renderModelSelect(key, label);
   if (field.options?.length) {
     return `<select class="input" data-config-key="${key}" aria-label="${esc(label)}">${field.options.map((option) => `<option value="${esc(option)}" ${String(value) === String(option) ? "selected" : ""}>${esc(optionLabel(key, option))}</option>`).join("")}</select>`;
   }
@@ -1591,6 +1643,7 @@ function renderPage(page) {
     memory: renderMemory,
     security: renderSecurity,
     account: renderAccount,
+    models: renderModels,
     basics: renderBasics,
     allconfig: renderAllConfig,
   }[page]?.() || renderOverview();
@@ -2276,6 +2329,52 @@ function renderCacheCard() {
     <div class="cache-protection"><strong>${icon("shield")}始终保留</strong><div>${protectedItems.map((item) => `<span>${icon("check")}${esc(item)}</span>`).join("")}</div></div>
     <div class="cache-actions"><div><strong>普通清理</strong><span>清除临时图片、视频与搜索缓存，保留当前登录二维码。</span></div><button class="button soft" data-action="cache-clean-normal" type="button">${icon("refresh")}普通清理</button><div><strong>深度清理</strong><span>额外清理过期二维码等一次性文件，仍不会删除 Cookie、记忆或数据库。</span></div><button class="button danger" data-action="cache-clean-deep" type="button">${icon("lightning")}深度清理</button></div>
   </section>`;
+}
+
+async function loadModelOptions() {
+  try {
+    state.modelOptions = await apiGet("model-options");
+    state.modelOptionsError = "";
+  } catch (error) {
+    state.modelOptions = null;
+    state.modelOptionsError = error.message || "模型清单读取失败";
+  }
+}
+
+function renderModels() {
+  const head = pageHead(
+    "MODELS",
+    "模型配置",
+    "每个功能用哪个模型；候选项全部取自 AstrBot 面板里已配置的模型，留空就用默认。",
+    button("重新读取", "refresh", "refresh", "soft"),
+  );
+  const options = state.modelOptions;
+  if (!options) {
+    return state.modelOptionsError
+      ? `${head}${renderErrorState("模型清单读取失败", state.modelOptionsError)}`
+      : `${head}<section class="card empty-search">${icon("refresh")}<strong>正在读取模型清单</strong><span>稍等一下，正在问 AstrBot 要已配置的模型。</span></section>`;
+  }
+
+  const configKeys = options.config_keys || {};
+  const chatKeys = Object.keys(configKeys).filter((key) => configKeys[key] === "chat" && hasKey(key));
+  const embedKeys = Object.keys(configKeys).filter((key) => configKeys[key] === "embedding" && hasKey(key));
+  const groups = options.groups || [];
+  const counts = groups
+    .map((group) => `<span><b>${(group.items || []).length}</b> ${esc(group.label)}</span>`)
+    .join("");
+  const independentKeys = ["EMBED_API_KEY", "EMBED_API_BASE", "EMBED_MODEL", "EMBED_TIMEOUT_SECONDS"].filter(hasKey);
+  const unknownKeys = chatKeys.filter((key) => !hasKey(key)).length;
+
+  return `${head}
+    <section class="card section-card">
+      ${sectionHead("模型来源", "数字来自 AstrBot 面板已配置的提供商；被禁用的也会列出来并标注「未启用」。", "lightning")}
+      <div class="settings-summary">${counts}<span>默认对话模型 <b>${esc(options.default_chat || "未设置")}</b></span></div>
+    </section>
+    ${renderConfigSection("对话模型", "回复、总结、生成、计划、视觉与联网判断分别用哪个模型。", chatKeys, "message")}
+    ${renderConfigSection("向量模型", "记忆向量化用哪个模型；选了宿主模型后，下面独立的 Embedding 接口就不再生效。", embedKeys, "memory-card")}
+    ${independentKeys.length ? `<details class="settings-group card"><summary><span class="section-icon">${icon("controller")}</span><div><strong>独立 Embedding 接口（兜底）</strong><small>${independentKeys.length} 项 · 仅在向量模型留空时使用</small></div>${icon("arrow-right")}</summary><div class="settings-group-body"><div class="settings-group-inner">${renderFields(independentKeys)}</div></div></details>` : ""}
+    ${unknownKeys ? `<div class="settings-summary"><span>有 ${unknownKeys} 个模型项在当前版本里不存在，已跳过</span></div>` : ""}
+  `;
 }
 
 function renderBasics() {
