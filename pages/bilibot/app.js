@@ -124,6 +124,9 @@ const state = {
   qrPollTimer: null,
   pageToken: 0,
   isSaving: false,
+  // 记录已经播过数字滚动的页面：首次进入播放，切回/刷新只写最终值，
+  // 避免每次刷新数字都从 0 重数一遍（会被读成「数据归零后又涨回来」）。
+  countUpsPlayed: new Set(),
   mode: "host",
   hostPage: "overview",
   extensions: [],
@@ -684,12 +687,16 @@ function availableModeExtensions() {
 function renderModeEntry(extensions) {
   if (!extensions.length) return "";
   const first = extensions[0];
-  const label = extensions.length === 1 ? (first.presentation?.switch_label || `进入 ${first.name || first.short_name || "扩展工作区"}`) : `切换工作模式（${extensions.length}）`;
+  const name = first.short_name || first.name || "扩展";
+  // 侧栏底部放一条带文字的入口：纯图标（房子/箭头）无法让用户判断点进去是什么。
+  // 按钮文案固定为「进入工作区」，扩展名过长时放进 title，避免窄栏里被截成「进入 Crea…」。
+  const label = extensions.length === 1 ? "进入工作区" : `切换工作模式（${extensions.length}）`;
+  const detail = extensions.length === 1 ? `${name} 工作区` : "有多个扩展工作区可切换";
   const attrs = extensions.length === 1 ? `data-enter-extension="${esc(first.id)}"` : "data-open-mode-picker";
   const popout = extensions.length === 1 && first.presentation?.standalone !== false
-    ? `<button class="mode-entry-popout" data-popout-extension="${esc(first.id)}" type="button" aria-label="在新标签页打开 ${esc(first.short_name || first.name || "扩展")}" title="在新标签页单独打开，便于对照检查">${icon("arrow-right")}</button>`
+    ? `<button class="mode-entry-popout" data-popout-extension="${esc(first.id)}" type="button" aria-label="在新标签页打开 ${esc(name)}" title="在新标签页单独打开，便于对照检查">${icon("arrow-right")}</button>`
     : "";
-  return `<div class="mode-entry-cluster"><button class="mode-entry-button" ${attrs} type="button" aria-label="${esc(label)}" title="${esc(label)}"><span>${icon(first.navigation?.[0]?.icon || "star")}</span><i></i>${extensions.length > 1 ? `<b>${extensions.length}</b>` : ""}</button>${popout}</div>`;
+  return `<div class="mode-entry-cluster"><button class="mode-entry-button" ${attrs} type="button" aria-label="${esc(`${label}：${detail}`)}" title="${esc(detail)}"><span>${icon(first.navigation?.[0]?.icon || "star")}</span><b>${esc(label)}</b>${icon("arrow-right")}</button>${popout}</div>`;
 }
 
 function openModePicker() {
@@ -697,14 +704,27 @@ function openModePicker() {
   if (!extensions.length) return;
   if (extensions.length === 1) return enterExtension(extensions[0].id);
   const returnFocus = document.activeElement;
-  const close = () => { modalRoot.innerHTML = ""; document.removeEventListener("keydown", onEscape); if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true }); };
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    release();
+    popScrollLock();
+    modalRoot.innerHTML = "";
+    document.removeEventListener("keydown", onEscape);
+    if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
+  };
   const onEscape = (event) => { if (event.key === "Escape") close(); };
   modalRoot.innerHTML = `<div class="modal-backdrop mode-picker-backdrop" data-mode-picker-backdrop><section class="mode-picker" role="dialog" aria-modal="true" aria-labelledby="mode-picker-title"><header><div><span>WORKSPACE SWITCHER</span><h2 id="mode-picker-title">选择工作模式</h2><p>入口完全由已启用扩展的 Manifest 动态生成。</p></div><button class="mode-picker-close" data-mode-picker-close type="button" aria-label="关闭">×</button></header><div class="mode-picker-grid">${extensions.map((item, index) => `<button class="mode-picker-card" data-mode-extension="${esc(item.id)}" type="button"><span class="mode-picker-index">${String(index + 1).padStart(2, "0")}</span><i>${icon(item.navigation?.[0]?.icon || "star")}</i><div><strong>${esc(item.name || item.short_name || item.id)}</strong><small>${esc(item.description || "独立扩展工作区")}</small></div>${icon("arrow-right")}</button>`).join("")}</div></section></div>`;
+  pushScrollLock();
+  const release = trapFocus(modalRoot, { returnFocus: null, initial: modalRoot.querySelector("[data-mode-extension]") });
+  // 与其它弹层一致：遮罩默认 opacity:0，显式打开（bindOverlayDepth 另有兜底）
+  const modeBackdrop = modalRoot.querySelector("[data-mode-picker-backdrop]");
+  window.requestAnimationFrame(() => modeBackdrop?.classList.add("is-visible"));
   document.addEventListener("keydown", onEscape);
   modalRoot.querySelectorAll("[data-mode-picker-close]").forEach((node) => node.addEventListener("click", close));
   modalRoot.querySelector("[data-mode-picker-backdrop]")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) close(); });
   modalRoot.querySelectorAll("[data-mode-extension]").forEach((node) => node.addEventListener("click", () => { const id = node.dataset.modeExtension; close(); enterExtension(id); }));
-  modalRoot.querySelector("[data-mode-extension]")?.focus();
 }
 
 function renderSidebar() {
@@ -739,7 +759,7 @@ function renderSidebar() {
     if (ids !== null && !items) return "";
     return `<div class="nav-label">${esc(label)}</div>${items}`;
   }).join("");
-  sidebar.innerHTML = `<div class="sidebar-brand"><div class="brand-mark"><img src="${esc(brandLogoUrl)}" alt="BiliBot" /></div><div class="brand-copy"><strong>BiliBot</strong><span>控制中心</span></div>${renderModeEntry(modeExtensions)}</div><div class="sidebar-state" aria-label="服务状态"><span class="status-dot ${running ? "is-online" : ""}"></span><div><strong>${running ? "服务运行中" : "服务未运行"}</strong><span>${accountReady ? "账号链路已配置" : "等待连接账号"}</span></div></div><div class="sidebar-scroll"><nav class="nav-list"><span class="nav-indicator" aria-hidden="true"></span>${groupMarkup}</nav></div><div class="sidebar-foot"><p>${state.dirtyKeys.size ? `${state.dirtyKeys.size} 项配置待保存` : "BiliBot 控制中心"}</p><button class="rail-toggle" data-rail-toggle type="button" aria-label="收起或展开侧边栏" title="收起或展开侧边栏">${icon("arrow-left")}</button></div>`;
+  sidebar.innerHTML = `<div class="sidebar-brand"><div class="brand-mark"><img src="${esc(brandLogoUrl)}" alt="BiliBot" /></div><div class="brand-copy"><strong>BiliBot</strong><span>控制中心</span></div></div><div class="sidebar-state" aria-label="服务状态"><span class="status-dot ${running ? "is-online" : ""}"></span><div><strong>${running ? "服务运行中" : "服务未运行"}</strong><span>${accountReady ? "账号链路已配置" : "等待连接账号"}</span></div></div><div class="sidebar-scroll"><nav class="nav-list"><span class="nav-indicator" aria-hidden="true"></span>${groupMarkup}</nav></div>${modeExtensions.length ? `<div class="sidebar-workspace">${renderModeEntry(modeExtensions)}</div>` : ""}<div class="sidebar-foot"><p>${state.dirtyKeys.size ? `${state.dirtyKeys.size} 项配置待保存` : "BiliBot 控制中心"}</p><button class="rail-toggle" data-rail-toggle type="button" aria-label="收起或展开侧边栏" title="收起或展开侧边栏">${icon("arrow-left")}</button></div>`;
   sidebar.querySelectorAll("[data-page]").forEach((button) => button.addEventListener("click", () => navigate(button.dataset.page)));
   sidebar.querySelector("[data-enter-extension]")?.addEventListener("click", (event) => enterExtension(event.currentTarget.dataset.enterExtension));
   sidebar.querySelector("[data-open-mode-picker]")?.addEventListener("click", openModePicker);
@@ -829,14 +849,22 @@ function updateSaveDock() {
 }
 
 
-function closeMobileNav() {
+function closeMobileNav(options = {}) {
+  const wasOpen = sidebar.classList.contains("is-open");
   sidebar.classList.remove("is-open");
   document.querySelector("#sidebar-scrim")?.classList.remove("is-visible");
+  if (wasOpen && options.restoreFocus) {
+    document.querySelector("#mobile-menu")?.focus({ preventScroll: true });
+  }
 }
 
 function openMobileNav() {
   sidebar.classList.add("is-open");
-  document.querySelector("#sidebar-scrim")?.classList.add("is-visible");
+  const scrim = document.querySelector("#sidebar-scrim");
+  scrim?.classList.add("is-visible");
+  // 抽屉打开后把焦点送进导航，否则键盘用户仍停在汉堡按钮上、Tab 会走到页面背后
+  const target = sidebar.querySelector(".nav-item.is-active") || sidebar.querySelector(".nav-item");
+  target?.focus({ preventScroll: true });
 }
 
 async function loadBase() {
@@ -937,6 +965,8 @@ async function navigate(page) {
     playEnterSequence();
     // 新页从顶部开始：在快照捕获前改滚动位置，避免转场结束后才跳一下
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    // 切页后原焦点节点已被移除，不接管会掉到 <body>，键盘用户要从文档头重新 Tab
+    content.focus({ preventScroll: true });
   };
 
   if (!useTransition) content.classList.add("page-exit");
@@ -962,8 +992,6 @@ async function navigate(page) {
     } else {
       paint();
       content.classList.remove("page-exit");
-      content.classList.add("page-enter");
-      requestAnimationFrame(() => requestAnimationFrame(() => content.classList.remove("page-enter")));
     }
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   } catch (error) {
@@ -971,8 +999,8 @@ async function navigate(page) {
     content.innerHTML = renderErrorState("页面数据读取失败", error.message || "请检查插件日志并重试");
     content.dataset.page = page;
     content.classList.remove("page-exit");
-    content.classList.add("page-enter");
     bindContent();
+    content.focus({ preventScroll: true });
   } finally {
     if (token === state.pageToken) {
       content.removeAttribute("aria-busy");
@@ -1088,9 +1116,14 @@ function renderCurrentPage() {
     content.innerHTML = state.extensionSchema ? renderExtensionPage(state.extensionSchema) : renderCreatorError("扩展页面尚未加载");
     bindCreatorContent();
   } else {
+    // 与 navigate() 的 paint 走同一条路径：内嵌页必须先销毁旧视图再重新挂载，
+    // 否则刷新/保存后 #content 只剩「正在加载页面…」占位，旧视图的监听与定时器也泄漏。
+    const token = ++state.pageToken;
+    destroyEmbedded();
     content.innerHTML = renderPage(state.currentPage);
     content.dataset.page = state.currentPage;
     bindContent();
+    mountEmbedded(state.currentPage, token);
   }
   requestAnimationFrame(() => content.focus({ preventScroll: true }));
 }
@@ -1114,7 +1147,8 @@ function metricCard(label, value, foot, iconName, tone = "blue", progress = null
   const numeric = /^-?\d[\d,]*(?:\.\d+)?$/.test(raw);
   const valueMarkup = numeric
     ? `<strong data-count-up="${esc(raw.replace(/,/g, ""))}">${esc(raw)}</strong>`
-    : `<strong>${esc(raw)}</strong>`;
+    // 状态文案（如「平台隔离」「安全共享」）用状态级字号，避免和数字卡抢同一视觉层级。
+    : `<strong class="is-text">${esc(raw)}</strong>`;
   return `<article class="metric-card tone-${tone}"><div class="metric-top"><span class="metric-icon">${icon(iconName)}</span><span>${esc(label)}</span></div>${valueMarkup}<p>${esc(foot)}</p>${meter}</article>`;
 }
 
@@ -1664,6 +1698,9 @@ async function mountEmbedded(page, token, options = {}) {
       view?.destroy?.();
       return;
     }
+    // 占位文案「正在加载页面…」留在宿主元素的 light DOM 里：有 shadow root 时虽然不显示，
+    // 但仍会进无障碍树、也会被 textContent 探针读到，挂载成功后清掉。
+    host.textContent = "";
     host.classList.remove("is-loading");
     host.dataset.theme = resolvedTheme();
     applyEmbeddedMotion(host);
@@ -1710,9 +1747,21 @@ function destroyEmbedded() {
   embeddedView = null;
 }
 
+// 状态提示 → 处理入口。后端 warnings 只给文案，这里按已知标题映射到具体页面。
+const WARNING_ACTIONS = {
+  "账号未连接": ["account", "去连接账号"],
+  "后台任务未运行": ["basics", "检查运行配置"],
+  "今日存在执行失败": ["selftest", "运行自检"],
+};
+
 function renderOverview() {
   const s = state.stats || {};
-  const warning = (s.warnings || [])[0] || { level: "success", title: "未发现重大问题", detail: "当前没有需要立即处理的异常。" };
+  const warnings = Array.isArray(s.warnings) && s.warnings.length
+    ? s.warnings
+    : [{ level: "success", title: "未发现重大问题", detail: "当前没有需要立即处理的异常。" }];
+  const warning = warnings[0];
+  const extraWarnings = warnings.slice(1);
+  const primaryAction = WARNING_ACTIONS[warning.title];
   const isHealthy = warning.level === "success";
   const accountReady = Boolean(s.account_connected || state.account?.logged_in);
   const running = s.running !== false;
@@ -1724,9 +1773,13 @@ function renderOverview() {
   return `${pageHead("MONITOR", "运行总览", "最重要的账号、调度、互动、安全与配额状态集中在这里。", button("刷新状态", "refresh", "refresh"))}
     <section class="health-hero ${isHealthy ? "is-healthy" : "has-warning"}">
       <div class="health-orb">${icon(isHealthy ? "shield" : "lightning")}</div>
-      <div class="health-copy"><span>${isHealthy ? "SYSTEM HEALTHY" : "ATTENTION NEEDED"}</span><h2>${esc(warning.title)}</h2><p>${esc(warning.detail)}</p></div>
+      <div class="health-copy"><span>${isHealthy ? "SYSTEM HEALTHY" : "ATTENTION NEEDED"}</span><h2>${esc(warning.title)}</h2><p>${esc(warning.detail)}</p>${primaryAction ? `<button class="button primary health-action" data-page-target="${primaryAction[0]}" type="button">${icon("arrow-right")}${esc(primaryAction[1])}</button>` : ""}</div>
       <div class="health-side"><strong>${num(s.activity_level, state.persona.energy)}%</strong><span>${esc(s.activity_label || "今日活跃度")}</span><div class="activity-mini"><i style="width:${clamp(num(s.activity_level, 55), 0, 100)}%"></i></div></div>
     </section>
+    ${extraWarnings.length ? `<div class="warning-stack">${extraWarnings.map((item) => {
+      const action = WARNING_ACTIONS[item.title];
+      return `<div class="warning-row ${item.level === "danger" ? "is-danger" : ""}">${icon(item.level === "danger" ? "lightning" : "shield")}<div><strong>${esc(item.title)}</strong><span>${esc(item.detail)}</span></div>${action ? `<button class="button soft" data-page-target="${action[0]}" type="button">${esc(action[1])}${icon("arrow-right")}</button>` : ""}</div>`;
+    }).join("")}</div>` : ""}
     <section class="metrics-grid">
       ${metricCard("评论回复", fmt(s.comment_replies_today), "评论区已发送", "message", "pink", num(s.comment_replies_today) / replyLimit * 100, replyLimit)}
       ${metricCard("私信回复", fmt(s.private_replies_today), "安全私信已发送", "user", "violet", num(s.private_replies_today) / privateLimit * 100, privateLimit)}
@@ -2166,13 +2219,19 @@ function renderAutonomyDrawer(item) {
   modalRoot.innerHTML = `<div class="drawer-backdrop" data-drawer-backdrop><aside class="autonomy-drawer" role="dialog" aria-modal="true" aria-labelledby="autonomy-drawer-title"><header><span class="drawer-icon">${icon(item.icon)}</span><div><small>AUTONOMY CAPABILITY</small><h2 id="autonomy-drawer-title">${esc(item.title)}</h2><p>${esc(item.description)}</p></div><button class="modal-close" data-drawer-close type="button" aria-label="关闭">×</button></header><div class="drawer-toggle"><div><strong>总开关</strong><span>关闭后保存，相关事件会从当天计划移除。</span></div>${renderControl(item.toggle, state.schema[item.toggle])}</div><div class="drawer-fields">${renderFields(keys)}</div><footer><button class="button soft" data-drawer-close type="button">完成设置</button></footer></aside></div>`;
   bindConfigControls(modalRoot);
   bindStepperControls(modalRoot);
+  pushScrollLock();
+  // 关闭时卡片会被重建，触发按钮会换掉，所以焦点在 close 里显式交给新卡片。
+  const release = trapFocus(modalRoot, { returnFocus: null, initial: modalRoot.querySelector("[data-drawer-close]") });
   const close = () => {
     modalRoot.querySelector(".drawer-backdrop")?.classList.add("is-closing");
     window.setTimeout(() => {
-      modalRoot.innerHTML = "";
       const drawerId = state.autonomyDrawer;
       state.autonomyDrawer = null;
+      release();
+      popScrollLock();
+      modalRoot.innerHTML = "";
       refreshCapabilityCard(drawerId);
+      content.querySelector(`[data-capability-open="${drawerId}"]`)?.focus({ preventScroll: true });
     }, 210);
   };
   modalRoot.querySelectorAll("[data-drawer-close]").forEach((node) => node.addEventListener("click", close));
@@ -2375,13 +2434,14 @@ function renderModels() {
     .map((group) => `<span><b>${(group.items || []).length}</b> ${esc(group.label)}</span>`)
     .join("");
   const independentKeys = ["EMBED_API_KEY", "EMBED_API_BASE", "EMBED_MODEL", "EMBED_TIMEOUT_SECONDS"].filter(hasKey);
-  const unknownKeys = chatKeys.filter((key) => !hasKey(key)).length;
+  const unknownKeys = Object.keys(configKeys).filter((key) => !hasKey(key)).length;
 
   return `${head}
     <section class="card section-card">
       ${sectionHead("模型来源", "数量来自 AstrBot 中已启用的模型提供商。", "lightning")}
       <div class="settings-summary">${counts}<span>默认对话模型 <b>${esc(options.default_chat || "未设置")}</b></span></div>
     </section>
+    ${!chatKeys.length && !embedKeys.length ? `<section class="card empty-search">${icon("lightning")}<strong>还没有可用的模型</strong><span>AstrBot 里尚未启用任何模型提供商；启用并保存后回到本页点「重新读取」。</span></section>` : ""}
     ${renderConfigSection("对话模型", "回复、总结、生成、计划、视觉与联网判断分别使用的模型。", chatKeys, "message")}
     ${renderConfigSection("向量模型", "记忆向量化所使用的模型。选中宿主向量模型后，下方独立的 Embedding 接口不再生效。", embedKeys, "memory-card")}
     ${independentKeys.length ? `<details class="settings-group card"><summary><span class="section-icon">${icon("controller")}</span><div><strong>独立 Embedding 接口（兜底）</strong><small>${independentKeys.length} 项 · 仅在向量模型留空时使用</small></div>${icon("arrow-right")}</summary><div class="settings-group-body"><div class="settings-group-inner">${renderFields(independentKeys)}</div></div></details>` : ""}
@@ -2737,8 +2797,84 @@ function bindOverlayDepth() {
   new MutationObserver(() => {
     const open = modalRoot.childElementCount > 0;
     app.classList.toggle("is-dimmed", open);
-    if (open) markOverlayOrigin();
+    if (!open) return;
+    markOverlayOrigin();
+    // 打开动画统一在这里启动：.modal-backdrop / .drawer-backdrop 默认 opacity:0，
+    // 只有加 is-visible 才看得见。此前每个弹层各自 requestAnimationFrame 加类，
+    // confirmModal / openModePicker 漏加 → 只剩压暗的页面、弹窗透明、点击被透明遮罩吃掉。
+    const backdrop = modalRoot.querySelector(".modal-backdrop, .drawer-backdrop");
+    if (backdrop && !backdrop.classList.contains("is-visible") && !backdrop.classList.contains("is-closing")) {
+      window.requestAnimationFrame(() => {
+        if (backdrop.isConnected) backdrop.classList.add("is-visible");
+      });
+    }
   }).observe(modalRoot, { childList: true });
+}
+
+/* ── 浮层可访问性：焦点陷阱、滚动锁、关闭后归还焦点 ─────────────────── */
+
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled]):not([type=hidden])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(", ");
+
+// 浮层打开时锁住文档滚动：用根元素 overflow 而不是 body position:fixed，
+// 这样固定定位的侧栏/保存条不会跳位，也不会丢掉当前滚动位置。
+let scrollLockDepth = 0;
+let scrollLockGap = "";
+
+function pushScrollLock() {
+  if (scrollLockDepth === 0) {
+    const gap = window.innerWidth - document.documentElement.clientWidth;
+    scrollLockGap = document.documentElement.style.paddingRight;
+    if (gap > 0) document.documentElement.style.paddingRight = `${gap}px`;
+    document.documentElement.style.overflow = "hidden";
+  }
+  scrollLockDepth += 1;
+}
+
+function popScrollLock() {
+  scrollLockDepth = Math.max(0, scrollLockDepth - 1);
+  if (scrollLockDepth === 0) {
+    document.documentElement.style.overflow = "";
+    document.documentElement.style.paddingRight = scrollLockGap;
+  }
+}
+
+// 把 Tab 循环约束在浮层内；返回的 release 负责解除监听并把焦点还给触发元素。
+function trapFocus(container, options = {}) {
+  // 允许显式传 null：调用方自己接管关闭后的焦点归属（例如抽屉关闭时会重建触发按钮）。
+  const returnFocus = "returnFocus" in options ? options.returnFocus : document.activeElement;
+  const items = () => [...container.querySelectorAll(FOCUSABLE_SELECTOR)]
+    .filter((node) => node instanceof HTMLElement && (node.offsetWidth || node.offsetHeight || node.getClientRects().length));
+  const onKeydown = (event) => {
+    if (event.key !== "Tab") return;
+    const list = items();
+    if (!list.length) return;
+    const first = list[0];
+    const last = list[list.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !container.contains(active))) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+    } else if (!event.shiftKey && (active === last || !container.contains(active))) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
+    }
+  };
+  container.addEventListener("keydown", onKeydown);
+  const initial = options.initial || items()[0];
+  initial?.focus?.({ preventScroll: true });
+  return () => {
+    container.removeEventListener("keydown", onKeydown);
+    if (returnFocus instanceof HTMLElement && returnFocus.isConnected) {
+      returnFocus.focus({ preventScroll: true });
+    }
+  };
 }
 
 // 一次性按钮反馈：点击涟漪 + 真实刷新时的图标旋转
@@ -2871,9 +3007,9 @@ function markReveals(root) {
   });
 }
 
-function animateCountUps(root) {
+function animateCountUps(root, replay = true) {
   const nodes = [...root.querySelectorAll("[data-count-up]")];
-  if (!nodes.length || prefersReducedMotion()) return;
+  if (!nodes.length || prefersReducedMotion() || !replay) return;
   const formatter = new Intl.NumberFormat("zh-CN");
   for (const node of nodes) {
     const target = Number(node.dataset.countUp);
@@ -2894,9 +3030,19 @@ function animateCountUps(root) {
   }
 }
 
-function enhancePage(root = content) {
+// 两列布局里只剩一个区块时（配置键在当前版本被下线、或某侧条件渲染为空），
+// 让剩下的那个占满整行，而不是缩在左侧半栏、右边留一块空背景。
+function normalizeTwoColumns(root = content) {
+  root.querySelectorAll(".two-column").forEach((column) => {
+    const children = [...column.children].filter((node) => node.nodeType === 1 && !node.hidden);
+    column.classList.toggle("is-single", children.length === 1);
+  });
+}
+
+function enhancePage(root = content, options = {}) {
   markReveals(root);
-  animateCountUps(root);
+  animateCountUps(root, options.countUp !== false);
+  normalizeTwoColumns(root);
   decorateMotion(root);
   updateNavIndicator();
 }
@@ -2908,7 +3054,10 @@ function bindContent() {
     // 只对真实动作给反馈：主按钮涟漪、刷新类动作转图标
     if (node.classList.contains("primary")) pulseButton(node);
     if (/^refresh/.test(node.dataset.action || "")) spinIcon(node);
-    handleAction(node.dataset.action, node);
+    // 兜底：任何动作抛错都要有可见提示，不能再出现「点了没反应」的静默失败
+    handleAction(node.dataset.action, node).catch((error) => {
+      toast("操作未完成", error?.message || "请检查插件日志后重试", "error");
+    });
   }));
   content.querySelectorAll("[data-page-target]").forEach((node) => node.addEventListener("click", () => navigate(node.dataset.pageTarget)));
   content.querySelectorAll("[data-plan-mode]").forEach((node) => node.addEventListener("click", () => {
@@ -2988,7 +3137,9 @@ function bindContent() {
     next?.setSelectionRange(position, position);
   });
   if (state.currentPage === "account" && !state.account?.logged_in) generateQr();
-  enhancePage();
+  const firstVisit = !state.countUpsPlayed.has(state.currentPage);
+  state.countUpsPlayed.add(state.currentPage);
+  enhancePage(content, { countUp: firstVisit });
 }
 
 function setActiveScheduleEvent(index) {
@@ -3035,15 +3186,30 @@ async function handleAction(action, source = null) {
   if (action === "regenerate-schedule") {
     const ok = await confirmModal("重新生成今日计划", "这会清空今天尚未完成的日程并立即根据当前活跃度与安全上限重新生成。", "重新生成");
     if (!ok) return;
-    const regenerated = await apiPost("schedule/regenerate", {});
-    state.schedule = { ...state.schedule, ...(regenerated || {}) };
-    state.scheduleStats = await apiGet("schedule/stats") || {};
-    renderCurrentPage();
-    const plan = regenerated?.autonomous_plan;
-    if (plan?.generation_status === "error") {
-      toast("今天不新增自动事件", `${plan.model_error || "计划模型暂时没有返回有效内容。"} 可稍后重新生成。`, "error");
-    } else {
-      toast("今日计划已更新", "新计划已经过睡眠区间、最小间隔与安全上限校验");
+    // 后端要清空计划文件并重新调用模型生成，可能耗时几十秒：
+    // 期间禁用按钮、给出一次明确提示，避免重复点击与「点了没反应」的错觉。
+    const trigger = source instanceof HTMLButtonElement ? source : null;
+    if (trigger) {
+      trigger.disabled = true;
+      spinIcon(trigger);
+    }
+    toast("正在重新生成今日计划", "需要调用模型重排今天的日程，请稍候…");
+    try {
+      const regenerated = await apiPost("schedule/regenerate", {});
+      state.schedule = { ...state.schedule, ...(regenerated || {}) };
+      state.scheduleStats = await apiGet("schedule/stats") || {};
+      renderCurrentPage();
+      const plan = regenerated?.autonomous_plan;
+      if (plan?.generation_status === "error") {
+        toast("今天不新增自动事件", `${plan.model_error || "计划模型暂时没有返回有效内容。"} 可稍后重新生成。`, "error");
+      } else {
+        toast("今日计划已更新", "新计划已经过睡眠区间、最小间隔与安全上限校验");
+      }
+    } catch (error) {
+      // 以前这里没有 catch：后端返回 500 时是未处理的 Promise rejection，页面无任何提示。
+      toast("重新生成失败", error.message || "请检查 AstrBot 日志后重试", "error");
+    } finally {
+      if (trigger) trigger.disabled = false;
     }
     return;
   }
@@ -3216,9 +3382,16 @@ function renderToolPickerModal() {
   const unavailableSummary = unavailableTools.length ? `<details class="tool-unavailable" data-tool-unavailable><summary><span>${icon("lock")}其他已注册工具（不可加入 B站只读白名单）</span><b>${unavailableTools.length} 项</b></summary><p>这些工具来自 AstrBot 内置工具、其他插件或 MCP；它们不是 B站只读适配器，因此不会进入白名单，也不会被 B站评论/私信上下文调用。</p><div class="tool-unavailable-list">${unavailableTools.slice(0, 80).map((tool) => `<span><strong>${esc(tool.label || tool.name)}</strong><small>${esc(tool.reason || "未提供 B站只读适配器")}</small></span>`).join("")}</div></details>` : "";
   modalRoot.innerHTML = `<div class="modal-backdrop tool-picker-backdrop" data-modal-backdrop><div class="modal tool-modal" role="dialog" aria-modal="true" aria-labelledby="tool-modal-title"><div class="tool-modal-head"><span class="modal-icon">${icon("controller")}</span><div><h2 id="tool-modal-title">选择 B站端私信回复工具</h2><p>仅当B站私信用户提出查询请求时，私信回复模型才可调用已勾选工具；这里不控制 QQ/AstrBot 聊天工具。其他注册工具仅作说明，不会出现在可选白名单中。</p></div><button class="modal-close" data-tool-close type="button" aria-label="关闭">×</button></div><label class="tool-search">${icon("search")}<input id="tool-search-input" type="search" value="" placeholder="搜索 B站只读工具" /></label><div class="tool-modal-list">${[...groups.entries()].map(([group, items], index) => `<details class="tool-group" data-tool-group ${index < 2 ? "open" : ""}><summary><div><strong>${esc(group)}</strong><span data-group-count>${items.length} 项</span></div>${icon("arrow-right")}</summary><div class="tool-group-body">${items.map(optionHtml).join("")}</div></details>`).join("") || `<div class="empty-search">${icon("search")}<strong>当前没有可用的 B站只读适配器</strong><span>这不影响普通评论和私信处理。</span></div>`}<div class="empty-search tool-search-empty" hidden>${icon("search")}<strong>没有匹配工具</strong><span>换一个关键词试试。</span></div>${unavailableSummary}</div><div class="tool-modal-actions"><span>已选择 <b data-tool-selected-count>${state.toolPickerSelection.size}</b> 项</span><div><button class="button soft" data-tool-close type="button">取消</button><button class="button primary" data-tool-confirm type="button">${icon("save")}确认选择</button></div></div></div></div>`;
   const backdrop = modalRoot.querySelector(".tool-picker-backdrop");
+  const returnFocus = document.activeElement;
+  pushScrollLock();
+  const release = trapFocus(modalRoot, { returnFocus, initial: modalRoot.querySelector("#tool-search-input") });
   const close = () => {
     backdrop?.classList.add("is-closing");
-    window.setTimeout(() => { modalRoot.innerHTML = ""; }, 190);
+    window.setTimeout(() => {
+      release();
+      popScrollLock();
+      modalRoot.innerHTML = "";
+    }, 190);
   };
   modalRoot.querySelectorAll("[data-tool-close]").forEach((node) => node.addEventListener("click", close));
   modalRoot.querySelector("[data-modal-backdrop]")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) close(); });
@@ -3270,10 +3443,28 @@ function renderToolPickerModal() {
 
 function confirmModal(title, message, confirmText, danger = false) {
   return new Promise((resolve) => {
+    const returnFocus = document.activeElement;
     modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><span class="modal-icon">${icon(danger ? "lightning" : "shield")}</span><h2 id="modal-title">${esc(title)}</h2><p>${esc(message)}</p><div class="modal-actions"><button class="button soft" data-modal="cancel" type="button">取消</button><button class="button ${danger ? "danger" : "primary"}" data-modal="confirm" type="button">${esc(confirmText)}</button></div></div></div>`;
-    const close = (result) => { modalRoot.innerHTML = ""; resolve(result); };
+    const backdrop = modalRoot.querySelector(".modal-backdrop");
+    // 遮罩默认 opacity:0，必须显式加 is-visible 才显示（bindOverlayDepth 里还有一层兜底）
+    window.requestAnimationFrame(() => backdrop?.classList.add("is-visible"));
+    pushScrollLock();
+    const release = trapFocus(modalRoot, { returnFocus, initial: modalRoot.querySelector('[data-modal="cancel"]') });
+    const close = (result) => {
+      release();
+      popScrollLock();
+      resolve(result);
+      if (!backdrop) {
+        modalRoot.innerHTML = "";
+        return;
+      }
+      // 与其它弹层一致的关闭动画；期间若已被新弹层替换（isConnected=false）就不要清空它。
+      backdrop.classList.add("is-closing");
+      window.setTimeout(() => {
+        if (backdrop.isConnected) modalRoot.innerHTML = "";
+      }, 200);
+    };
     const cancel = modalRoot.querySelector('[data-modal="cancel"]');
-    cancel?.focus();
     cancel?.addEventListener("click", () => close(false));
     modalRoot.querySelector('[data-modal="confirm"]')?.addEventListener("click", () => close(true));
     modalRoot.querySelector("[data-modal-backdrop]")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) close(false); });
@@ -3347,7 +3538,7 @@ function init() {
   const mobileMenu = document.querySelector("#mobile-menu");
   if (mobileMenu) mobileMenu.innerHTML = icon("menu");
   mobileMenu?.addEventListener("click", openMobileNav);
-  document.querySelector("#sidebar-scrim")?.addEventListener("click", closeMobileNav);
+  document.querySelector("#sidebar-scrim")?.addEventListener("click", () => closeMobileNav({ restoreFocus: true }));
 
   const refreshButton = document.querySelector("#refresh-page");
   if (refreshButton) refreshButton.innerHTML = icon("refresh");
@@ -3371,7 +3562,11 @@ function init() {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     const backdrop = modalRoot.querySelector(".modal-backdrop, .drawer-backdrop");
-    if (backdrop) backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    if (backdrop) {
+      backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      return;
+    }
+    if (sidebar.classList.contains("is-open")) closeMobileNav({ restoreFocus: true });
   });
 
   // 滚动叙事（顶栏形变 / 页头视差 / 环境层位移 / 回到顶部）统一走 syncScrollMotion

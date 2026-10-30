@@ -96,6 +96,67 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 体检条里的处理入口：只在有明确去处时出现 */
+.health-action {
+  margin-top: var(--sp-4);
+}
+
+/* 其余警告：一行一条，带自己的处理按钮 */
+.warning-stack {
+  display: grid;
+  gap: var(--sp-2);
+  margin: calc(var(--gap-grid) - var(--gap-section)) 0 var(--gap-section);
+}
+
+.warning-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
+.warning-row > .gicon {
+  flex: none;
+  color: var(--orange);
+}
+
+.warning-row.is-danger > .gicon {
+  color: var(--red);
+}
+
+.warning-row > div {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+.warning-row strong {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+
+.warning-row span {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 680px) {
+  .warning-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .warning-row .button {
+    width: 100%;
+  }
+}
+
 .health-side > span {
   font-size: var(--fs-micro);
   color: var(--text-tertiary);

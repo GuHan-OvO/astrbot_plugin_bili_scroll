@@ -347,7 +347,9 @@
   height: 148px;
   border-radius: 50%;
   background: var(--tone-soft, var(--accent-soft));
-  opacity: 0.7;
+  /* 六张指标卡并排时，大块彩色光斑会把浅色页面染成六种淡色、稀释主次；
+     压到 .42 后只在卡角留一点语义色提示，hover 时才回到明显。 */
+  opacity: 0.42;
   filter: blur(18px);
   pointer-events: none;
   transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
@@ -410,6 +412,15 @@
   margin-top: 2px;
   font-size: var(--fs-xs);
   color: var(--text-tertiary);
+}
+
+/* 值本身就是一句状态（「平台隔离」「安全共享」），不按 28px 数字渲染 */
+.metric-card > strong.is-text {
+  margin-top: var(--sp-4);
+  font-size: var(--fs-heading);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-weight: var(--fw-semibold);
 }
 
 .metric-meter {
@@ -1291,7 +1302,16 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 .two-column > .card,
 .two-column > .section-card {
   margin-top: 0;
-  height: 100%;
+  /* 原先这里写 height:100%，把短卡强行拉成和长卡同高：
+     左列只有三个开关、右列有七个字段时，左卡下面会空出一大块。
+     自然高度更诚实，也让两张卡的边界落回内容结束的位置。 */
+  height: auto;
+}
+
+/* 只剩一个区块时（配置键在当前版本被下线、条件渲染为空），让剩下的占满整行，
+   而不是缩在左半栏、右边留一块空背景。app.js 的 normalizeTwoColumns 负责打类。 */
+.two-column.is-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* ── 浮层：遮罩、弹窗、抽屉 ────────────────────────────────────────── */

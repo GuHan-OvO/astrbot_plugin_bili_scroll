@@ -436,7 +436,10 @@ html[data-vt-dir] ::view-transition-new(vt-layer-0) {
 
 .app-shell .main-stage {
   transition: transform var(--t4) var(--ease-enter), filter var(--t4) var(--ease-enter),
-    opacity var(--t4) var(--ease-enter);
+    opacity var(--t4) var(--ease-enter),
+    /* 侧栏折叠会改 margin-left（shell.css 的 .is-rail ~ .main-stage）：
+       这里必须保留这条过渡，否则内容列是跳变而不是跟着侧栏滑过去。 */
+    margin-left var(--dur-slow) var(--ease-apple);
 }
 
 /* 遮罩：原点感知的径向扩散，而不是整块同步变暗 */
@@ -1463,29 +1466,29 @@ html[data-mode="extension"] .creator-grid-noise {
 /* 首屏网格内部再错一层：卡片比它所在的区块再晚 90ms 进来 */
 #content.is-entering .metrics-grid > *,
 #content.is-entering .capability-grid > *,
-#content.is-entering .behavior-grid > * {
+#content.is-entering .behavior-matrix > * {
   animation: blockEnter var(--t4) var(--ease-enter) backwards;
   animation-delay: calc(var(--enter-step, 0) * 34ms + 150ms);
 }
 
 #content.is-entering .metrics-grid > *:nth-child(1),
 #content.is-entering .capability-grid > *:nth-child(1),
-#content.is-entering .behavior-grid > *:nth-child(1) { --enter-step: 0; }
+#content.is-entering .behavior-matrix > *:nth-child(1) { --enter-step: 0; }
 #content.is-entering .metrics-grid > *:nth-child(2),
 #content.is-entering .capability-grid > *:nth-child(2),
-#content.is-entering .behavior-grid > *:nth-child(2) { --enter-step: 1; }
+#content.is-entering .behavior-matrix > *:nth-child(2) { --enter-step: 1; }
 #content.is-entering .metrics-grid > *:nth-child(3),
 #content.is-entering .capability-grid > *:nth-child(3),
-#content.is-entering .behavior-grid > *:nth-child(3) { --enter-step: 2; }
+#content.is-entering .behavior-matrix > *:nth-child(3) { --enter-step: 2; }
 #content.is-entering .metrics-grid > *:nth-child(4),
 #content.is-entering .capability-grid > *:nth-child(4),
-#content.is-entering .behavior-grid > *:nth-child(4) { --enter-step: 3; }
+#content.is-entering .behavior-matrix > *:nth-child(4) { --enter-step: 3; }
 #content.is-entering .metrics-grid > *:nth-child(5),
 #content.is-entering .capability-grid > *:nth-child(5),
-#content.is-entering .behavior-grid > *:nth-child(5) { --enter-step: 4; }
+#content.is-entering .behavior-matrix > *:nth-child(5) { --enter-step: 4; }
 #content.is-entering .metrics-grid > *:nth-child(n + 6),
 #content.is-entering .capability-grid > *:nth-child(n + 6),
-#content.is-entering .behavior-grid > *:nth-child(n + 6) { --enter-step: 5; }
+#content.is-entering .behavior-matrix > *:nth-child(n + 6) { --enter-step: 5; }
 
 /* ============================================================================
  * 命中区下限（红队轮）：实测 allconfig 的删除按钮只有 19×26、行为滑杆 22px 高，
@@ -1532,7 +1535,7 @@ html[data-mode="extension"] .creator-grid-noise {
   #content.is-entering > *,
   #content.is-entering .metrics-grid > *,
   #content.is-entering .capability-grid > *,
-  #content.is-entering .behavior-grid > * {
+  #content.is-entering .behavior-matrix > * {
     animation: none !important;
   }
 }

@@ -10,113 +10,16 @@
  * 交错只作用于「首屏可见的分区」，滚动进入的用 IntersectionObserver 打标。
  * ========================================================================== */
 
-/* ── 页面进入：分层交错 ────────────────────────────────────────────── */
-
-.content.page-enter > * {
-  animation: pageLayerIn var(--dur-page) var(--ease-apple) both;
-}
-
-.content.page-enter > *:nth-child(1) {
-  animation-delay: 0ms;
-}
-.content.page-enter > *:nth-child(2) {
-  animation-delay: calc(var(--stagger-step) * 1);
-}
-.content.page-enter > *:nth-child(3) {
-  animation-delay: calc(var(--stagger-step) * 2);
-}
-.content.page-enter > *:nth-child(4) {
-  animation-delay: calc(var(--stagger-step) * 3);
-}
-.content.page-enter > *:nth-child(5) {
-  animation-delay: calc(var(--stagger-step) * 4);
-}
-.content.page-enter > *:nth-child(6) {
-  animation-delay: calc(var(--stagger-step) * 5);
-}
-.content.page-enter > *:nth-child(7) {
-  animation-delay: calc(var(--stagger-step) * 6);
-}
-.content.page-enter > *:nth-child(n + 8) {
-  animation-delay: calc(var(--stagger-step) * 7);
-}
-
-@keyframes pageLayerIn {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 12px, 0) scale(0.996);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* 滚动显现的分区不参与 page-enter，交给 IntersectionObserver 控制节奏 */
-.content.page-enter > [data-reveal] {
-  animation: none;
-}
-
-/* 页头单独再走一段：位移更小、稍快，形成"标题先落位"的层次 */
-.content.page-enter > .page-head {
-  animation: pageHeadIn calc(var(--dur-page) - 80ms) var(--ease-apple) both;
-}
-
-@keyframes pageHeadIn {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 8px, 0);
-  }
-}
-
-/* 网格子项：只在进入时做很短的错位，之后不再重复 */
-.content.page-enter .metrics-grid > *,
-.content.page-enter .capability-grid > *,
-.content.page-enter .behavior-matrix > * {
-  animation: cardStaggerIn var(--dur-slow) var(--ease-out) both;
-  animation-delay: calc(var(--stagger-step) * 1);
-}
-
-.content.page-enter .metrics-grid > *:nth-child(2),
-.content.page-enter .capability-grid > *:nth-child(2),
-.content.page-enter .behavior-matrix > *:nth-child(2) {
-  animation-delay: calc(var(--stagger-step) * 2);
-}
-
-.content.page-enter .metrics-grid > *:nth-child(3),
-.content.page-enter .capability-grid > *:nth-child(3),
-.content.page-enter .behavior-matrix > *:nth-child(3) {
-  animation-delay: calc(var(--stagger-step) * 3);
-}
-
-.content.page-enter .metrics-grid > *:nth-child(4),
-.content.page-enter .capability-grid > *:nth-child(4),
-.content.page-enter .behavior-matrix > *:nth-child(4) {
-  animation-delay: calc(var(--stagger-step) * 4);
-}
-
-.content.page-enter .metrics-grid > *:nth-child(5),
-.content.page-enter .capability-grid > *:nth-child(5),
-.content.page-enter .behavior-matrix > *:nth-child(5) {
-  animation-delay: calc(var(--stagger-step) * 5);
-}
-
-.content.page-enter .metrics-grid > *:nth-child(n + 6),
-.content.page-enter .capability-grid > *:nth-child(n + 6),
-.content.page-enter .behavior-matrix > *:nth-child(n + 6) {
-  animation-delay: calc(var(--stagger-step) * 6);
-}
-
-@keyframes cardStaggerIn {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 10px, 0);
-  }
-}
+/* ── 页面进入：分层交错 ──────────────────────────────────────────────
+ * 真正的入场编排在 motion-pro.css 的 #content.is-entering（app.js 的
+ * playEnterSequence 只加这个类）。这里原先还有一套 .content.page-enter 规则，
+ * 但 app.js 从不添加该类、且被 #content.is-entering 以更高特异性压制，
+ * 属于 101 行空转代码，已删除，避免两套编排名义并存。
+ */
 
 /* ── 视图过渡（View Transitions API）──────────────────────────────────
  * 用在「深浅色切换」这类全局面板变化上：整页交叉淡入，不搬动布局。
- * 页面间的切换走上面的 page-exit / page-enter，避免与内部交错动画打架。
+ * 页面间的切换走 motion-pro 的 vt-layer 分层 + is-entering 交错。
  */
 
 ::view-transition-old(root),
@@ -182,25 +85,17 @@
 
 /* ── 首屏启动淡出 ──────────────────────────────────────────────────── */
 
-/* 数据读完之前先藏住空壳，启动屏本身留在内容区里正常显示 */
+/* 数据读完之前先藏住空壳，启动屏本身留在内容区里正常显示。
+   淡出的 transition 已并入 shell.css 的 .sidebar / .topbar 声明：
+   在这里再写一条 transition 会以更高特异性覆盖折叠、抽屉与滚动收缩的过渡。 */
 .app-shell.is-booting .sidebar,
 .app-shell.is-booting .topbar {
   opacity: 0;
 }
 
-.app-shell .sidebar,
-.app-shell .topbar {
-  transition: opacity var(--dur-slow) var(--ease-out);
-}
-
 /* ── 减少动态效果 ──────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .content.page-enter > *,
-  .content.page-enter > .page-head,
-  .content.page-enter .metrics-grid > *,
-  .content.page-enter .capability-grid > *,
-  .content.page-enter .behavior-matrix > *,
   .event-row,
   .profile-row,
   .tool-option,

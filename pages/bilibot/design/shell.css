@@ -42,7 +42,9 @@
   backdrop-filter: saturate(180%) blur(24px);
   -webkit-backdrop-filter: saturate(180%) blur(24px);
   transition: width var(--dur-slow) var(--ease-apple),
-    transform var(--dur-slow) var(--ease-apple), background-color var(--dur-base) var(--ease-out);
+    transform var(--dur-slow) var(--ease-apple),
+    background-color var(--dur-base) var(--ease-out),
+    opacity var(--dur-slow) var(--ease-out);
 }
 
 .sidebar-brand {
@@ -92,12 +94,16 @@
   white-space: nowrap;
 }
 
-/* 工作模式入口（由扩展 Manifest 驱动） */
+/* 工作模式入口（由扩展 Manifest 驱动）：放在侧栏底部，带文字说明 */
+.sidebar-workspace {
+  padding: 0 var(--sp-2);
+}
+
 .mode-entry-cluster {
   display: flex;
   align-items: center;
   gap: var(--sp-1);
-  margin-left: auto;
+  width: 100%;
 }
 
 .mode-entry-button {
@@ -105,8 +111,10 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
-  height: 30px;
-  padding: 0 var(--sp-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 34px;
+  padding: 0 var(--sp-3);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-pill);
   background: var(--surface);
@@ -118,6 +126,7 @@
 .mode-entry-button span {
   display: grid;
   place-items: center;
+  flex: none;
   font-size: var(--icon-sm);
 }
 
@@ -130,9 +139,21 @@
 }
 
 .mode-entry-button b {
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-semibold);
-  color: var(--text-tertiary);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mode-entry-button > .gicon:last-child {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  opacity: 0.55;
 }
 
 .mode-entry-button:hover {
@@ -148,13 +169,20 @@
 .mode-entry-popout {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   border: 1px solid transparent;
   border-radius: var(--r-pill);
   color: var(--text-tertiary);
+  /* 「在新标签页打开」是次要操作：默认压到 45%，避免和主入口抢注意力。 */
+  opacity: 0.45;
   transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out),
-    transform var(--dur-press) var(--ease-out);
+    opacity var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+
+.mode-entry-cluster:hover .mode-entry-popout,
+.mode-entry-popout:focus-visible {
+  opacity: 1;
 }
 
 .mode-entry-popout:hover {
@@ -440,7 +468,9 @@
     margin: 0 auto;
   }
 
-  .sidebar.is-rail + .main-stage {
+  /* 侧栏与 main-stage 之间隔着 sidebar-scrim（#sidebar 的直接兄弟是遮罩），
+     所以这里必须用通用兄弟选择器；相邻兄弟选择器永远匹配不到 .main-stage。 */
+  .sidebar.is-rail ~ .main-stage {
     margin-left: calc(var(--sidebar-rail-w) + 24px);
   }
 
@@ -491,7 +521,9 @@
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   transition: border-color var(--dur-base) var(--ease-out),
-    background-color var(--dur-base) var(--ease-out);
+    background-color var(--dur-base) var(--ease-out),
+    height var(--dur-slow) var(--ease-apple),
+    opacity var(--dur-slow) var(--ease-out);
 }
 
 .topbar.is-scrolled {
@@ -925,7 +957,9 @@
   .sidebar-scrim {
     position: fixed;
     inset: 0;
-    z-index: var(--z-scrim);
+    /* 必须低于侧栏（--z-sidebar: 40），否则遮罩会盖住抽屉本身：
+       导航项看得见、点不到，elementFromPoint 命中 sidebar-scrim。 */
+    z-index: calc(var(--z-sidebar) - 1);
     display: block;
     border: 0;
     background: var(--backdrop);

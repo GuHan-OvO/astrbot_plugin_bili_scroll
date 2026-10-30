@@ -15,45 +15,16 @@
 // JS 只把取元素换成 shadow 查询，初始化顺序、渲染、POST trial 的语义都不变。
 
 const STYLE = `
-/* 「自检」页面。与控制中心共用同一套视觉令牌，但文件自包含。 */
-
+/* 「自检」页面。
+ * 视觉令牌不在 shadow 内重抄：自定义属性从宿主继承，控制中心换主题时这一页跟着走。
+ * 这里只补宿主没有的别名。
+ */
 :host {
   color-scheme: light;
-
-  --bg: #f5f5f7;
-  --surface: #ffffff;
-  --surface-muted: #fafafc;
-  --surface-sunken: #f1f1f4;
-  --text: #1d1d1f;
-  --text-strong: #000000;
-  --text-2: #6e6e73;
-  --text-3: #8e8e93;
-  --line: rgba(0, 0, 0, 0.08);
-  --line-strong: rgba(0, 0, 0, 0.14);
-  --accent: #0071e3;
-  --accent-soft: rgba(0, 113, 227, 0.09);
-  --green: #1f8a3d;
-  --green-soft: rgba(52, 199, 89, 0.14);
-  --orange: #b35c00;
-  --orange-soft: rgba(255, 149, 0, 0.16);
-  --red: #c9302c;
-  --red-soft: rgba(255, 59, 48, 0.11);
-  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.045);
-  --shadow-2: 0 14px 34px -18px rgba(16, 24, 40, 0.24), 0 2px 6px rgba(16, 24, 40, 0.04);
-  --r-sm: 9px;
-  --r-md: 13px;
-  --r-lg: 18px;
-  --r-pill: 999px;
-  --dur-fast: 150ms;
-  --dur-base: 220ms;
-  --dur-slow: 320ms;
-  --ease-out: cubic-bezier(0.22, 0.68, 0.36, 1);
-  --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", system-ui,
-    sans-serif;
-  --font-mono: "SF Mono", "Cascadia Mono", ui-monospace, Consolas, monospace;
-  --ambient: rgba(0, 113, 227, 0.1);
+  --text-2: var(--text-secondary);
+  --text-3: var(--text-tertiary);
+  --font: var(--font-ui);
+  --ambient: var(--accent-soft);
 }
 
 /* 深浅色只跟控制中心的 data-theme：控制中心是手动切换的，如果这里再留一份
@@ -62,27 +33,6 @@ const STYLE = `
 :host([data-theme="dark"]) {
   /* 原生控件（select 弹层、滚动条）按这个走，否则手动切深色后它们还是浅色 */
   color-scheme: dark;
-  --bg: #0b0b0d;
-  --surface: #1a1a1d;
-  --surface-muted: #161618;
-  --surface-sunken: #101012;
-  --text: #f5f5f7;
-  --text-strong: #ffffff;
-  --text-2: #a1a1a6;
-  --text-3: #7c7c82;
-  --line: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.18);
-  --accent: #0a84ff;
-  --accent-soft: rgba(10, 132, 255, 0.16);
-  --green: #30d158;
-  --green-soft: rgba(48, 209, 88, 0.16);
-  --orange: #ff9f0a;
-  --orange-soft: rgba(255, 159, 10, 0.16);
-  --red: #ff453a;
-  --red-soft: rgba(255, 69, 58, 0.16);
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-2: 0 16px 38px -20px rgba(0, 0, 0, 0.8);
-  --ambient: rgba(10, 132, 255, 0.16);
 }
 
 *,
@@ -532,6 +482,11 @@ button {
     width: 100%;
     justify-content: flex-end;
   }
+
+  /* 触屏下把控件抬到 44px：桌面 36px 的可点目标在手机上偏小 */
+  .btn {
+    height: 44px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -557,7 +512,7 @@ const MARKUP = `
       <div class="bar-copy">
         <span class="eyebrow">BILIBOT / SELF CHECK</span>
         <h1>自检</h1>
-        <p class="bar-sub">看这个插件现在到底能不能跑。只读，不会发任何 B站 请求。</p>
+        <p class="bar-sub">只读检查模块、配置、数据与路由；下方「刷一个 / 测私信 / 测提及」会真实向 B站 发出请求。</p>
       </div>
       <div class="bar-actions">
         <span id="stamp" class="stamp"></span>
@@ -602,10 +557,8 @@ const MARKUP = `
       <header class="card-head"><span class="dot idle"></span><h2>试运行</h2></header>
       <p class="note" id="trial-note"></p>
       <dl id="trial-cookie" class="kv"></dl>
-      <h3 class="sub-head">候选</h3>
+      <h3 class="sub-head">细节</h3>
       <ul id="trial-candidates" class="checks"></ul>
-      <h3 class="sub-head">正式跑会做什么</h3>
-      <ul id="trial-plan" class="checks"></ul>
     </section>
   </div>
 `;
@@ -637,8 +590,10 @@ export function mountSelftest(host) {
     trialNote: shadow.querySelector("#trial-note"),
     trialCookie: shadow.querySelector("#trial-cookie"),
     trialCandidates: shadow.querySelector("#trial-candidates"),
-    trialPlan: shadow.querySelector("#trial-plan"),
   };
+
+  // 切页后 stop 轮询与倒计时：视图销毁后仍在写已脱离文档的 DOM 是明确的泄漏。
+  let destroyed = false;
 
   const cards = {
     module: shadow.querySelector("#card-module"),
@@ -682,6 +637,11 @@ export function mountSelftest(host) {
     if (!dot) return;
     dot.classList.remove("ok", "bad", "idle");
     dot.classList.add(tone);
+    // 状态点原先只有颜色：给读屏与色觉障碍一个文本结论。
+    const label = { ok: "正常", bad: "异常", idle: "未知" }[tone] || "未知";
+    dot.setAttribute("role", "img");
+    dot.setAttribute("aria-label", label);
+    card.dataset.state = label;
   }
 
   function addRow(dl, label, value, tone) {
@@ -721,8 +681,7 @@ export function mountSelftest(host) {
       el.configTotal.textContent = "读取失败";
       markCard(cards.config, "bad");
       return;
-    }
-    const required = cfg.required || [];
+    }    const required = cfg.required || [];
     const allOk = required.every((item) => item.ok);
     markCard(cards.config, allOk ? "ok" : "bad");
     el.configTotal.textContent = `配置项共 ${cfg.total_keys} 个${allOk ? "" : " · 有必填项未通过"}`;
@@ -739,7 +698,8 @@ export function mountSelftest(host) {
 
     clear(el.configOptional);
     for (const item of cfg.optional || []) {
-      addRow(el.configOptional, item.key, `${item.value}　（${item.hint}）`);
+      // 后端会把未配置项的值原样传成 None：直接插模板会渲染出 "null"。
+      addRow(el.configOptional, item.key, `${item.value ?? "—"}　（${item.hint ?? "—"}）`);
     }
   }
 
@@ -767,15 +727,15 @@ export function mountSelftest(host) {
     const watch = data.watch_log || {};
     const verify = data.verify_log || {};
     const db = data.database || {};
-    const broken = watch.count === null || verify.count === null;
+    const broken = watch.count == null || verify.count == null;
     markCard(cards.data, broken ? "bad" : "ok");
 
     addRow(
       el.dataList,
       "看过的视频",
-      watch.count === null ? "文件损坏" : `${watch.total ?? watch.count} 条`
+      watch.count == null ? "文件损坏" : `${watch.total ?? watch.count} 条`
     );
-    addRow(el.dataList, "复核记录", verify.count === null ? "文件损坏" : `${verify.count} 条`);
+    addRow(el.dataList, "复核记录", verify.count == null ? "文件损坏" : `${verify.count} 条`);
     const verifyRecent = data.verify_recent || [];
     addRow(
       el.dataList,
@@ -822,89 +782,43 @@ export function mountSelftest(host) {
     }
   }
 
-  function renderTrial(data) {
-    el.trialCard.hidden = false;
-    markCard(el.trialCard, data.plan?.proactive_enabled ? "ok" : "idle");
-
-    const ms = data.elapsed_ms;
-    el.trialNote.textContent = `耗时 ${ms} ms · 取到 ${data.candidate_total ?? 0} 个候选 · 没有发出任何写请求`;
-
-    clear(el.trialCookie);
-    const cookie = data.cookie || {};
-    addRow(el.trialCookie, "登录态", cookie.detail || "—", cookie.ok ? "ok-text" : "bad-text");
-
-    clear(el.trialCandidates);
-    const list = data.candidates || [];
-    if (!list.length) {
-      el.trialCandidates.appendChild(node("li", "hint", "没有取到候选（检查视频池配置或网络）"));
-    }
-    for (const item of list) {
-      const li = node("li");
-      li.appendChild(node("span", `dot ${item.source ? "ok" : "idle"}`));
-      const body = node("div");
-      body.appendChild(node("span", "name", item.title || item.bvid));
-      const meta = [item.up_name, item.tname, item.play && `${item.play} 播放`, item.source]
-        .filter(Boolean)
-        .join(" · ");
-      body.appendChild(node("span", "hint", `　${meta}`));
-      li.appendChild(body);
-      el.trialCandidates.appendChild(li);
-    }
-
-    clear(el.trialPlan);
-    const plan = data.plan || {};
-    if (!plan.proactive_enabled) {
-      const li = node("li");
-      li.appendChild(node("span", "dot bad"));
-      li.appendChild(node("span", "hint bad-text", "ENABLE_PROACTIVE 关着，正式跑也不会启动"));
-      el.trialPlan.appendChild(li);
-    }
-    for (const action of plan.actions || []) {
-      const li = node("li");
-      li.appendChild(node("span", `dot ${action.enabled ? "ok" : "idle"}`));
-      li.appendChild(
-        node(
-          "span",
-          "hint",
-          action.enabled ? `${action.action}：评分 ≥ ${action.threshold}` : `${action.action}：已关闭`
-        )
-      );
-      el.trialPlan.appendChild(li);
-    }
-    if (plan.note) el.trialPlan.appendChild(node("li", "hint", plan.note));
-  }
 
   /* 防连点：冷却期禁用按钮，剩余秒数放提示行（按钮文字保持 4 字以内）。 */
   let cooldownTimer = 0;
 
-  function syncCooldown(remaining) {
+  function syncCooldown(remaining, options = {}) {
     window.clearInterval(cooldownTimer);
     let left = Number(remaining) || 0;
     if (left <= 0) {
       el.trial.disabled = false;
+      el.trial.title = "";
       return;
     }
     el.trial.disabled = true;
-    el.trialNote.textContent = `冷却中，还要等 ${left} 秒`;
+    el.trial.title = `冷却中，还要等 ${left} 秒`;
+    // keepNote：真跑刚结束时 note 里是「刷完了，用时 X 秒」这类结论，
+    // 冷却倒计时只写按钮 title，不能把结论覆盖成「冷却中」。
+    if (!options.keepNote) el.trialNote.textContent = `冷却中，还要等 ${left} 秒`;
     cooldownTimer = window.setInterval(() => {
       left -= 1;
+      el.trial.title = left > 0 ? `冷却中，还要等 ${left} 秒` : "";
       if (left <= 0) {
         window.clearInterval(cooldownTimer);
         el.trial.disabled = false;
-        el.trialNote.textContent = "";
+        if (!options.keepNote) el.trialNote.textContent = "";
         return;
       }
-      el.trialNote.textContent = `冷却中，还要等 ${left} 秒`;
+      if (!options.keepNote) el.trialNote.textContent = `冷却中，还要等 ${left} 秒`;
     }, 1000);
   }
 
   /* 问后端当前是否在冷却——状态在后端，刷新页面也拦得住。 */
-  async function refreshCooldown() {
+  async function refreshCooldown(options = {}) {
     try {
       const state = await apiGet("trial/live");
-      syncCooldown(state && state.cooldown_remaining);
+      syncCooldown(state && state.cooldown_remaining, options);
     } catch (err) {
-      syncCooldown(0);
+      syncCooldown(0, options);
     }
   }
 
@@ -915,6 +829,8 @@ export function mountSelftest(host) {
   async function runTest(kind) {
     const btn = kind === "private" ? el.testPrivate : el.testMention;
     const label = TEST_LABEL[kind];
+    // 上一次冷却留下的 1s 倒计时会在接下来几秒里继续写 note，把本次结果覆盖掉。
+    window.clearInterval(cooldownTimer);
     btn.disabled = true;
     btn.textContent = "发送中…";
     el.trialCard.hidden = false;
@@ -935,7 +851,6 @@ export function mountSelftest(host) {
   function renderTestResult(res) {
     clear(el.trialCookie);
     clear(el.trialCandidates);
-    clear(el.trialPlan);
 
     const cooldown = Number(res && res.retry_after) || 0;
     if (cooldown > 0) {
@@ -953,7 +868,9 @@ export function mountSelftest(host) {
         : "带 @ 的评论已发出，等推送到达"
       : (res && res.error) || "失败";
 
-    if (!res || res.error === undefined) return;
+    // 后端成功响应没有 error 字段；原先按 error === undefined 直接 return，
+    // 导致「测私信 / 测提及」成功时收件人、内容、oid、@映射全部不显示。
+    if (!res) return;
 
     if (isPrivate) {
       addRow(el.trialCookie, "收件人",
@@ -978,21 +895,27 @@ export function mountSelftest(host) {
 
 
   async function runTrial() {
+    // 同 runTest：先停掉旧的冷却倒计时，避免它每秒把「刷完了」覆盖成「冷却中」。
+    window.clearInterval(cooldownTimer);
     el.trial.disabled = true;
     el.trial.textContent = "刷片中…";
     el.error.hidden = true;
     el.trialCard.hidden = false;
     markCard(el.trialCard, "idle");
     el.trialNote.textContent = "正在刷 B站：取片 → 分析 → 评价 → 按配置互动。可能要一两分钟…";
+    let produced = false;
     try {
       const started = await apiPost("trial/live");
       if (!started || !started.started) {
         el.trialNote.textContent = (started && started.reason) || "启动失败";
         syncCooldown((started && started.retry_after) || 0);
+        produced = true;
         return;
       }
       renderLive(await pollLive());
+      produced = true;
     } catch (err) {
+      if (destroyed) return;
       el.trialCard.hidden = false;
       markCard(el.trialCard, "bad");
       el.error.hidden = false;
@@ -1000,7 +923,8 @@ export function mountSelftest(host) {
     } finally {
       el.trial.disabled = false;
       el.trial.textContent = "刷一个";
-      await refreshCooldown();
+      // 拿到结论时别让冷却倒计时覆盖它：冷却只写按钮 title 与禁用状态。
+      if (!destroyed) await refreshCooldown({ keepNote: produced });
     }
   }
 
@@ -1008,8 +932,9 @@ export function mountSelftest(host) {
   async function pollLive() {
     const deadline = Date.now() + 6 * 60 * 1000;
     let last = null;
-    while (Date.now() < deadline) {
+    while (!destroyed && Date.now() < deadline) {
       await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      if (destroyed) return last || { running: false, error: "页面已关闭", elapsed_ms: 0, watched: null };
       const state = await apiGet("trial/live");
       last = state;
       if (state && !state.running) return state;
@@ -1035,7 +960,6 @@ export function mountSelftest(host) {
 
     clear(el.trialCookie);
     clear(el.trialCandidates);
-    clear(el.trialPlan);
 
     if (!watched) return;
 
@@ -1093,10 +1017,12 @@ export function mountSelftest(host) {
     }
   }
 
+  const onTestPrivate = () => runTest("private");
+  const onTestMention = () => runTest("mention");
   el.reload.addEventListener("click", load);
   el.trial.addEventListener("click", runTrial);
-  el.testPrivate.addEventListener("click", () => runTest("private"));
-  el.testMention.addEventListener("click", () => runTest("mention"));
+  el.testPrivate.addEventListener("click", onTestPrivate);
+  el.testMention.addEventListener("click", onTestMention);
   refreshCooldown();
 
   // 原页面会在这里改写 <meta name="theme-color">。那个 meta 属于宿主 SPA 外壳、
@@ -1110,8 +1036,12 @@ export function mountSelftest(host) {
 
   return {
     destroy() {
+      destroyed = true;
+      window.clearInterval(cooldownTimer);
       el.reload.removeEventListener("click", load);
       el.trial.removeEventListener("click", runTrial);
+      el.testPrivate.removeEventListener("click", onTestPrivate);
+      el.testMention.removeEventListener("click", onTestMention);
     },
   };
 }

@@ -76,9 +76,13 @@ const HISTORY_HTML = `
 
     <main id="grid" class="grid" aria-live="polite"></main>
     <p id="empty" class="empty" hidden>还没有看过的记录。等它跑完一轮就会出现。</p>
-    <p id="error" class="error" hidden></p>
+    <div id="error" class="error" hidden role="alert">
+      <strong>加载失败</strong>
+      <p id="error-detail"></p>
+      <button id="error-retry" class="btn soft" type="button">重新加载</button>
+    </div>
 
-    <nav class="pager" aria-label="分页">
+    <nav id="pager" class="pager" aria-label="分页">
       <button id="prev" type="button" class="btn soft" aria-label="上一页">上一页</button>
       <span id="page-info" class="page-info"></span>
       <button id="next" type="button" class="btn soft" aria-label="下一页">下一页</button>
@@ -96,51 +100,16 @@ const HISTORY_HTML = `
 const HISTORY_CSS = `
 /* 「看过的视频」页面。
  *
- * 刻意自包含：不引用控制中心的样式文件，避免两边互相牵连。
- * 令牌值与控制中心保持一致（浅色 #f5f5f7 底、#0071e3 强调色、统一圆角与缓动）。
+ * 视觉令牌不在 shadow 内重抄一份：CSS 自定义属性本来就会从宿主继承，
+ * 重抄会让控制中心换主题（accent、对比度、阴影、圆角）时这一页纹丝不动。
+ * 这里只补宿主没有的别名；:root 上的其余令牌由宿主继承下来。
  */
-
 :host {
   color-scheme: light;
-
-  --bg: #f5f5f7;
-  --surface: #ffffff;
-  --surface-muted: #fafafc;
-  --surface-sunken: #f1f1f4;
-  --text: #1d1d1f;
-  --text-strong: #000000;
-  --text-2: #6e6e73;
-  --text-3: #8e8e93;
-  --line: rgba(0, 0, 0, 0.08);
-  --line-strong: rgba(0, 0, 0, 0.14);
-  --line-input: rgba(0, 0, 0, 0.16);
-  --accent: #0071e3;
-  --accent-soft: rgba(0, 113, 227, 0.09);
-  --accent-ring: rgba(0, 113, 227, 0.28);
-  --green: #1f8a3d;
-  --green-soft: rgba(52, 199, 89, 0.14);
-  --orange: #b35c00;
-  --orange-soft: rgba(255, 149, 0, 0.16);
-  --red: #c9302c;
-  --red-soft: rgba(255, 59, 48, 0.11);
-  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.045);
-  --shadow-2: 0 14px 34px -18px rgba(16, 24, 40, 0.24), 0 2px 6px rgba(16, 24, 40, 0.04);
-  --shadow-3: 0 32px 72px -28px rgba(16, 24, 40, 0.34);
-  --backdrop: rgba(20, 20, 24, 0.34);
-  --ambient: rgba(0, 113, 227, 0.1);
-  --r-sm: 9px;
-  --r-md: 13px;
-  --r-lg: 18px;
-  --r-pill: 999px;
-  --dur-fast: 150ms;
-  --dur-base: 220ms;
-  --dur-slow: 320ms;
-  --ease-out: cubic-bezier(0.22, 0.68, 0.36, 1);
-  --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", system-ui,
-    sans-serif;
-  --font-mono: "SF Mono", "Cascadia Mono", ui-monospace, Consolas, monospace;
+  --text-2: var(--text-secondary);
+  --text-3: var(--text-tertiary);
+  --font: var(--font-ui);
+  --ambient: var(--accent-soft);
 }
 
 /* 深浅色只跟控制中心的 data-theme：控制中心是手动切换的，如果这里再留一份
@@ -149,31 +118,6 @@ const HISTORY_CSS = `
 :host([data-theme="dark"]) {
   /* 原生控件（select 弹层、滚动条）按这个走，否则手动切深色后它们还是浅色 */
   color-scheme: dark;
-  --bg: #0b0b0d;
-  --surface: #1a1a1d;
-  --surface-muted: #161618;
-  --surface-sunken: #101012;
-  --text: #f5f5f7;
-  --text-strong: #ffffff;
-  --text-2: #a1a1a6;
-  --text-3: #7c7c82;
-  --line: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.18);
-  --line-input: rgba(255, 255, 255, 0.2);
-  --accent: #0a84ff;
-  --accent-soft: rgba(10, 132, 255, 0.16);
-  --accent-ring: rgba(10, 132, 255, 0.4);
-  --green: #30d158;
-  --green-soft: rgba(48, 209, 88, 0.16);
-  --orange: #ff9f0a;
-  --orange-soft: rgba(255, 159, 10, 0.16);
-  --red: #ff453a;
-  --red-soft: rgba(255, 69, 58, 0.16);
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-2: 0 16px 38px -20px rgba(0, 0, 0, 0.8);
-  --shadow-3: 0 36px 80px -30px rgba(0, 0, 0, 0.9);
-  --backdrop: rgba(0, 0, 0, 0.58);
-  --ambient: rgba(10, 132, 255, 0.16);
 }
 
 *,
@@ -340,7 +284,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 34px;
+  height: 36px;
   padding: 0 16px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-pill);
@@ -436,7 +380,7 @@ button {
 input[type="number"],
 input[type="search"],
 select {
-  height: 34px;
+  height: 36px;
   padding: 0 11px;
   border: 1px solid var(--line-input);
   border-radius: var(--r-sm);
@@ -702,6 +646,12 @@ select:focus {
 
 /* ── 空态 / 错误 ────────────────────────────────────────────────────── */
 
+/* 视图内自带完整样式表，但没有宿主 base.css 的 [hidden] 兜底；
+   .drawer 的 display:flex 会盖掉浏览器默认的 [hidden]，所以这里必须显式声明。 */
+[hidden] {
+  display: none !important;
+}
+
 .empty,
 .error {
   padding: 64px 16px;
@@ -709,13 +659,38 @@ select:focus {
   color: var(--text-3);
 }
 
+/* 错误态做成一张可重试的卡片，而不是一条和页面语言不搭的红色横幅 */
 .error {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  max-width: 560px;
+  margin: 8px auto 0;
   padding: 20px;
-  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 26%, var(--line));
   border-radius: var(--r-md);
-  background: var(--red-soft);
-  color: var(--red);
+  background: var(--surface);
+  color: var(--text);
   text-align: left;
+  box-shadow: var(--shadow-1);
+}
+
+.error > strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--red);
+}
+
+.error > p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.error .btn {
+  margin-top: 6px;
 }
 
 .pager {
@@ -737,7 +712,8 @@ select:focus {
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  /* 必须高于宿主顶栏(30)、侧栏(40)与保存条(50)，否则抽屉头部的关闭按钮会被顶栏盖住。 */
+  z-index: 60;
   background: var(--backdrop);
   backdrop-filter: blur(6px);
   opacity: 0;
@@ -753,7 +729,7 @@ select:focus {
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 21;
+  z-index: 61;
   display: flex;
   flex-direction: column;
   width: min(540px, 94vw);
@@ -796,8 +772,8 @@ select:focus {
   display: grid;
   place-items: center;
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--r-sm);
   background: var(--surface-sunken);
   color: var(--text-2);
@@ -902,6 +878,19 @@ select:focus {
     width: 100%;
     border-left: 0;
   }
+
+  /* 触屏下把可点目标抬到 44px */
+  .btn,
+  input[type="number"],
+  input[type="search"],
+  select {
+    height: 44px;
+  }
+
+  .drawer-close {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -936,6 +925,9 @@ export function mountHistory(host) {
     count: shadow.querySelector("#count"),
     empty: shadow.querySelector("#empty"),
     error: shadow.querySelector("#error"),
+    errorDetail: shadow.querySelector("#error-detail"),
+    errorRetry: shadow.querySelector("#error-retry"),
+    pager: shadow.querySelector("#pager"),
     pageInfo: shadow.querySelector("#page-info"),
     prev: shadow.querySelector("#prev"),
     next: shadow.querySelector("#next"),
@@ -950,7 +942,20 @@ export function mountHistory(host) {
     q: shadow.querySelector("#q"),
   };
 
-  const state = { offset: 0, total: 0, items: [], loading: false, firstLoad: true, returnFocus: null };
+  const state = {
+    offset: 0,
+    total: 0,
+    items: [],
+    loading: false,
+    firstLoad: true,
+    returnFocus: null,
+    error: "",
+    // 请求序号：筛选/翻页/搜索可能并发，只让最新一次写 UI。
+    seq: 0,
+    detailSeq: 0,
+    destroyed: false,
+    closeTimer: 0,
+  };
 
   function unwrap(result) {
     if (result && result.status === "ok" && Object.prototype.hasOwnProperty.call(result, "data")) {
@@ -1000,8 +1005,10 @@ export function mountHistory(host) {
     return n;
   }
 
-  function renderStats(stats = {}) {
+  function renderStats(stats) {
     el.stats.replaceChildren();
+    // 读取失败时传 null：清空统计行，而不是把 "共 0 · 平均分 0" 当成真实数据。
+    if (!stats) return;
     const parts = [
       ["共", stats.total ?? 0],
       ["平均分", stats.average_score ?? 0],
@@ -1071,34 +1078,65 @@ export function mountHistory(host) {
     return card;
   }
 
+  function hasFilters() {
+    return Boolean(
+      el.minScore.value.trim() ||
+      el.maxScore.value.trim() ||
+      el.mood.value ||
+      el.source.value ||
+      el.state.value ||
+      el.q.value.trim()
+    );
+  }
+
   function render() {
     el.grid.replaceChildren(...state.items.map(renderCard));
-    el.empty.hidden = state.total !== 0 || state.loading;
+    const failed = Boolean(state.error);
+    el.error.hidden = !failed;
+    if (failed) el.errorDetail.textContent = state.error;
+    // 错误态与空态互斥：失败时绝不再叠加「还没有看过的记录」。
+    const noData = !state.loading && !failed && state.total === 0 && state.items.length === 0;
+    el.empty.hidden = !noData;
+    el.empty.textContent = noData && hasFilters()
+      ? "没有符合这些筛选条件的记录。"
+      : "还没有看过的记录。等它跑完一轮就会出现。";
+    // 失败时页码没有意义（offset 已归 0），整条分页隐藏。
+    el.pager.hidden = failed;
     const page = Math.floor(state.offset / PAGE_SIZE) + 1;
     const pages = Math.max(1, Math.ceil(state.total / PAGE_SIZE));
     el.pageInfo.textContent = `第 ${page} / ${pages} 页 · 共 ${state.total} 条`;
-    el.prev.disabled = state.offset <= 0;
-    el.next.disabled = state.offset + PAGE_SIZE >= state.total;
+    el.prev.disabled = state.loading || state.offset <= 0;
+    el.next.disabled = state.loading || state.offset + PAGE_SIZE >= state.total;
     el.count.textContent = state.total
       ? `第 ${state.offset + 1}–${Math.min(state.offset + PAGE_SIZE, state.total)} 条，共 ${state.total} 条`
       : "";
   }
 
   async function load() {
+    const seq = ++state.seq;
     state.loading = true;
+    state.error = "";
     el.error.hidden = true;
+    el.pager.hidden = false;
+    // 请求期间禁掉翻页，避免连点下一页把 offset 推成越界页（「第 6 / 5 页」）。
+    el.prev.disabled = true;
+    el.next.disabled = true;
     if (state.firstLoad) renderSkeleton();
     try {
       const data = await apiGet("history", buildQuery());
+      if (seq !== state.seq || state.destroyed) return;
       state.items = Array.isArray(data.items) ? data.items : [];
-      state.total = Number(data.total || 0);
+      state.total = Number(data.total ?? state.items.length);
       renderStats(data.stats || {});
     } catch (err) {
+      if (seq !== state.seq || state.destroyed) return;
       state.items = [];
       state.total = 0;
-      el.error.hidden = false;
-      el.error.textContent = `加载失败：${err?.message || err}`;
+      state.offset = 0;
+      state.error = err?.message || String(err);
+      renderStats(null);
     } finally {
+      if (seq !== state.seq || state.destroyed) return;
       state.loading = false;
       state.firstLoad = false;
       render();
@@ -1107,8 +1145,13 @@ export function mountHistory(host) {
 
   let closeTimer = 0;
   let openFrame = 0;
+  // 打开抽屉前 html 的 overflow 值：关闭时只恢复自己改过的那次，
+  // 不要无条件清空（宿主可能同时锁着页面）。
+  let previousOverflow = null;
 
   function openDrawerShell() {
+    window.clearTimeout(closeTimer);
+    // 320ms 关闭动画期间重新打开：清掉待执行的关闭定时器，否则新抽屉会被旧定时器清空。
     el.drawer.hidden = false;
     el.backdrop.hidden = false;
     // 原实现是 document.activeElement；焦点在 shadow 内时它只会返回 host，
@@ -1117,33 +1160,52 @@ export function mountHistory(host) {
     openFrame = requestAnimationFrame(() => {
       el.backdrop.classList.add("is-visible");
       el.drawer.classList.add("is-visible");
+      el.drawer.querySelector(".drawer-close")?.focus({ preventScroll: true });
     });
-    document.documentElement.style.overflow = "hidden";
+    if (previousOverflow === null) {
+      previousOverflow = document.documentElement.style.overflow;
+      document.documentElement.style.overflow = "hidden";
+    }
   }
 
-  function closeDrawer() {
+  function closeDrawer(options = {}) {
     if (el.drawer.hidden) return;
     el.backdrop.classList.remove("is-visible");
     el.drawer.classList.remove("is-visible");
+    window.clearTimeout(closeTimer);
     closeTimer = window.setTimeout(() => {
       el.drawer.hidden = true;
       el.backdrop.hidden = true;
       el.drawer.replaceChildren();
     }, 320);
-    document.documentElement.style.overflow = "";
-    if (state.returnFocus instanceof HTMLElement && state.returnFocus.isConnected) {
+    if (previousOverflow !== null) {
+      document.documentElement.style.overflow = previousOverflow;
+      previousOverflow = null;
+    }
+    if (options.restoreFocus !== false && state.returnFocus instanceof HTMLElement && state.returnFocus.isConnected) {
       state.returnFocus.focus({ preventScroll: true });
     }
   }
 
   async function openDetail(bvid) {
     if (!bvid) return;
+    const seq = ++state.detailSeq;
     openDrawerShell();
-    el.drawer.replaceChildren(node("p", "meta", "读取中…"));
+    // 读取中也保留头部关闭按钮：否则加载失败时只剩 Esc 能退出。
+    const head = node("div", "drawer-head");
+    const close = node("button", "drawer-close", "×");
+    close.type = "button";
+    close.setAttribute("aria-label", "关闭详情");
+    close.addEventListener("click", () => closeDrawer());
+    head.append(node("h2", null, "视频详情"), close);
+    el.drawer.replaceChildren(head, node("p", "meta", "读取中…"));
     try {
-      renderDetail(await apiGet("history/detail", { bvid }));
+      const item = await apiGet("history/detail", { bvid });
+      if (seq !== state.detailSeq || state.destroyed) return;
+      renderDetail(item);
     } catch (err) {
-      el.drawer.replaceChildren(node("p", "error", `读取失败：${err?.message || err}`));
+      if (seq !== state.detailSeq || state.destroyed) return;
+      el.drawer.replaceChildren(head, node("p", "error", `读取失败：${err?.message || err}`));
     }
     el.drawer.scrollTop = 0;
   }
@@ -1226,13 +1288,28 @@ export function mountHistory(host) {
     }, 300);
   });
 
-  for (const control of [el.minScore, el.maxScore, el.mood, el.source, el.state]) {
+  // 数字筛选也绑 input：只在 change 上绑意味着「敲完不失焦就看不到结果」。
+  let scoreTimer = 0;
+  for (const control of [el.minScore, el.maxScore]) {
+    control.addEventListener("input", () => {
+      clearTimeout(scoreTimer);
+      scoreTimer = setTimeout(() => {
+        state.offset = 0;
+        state.firstLoad = false;
+        load();
+      }, 300);
+    });
+  }
+
+  for (const control of [el.mood, el.source, el.state]) {
     control.addEventListener("change", () => {
       state.offset = 0;
       state.firstLoad = false;
       load();
     });
   }
+
+  el.errorRetry.addEventListener("click", () => load());
 
   el.prev.addEventListener("click", () => {
     state.offset = Math.max(0, state.offset - PAGE_SIZE);
@@ -1249,10 +1326,30 @@ export function mountHistory(host) {
   el.reset.addEventListener("click", resetFilters);
   el.backdrop.addEventListener("click", closeDrawer);
 
-  // Escape 关抽屉。监听留在 document 上（而不是 shadow）：抽屉打开时焦点可能在
-  // shadow 外，只有 document 上的监听能稳定收到 keydown；destroy() 里摘掉。
+  // Escape 关抽屉，Tab 循环约束在抽屉内（aria-modal 不能只写在属性上）。
+  // 监听留在 document 上（而不是 shadow）：抽屉打开时焦点可能在 shadow 外，
+  // 只有 document 上的监听能稳定收到 keydown；destroy() 里摘掉。
+  const DRAWER_FOCUSABLE = 'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
   function onKeydown(event) {
-    if (event.key === "Escape") closeDrawer();
+    if (event.key === "Escape") {
+      closeDrawer();
+      return;
+    }
+    if (event.key !== "Tab" || el.drawer.hidden) return;
+    const items = [...el.drawer.querySelectorAll(DRAWER_FOCUSABLE)]
+      .filter((node) => node.offsetWidth || node.offsetHeight || node.getClientRects().length);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = shadow.activeElement;
+    if (event.shiftKey && (active === first || !el.drawer.contains(active))) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+    } else if (!event.shiftKey && (active === last || !el.drawer.contains(active))) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
+    }
   }
 
   document.addEventListener("keydown", onKeydown);
@@ -1263,9 +1360,18 @@ export function mountHistory(host) {
   //  属于控制中心外壳的职责，这里不碰；本模块只操作 shadow 内的 DOM。）
 
   function destroy() {
+    state.destroyed = true;
+    // 递增序号让在途请求的回包失效，不再写已经脱离文档的 shadow。
+    state.seq += 1;
+    state.detailSeq += 1;
+    closeDrawer({ restoreFocus: false });
     document.removeEventListener("keydown", onKeydown);
-    document.documentElement.style.overflow = "";
+    if (previousOverflow !== null) {
+      document.documentElement.style.overflow = previousOverflow;
+      previousOverflow = null;
+    }
     clearTimeout(searchTimer);
+    clearTimeout(scoreTimer);
     clearTimeout(closeTimer);
     cancelAnimationFrame(openFrame);
   }

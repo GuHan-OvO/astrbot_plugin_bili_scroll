@@ -307,6 +307,9 @@ pre {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    /* 只压时长不压延迟时，带 backwards/both 填充的入场元素仍会先隐藏一段延迟 */
+    animation-delay: 0s !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
 

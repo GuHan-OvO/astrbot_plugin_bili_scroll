@@ -126,27 +126,31 @@ html[data-theme="light"] {
   --bg-deep: #ececf0;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-muted: #fafafc;
-  --surface-sunken: #f1f1f4;
+  --surface-muted: #f8f8fb;
+  --surface-sunken: #eeeef2;
   --surface-glass: rgba(255, 255, 255, 0.72);
   --surface-glass-strong: rgba(255, 255, 255, 0.86);
 
   --text: #1d1d1f;
   --text-strong: #000000;
-  --text-secondary: #6e6e73;
-  --text-tertiary: #8e8e93;
+  --text-secondary: #5f5f64;
+  /* 11-12px 的说明文字大量使用 tertiary：原先 #8e8e93 对白底只有 3.26:1，
+     不满足 AA 正文 4.5:1；提到 #66666c 后约 5.1:1，浅色下仍保持次要层级。 */
+  --text-tertiary: #66666c;
   --text-on-accent: #ffffff;
 
-  --line: rgba(0, 0, 0, 0.075);
-  --line-strong: rgba(0, 0, 0, 0.14);
-  --line-input: rgba(0, 0, 0, 0.16);
+  --line: rgba(0, 0, 0, 0.1);
+  --line-strong: rgba(0, 0, 0, 0.18);
+  --line-input: rgba(0, 0, 0, 0.24);
 
-  --accent: #0071e3;
-  --accent-hover: #0077ed;
-  --accent-press: #0058b8;
-  --accent-soft: rgba(0, 113, 227, 0.09);
-  --accent-soft-strong: rgba(0, 113, 227, 0.16);
-  --accent-ring: rgba(0, 113, 227, 0.28);
+  --accent: #0076a8;
+  --accent-hover: #0088bd;
+  --accent-press: #005d85;
+  --accent-soft: rgba(0, 118, 168, 0.09);
+  --accent-soft-strong: rgba(0, 118, 168, 0.16);
+  --accent-ring: rgba(0, 118, 168, 0.3);
+  /* B 站品牌粉：只用于品牌标识与少量装饰，不承担交互强调色（白字对比不足） */
+  --brand: #fb7299;
 
   --green: #1f8a3d;
   --green-soft: rgba(52, 199, 89, 0.14);
@@ -161,13 +165,13 @@ html[data-theme="light"] {
   --cyan: #00708f;
   --cyan-soft: rgba(50, 173, 230, 0.14);
 
-  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.045), 0 1px 1px rgba(16, 24, 40, 0.025);
-  --shadow-2: 0 10px 28px -14px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.04);
-  --shadow-3: 0 28px 64px -24px rgba(16, 24, 40, 0.28), 0 8px 20px -12px rgba(16, 24, 40, 0.14);
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 1px rgba(16, 24, 40, 0.03);
+  --shadow-2: 0 12px 30px -14px rgba(16, 24, 40, 0.22), 0 2px 6px rgba(16, 24, 40, 0.05);
+  --shadow-3: 0 28px 64px -24px rgba(16, 24, 40, 0.3), 0 8px 20px -12px rgba(16, 24, 40, 0.16);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 
-  --ambient-a: rgba(0, 113, 227, 0.1);
-  --ambient-b: rgba(255, 45, 85, 0.07);
+  --ambient-a: rgba(0, 118, 168, 0.1);
+  --ambient-b: rgba(251, 114, 153, 0.08);
   --ambient-c: rgba(94, 92, 230, 0.08);
   --ambient-base: #f5f5f7;
 
@@ -194,20 +198,22 @@ html[data-theme="dark"] {
 
   --text: #f5f5f7;
   --text-strong: #ffffff;
-  --text-secondary: #a1a1a6;
-  --text-tertiary: #7c7c82;
+  --text-secondary: #b3b3b9;
+  /* 原 #7c7c82 在 #1a1a1d 上只有 4.19:1；提到 #9a9aa1 后约 5.7:1。 */
+  --text-tertiary: #9a9aa1;
   --text-on-accent: #ffffff;
 
-  --line: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.18);
-  --line-input: rgba(255, 255, 255, 0.2);
+  --line: rgba(255, 255, 255, 0.11);
+  --line-strong: rgba(255, 255, 255, 0.19);
+  --line-input: rgba(255, 255, 255, 0.26);
 
-  --accent: #0a84ff;
-  --accent-hover: #3b9dff;
-  --accent-press: #0060c9;
-  --accent-soft: rgba(10, 132, 255, 0.16);
-  --accent-soft-strong: rgba(10, 132, 255, 0.26);
-  --accent-ring: rgba(10, 132, 255, 0.4);
+  --accent: #2ca4d8;
+  --accent-hover: #45b6e8;
+  --accent-press: #1a8cbd;
+  --accent-soft: rgba(44, 164, 216, 0.16);
+  --accent-soft-strong: rgba(44, 164, 216, 0.26);
+  --accent-ring: rgba(44, 164, 216, 0.4);
+  --brand: #ff8fb3;
 
   --green: #30d158;
   --green-soft: rgba(48, 209, 88, 0.16);
@@ -227,8 +233,8 @@ html[data-theme="dark"] {
   --shadow-3: 0 32px 72px -24px rgba(0, 0, 0, 0.9), 0 10px 24px -14px rgba(0, 0, 0, 0.6);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  --ambient-a: rgba(10, 132, 255, 0.16);
-  --ambient-b: rgba(255, 69, 58, 0.1);
+  --ambient-a: rgba(44, 164, 216, 0.16);
+  --ambient-b: rgba(251, 114, 153, 0.1);
   --ambient-c: rgba(130, 126, 255, 0.14);
   --ambient-base: #0b0b0d;
 
@@ -256,7 +262,8 @@ html[data-mode="extension"] {
   --text: #eef1f8;
   --text-strong: #ffffff;
   --text-secondary: #9aa4bb;
-  --text-tertiary: #6f7c96;
+  /* 8-10px 的标签在这个主题里大量使用 tertiary；#6f7c96 只有 4.34:1，提到 #8b99b4。 */
+  --text-tertiary: #8b99b4;
 
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.17);

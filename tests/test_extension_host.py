@@ -355,9 +355,12 @@ def test_webui_mode_entry_is_manifest_driven_not_creator_hardcoded():
     assert 'item.id === "creator"' not in source
     assert "creator-mode-switch" not in source
     brand_pos = source.index('sidebar.innerHTML = `<div class="sidebar-brand"')
-    entry_pos = source.index("${renderModeEntry(modeExtensions)}", brand_pos)
     nav_pos = source.index('<nav class="nav-list">', brand_pos)
-    assert brand_pos < entry_pos < nav_pos
+    foot_pos = source.index('<div class="sidebar-foot">', nav_pos)
+    # 模式入口已从品牌区移到导航下方、页脚上方：纯图标按钮看不出是什么，
+    # 改成带文字的工作区入口，位置也放在导航结束之后。
+    entry_pos = source.index("${renderModeEntry(modeExtensions)}", nav_pos)
+    assert brand_pos < nav_pos < entry_pos < foot_pos
 
 
 @pytest.mark.parametrize("changes", [
