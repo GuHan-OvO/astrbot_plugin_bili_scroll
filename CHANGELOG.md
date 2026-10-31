@@ -3,6 +3,28 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 已清空，不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v1.9.2 — 2026-10-31
+
+### 修复：主动看视频在写长期记忆前崩溃（`NameError: log_entry`）
+
+- 根因：v1.9.0 阶段「先落账再互动」的重构把观看记录改成内联字典直接传给
+  `append_watch_entry()`，删掉了局部变量 `log_entry`，而后面构造长期记忆文本与
+  视频分析缓存的两处仍在引用它。
+- 长期记忆文本是**无条件**构造的，因此只要一个视频真的评了分，就会在
+  `core/proactive.py` 抛 `NameError: name 'log_entry' is not defined`，
+  该轮主动看视频任务异常退出。
+- 崩溃点在观看记录补写之后、写长期记忆之前：`_save_self_memory_record("proactive_watch")`、
+  `external_memory`、视频分析缓存与观看计数全部没写到；分析降级为纯元数据时还会丢掉
+  `watched_bvids` 兜底，同一视频可能在后续轮次被重复下载分析。
+- 修法：把记录字典接回 `log_entry` 再传入 `append_watch_entry()`。
+- 新增 `tests/test_video_diagnostics.py::ProactiveWatchSuccessPathTests`，驱动
+  「评分成功 → 写长期记忆」这条路径。原有持久化用例没桩 `_evaluate_video`，
+  走的是「评价失败 → continue」，覆盖不到这一段。
+
+### 测试
+
+- 594 passed, 1 skipped, 94 subtests passed。
+
 ## v1.9.1 — 2026-10-30
 
 ### 修复：确认框不可见（点「重新生成今日计划」后整页虚化、点不动）
