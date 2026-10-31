@@ -1709,33 +1709,31 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             interaction_failed = False
             # 先落账再互动：互动段若抛未捕获异常，至少「看过什么 + 分数 + 感想」已经写进
             # watch_log，用户不会完全看不到这一轮发生了什么。互动结果在下面补回同一条。
-            watch_log = append_watch_entry(
-                self,
-                {
-                    "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "bvid": bvid,
-                    "title": video.get("title", ""),
-                    "up_name": video.get("up_name", ""),
-                    "up_mid": str(video.get("up_mid", "")),
-                    "score": score,
-                    "score_reason": score_reason,
-                    "mood": mood,
-                    "comment": comment,
-                    "review": review,
-                    "preference_signals": preference_signals,
-                    "search_keywords": search_keywords,
-                    "pic": (analysis_info.get("pic") or video.get("pic", "")),
-                    "tname": evaluation.get("partition") or analysis_info.get("tname", ""),
-                    "source": video.get("_source", ""),
-                    "source_detail": video.get("_source_detail", ""),
-                    "manual": is_manual,
-                    "discovery_mode": "explore" if video.get("_exploration") else "interest",
-                    "recommend_reason": evaluation.get("recommend_reason", ""),
-                    "content_summary": self._clip_media_text(video_description, 360),
-                    "analysis_basis": analysis_info.get("analysis_basis", "legacy"),
-                    "actions": [],
-                },
-            )
+            log_entry = {
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "bvid": bvid,
+                "title": video.get("title", ""),
+                "up_name": video.get("up_name", ""),
+                "up_mid": str(video.get("up_mid", "")),
+                "score": score,
+                "score_reason": score_reason,
+                "mood": mood,
+                "comment": comment,
+                "review": review,
+                "preference_signals": preference_signals,
+                "search_keywords": search_keywords,
+                "pic": (analysis_info.get("pic") or video.get("pic", "")),
+                "tname": evaluation.get("partition") or analysis_info.get("tname", ""),
+                "source": video.get("_source", ""),
+                "source_detail": video.get("_source_detail", ""),
+                "manual": is_manual,
+                "discovery_mode": "explore" if video.get("_exploration") else "interest",
+                "recommend_reason": evaluation.get("recommend_reason", ""),
+                "content_summary": self._clip_media_text(video_description, 360),
+                "analysis_basis": analysis_info.get("analysis_basis", "legacy"),
+                "actions": [],
+            }
+            watch_log = append_watch_entry(self, log_entry)
             if oid:
                 # 交互前快速校验 Cookie
                 cookie_ok, _ = await self.check_cookie()

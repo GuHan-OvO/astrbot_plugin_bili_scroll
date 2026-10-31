@@ -258,3 +258,69 @@ class VideoDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         result = safe_detail('api_key="abc" Bearer secret-token https://host/secret sk-abc_xyz')
         for secret in ("abc", "secret-token", "host/secret", "sk-"):
             self.assertNotIn(secret, result)
+
+
+class ProactiveWatchSuccessPathTests(unittest.IsolatedAsyncioTestCase):
+    """评分成功的观看必须一路走到长期记忆，而不是中途异常退出。
+
+    回归：核心流程把落账改成内联字典后，仍有两处引用重构前的 log_entry，
+    任何一次成功观看都会在最关键的「写长期记忆」之前 NameError 退出。
+    原有 regular 流程的用例走的是「评价失败 continue」分支，覆盖不到这一段。
+    """
+
+    async def test_watch_success_writes_long_term_memory(self):
+        class DiskBot(ProactiveMixin, VideoMixin, UtilsMixin):
+            pass
+
+        bot = DiskBot()
+        bot.config = {"PROACTIVE_FOLLOW_UIDS": ["42"]}
+        bot._seen_video_bvids = AsyncMock(return_value=set())
+        bot._get_up_latest_video = AsyncMock(return_value={
+            "bvid": "BVtest", "title": "test", "up_name": "UP", "oid": 1, "up_mid": "42",
+        })
+        bot._reserve_proactive_watch = AsyncMock(return_value=types.SimpleNamespace(success=True))
+        bot._get_video_info = AsyncMock(return_value={})
+
+        async def analyze(info):
+            info["analysis_basis"] = "metadata"
+            return "metadata only"
+
+        bot._analyze_video_with_vision = analyze
+        bot._get_environment_status = lambda: {"features": {"proactive_video_media": True}}
+        bot.get_followings = AsyncMock(return_value=[])
+        bot._get_pool_videos = AsyncMock(return_value=[])
+        bot._decide_proactive_search_queries = AsyncMock(return_value=[])
+        bot._get_proactive_search_videos = AsyncMock(return_value=[])
+        bot._get_taste_tids = lambda: []
+        bot._should_watch_video_before_download = AsyncMock(return_value=(True, ""))
+        bot._evaluate_video = AsyncMock(return_value=payload())
+        # Cookie 判定失效：互动段整体跳过，只验证「看完 → 落记录 → 写记忆」这一段。
+        bot.check_cookie = AsyncMock(return_value=(False, ""))
+        bot._save_self_memory_record = AsyncMock()
+
+        names = (
+            "WATCH_LOG_FILE", "COMMENTED_FILE", "EXTERNAL_MEMORY_FILE",
+            "PROACTIVE_LOG_FILE", "OWNER_RECOMMEND_LOG_FILE", "VIDEO_MEMORY_FILE",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            paths = {name: str(Path(directory) / (name + ".json")) for name in names}
+            archive = str(Path(directory) / "archive")
+            with patch.multiple(proactive_module, **paths), patch.multiple(
+                watch_log_module,
+                WATCH_LOG_FILE=paths["WATCH_LOG_FILE"],
+                archive_dir=lambda: archive,
+            ), patch.object(proactive_module.random, "randint", return_value=0):
+                await bot._run_proactive_inner(max_watch=1)
+
+            stored = json.loads(Path(paths["WATCH_LOG_FILE"]).read_text(encoding="utf-8"))
+            self.assertEqual(stored[0]["bvid"], "BVtest")
+            self.assertEqual(stored[0]["score"], 8.6)
+            self.assertEqual(stored[0]["actions"], [])
+            cache = json.loads(Path(paths["VIDEO_MEMORY_FILE"]).read_text(encoding="utf-8"))
+            self.assertEqual(cache["BVtest"]["score"], 8.6)
+
+        bot._save_self_memory_record.assert_awaited_once()
+        thread_id, text = bot._save_self_memory_record.await_args.args[:2]
+        self.assertEqual(thread_id, "proactive_watch")
+        self.assertIn("Bot看了视频《test》", text)
+        self.assertEqual(bot._save_self_memory_record.await_args.kwargs["extra"]["bvid"], "BVtest")
