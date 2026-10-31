@@ -24,6 +24,7 @@ from .mention import build_mention_map, compose_comment
 from .pc_bridge import share_via_pc
 from .dedup import dedupe_by_bvid, dedupe_similar_titles
 from .watch_log import append_watch_entry, update_watch_entry
+from .request_context import inject_temp_context
 from .security.redact import wrap_untrusted
 from .content_protocol import (
     ContentProtocolError, PROACTIVE_COMMENT_SCHEMA_PROMPT,
@@ -1452,7 +1453,11 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
         trigger_log.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "type": "manual_proactive_request", "scheduled": "llm_request", "status": "triggered", "content": msg[:100]})
         self._save_json(PROACTIVE_TRIGGER_LOG_FILE, trigger_log[-200:])
         sender_name = event.get_sender_name() or "用户"
-        req.system_prompt += f"\n\n【系统提示】{sender_name}叫你去看B站视频，你已在后台开始执行一次看视频流程。回复时让对方知道你去看了，看完后相关记忆会存入你的评论区记忆中，之后可以回忆起来。"
+        inject_temp_context(
+            req,
+            f"【系统提示】{sender_name}叫你去看B站视频，你已在后台开始执行一次看视频流程。"
+            "回复时让对方知道你去看了，看完后相关记忆会存入你的评论区记忆中，之后可以回忆起来。",
+        )
 
     # ── 主流程 ──
     async def _run_proactive(self, max_watch=None, max_comment=None):

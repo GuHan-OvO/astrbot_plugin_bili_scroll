@@ -3,6 +3,27 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 指向本仓库、不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v1.9.4 — 2026-11-01
+
+### 修复：临时上下文的注入方式（插件市场审核反馈）
+
+- 主动触发不再把动态文本追加进 `req.system_prompt`：那里面含每轮都变的昵称，会让服务端
+  前缀缓存失效，也破坏「系统提示词 = 稳定人格」的分层。
+- 分享背景、当前活动、跨端摘要（`_inject_context_block_before_user`）改为
+  `req.extra_user_content_parts` + `ContentPart.mark_as_temp()`：AstrBot 会把这类片段并进本轮
+  user 内容，落盘前逐 part 过滤 `_no_save`（`astrbot/core/agent/message.py:350-355`），
+  因此临时上下文只发给模型、不进会话历史。原实现把它拼进 `req.prompt`，会随本轮 user 消息
+  被写进历史，每轮注入一次就在历史里叠加一份。
+- 删掉「兜底改写 system_prompt」分支：AstrBot 缺少该机制时退回 `req.prompt` 前置，功能不丢，
+  但绝不再动系统提示词。
+- 新增 `core/request_context.py`（延迟导入 + `mark_as_temp` 保护）与
+  `tests/test_request_context.py`（9 条用例，含真实 `mark_as_temp` 守护；在桩掉 astrbot 的
+  测试会话里该条自动 skip）。
+
+### 测试
+
+- 602 passed, 2 skipped, 94 subtests passed。
+
 ## v1.9.3 — 2026-11-01
 
 ### 市场元数据补全（无代码改动）

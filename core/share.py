@@ -14,6 +14,7 @@ from .network import plugin_http_session
 from astrbot.api import logger
 
 from .config import TEMP_VIDEO_DIR, VIDEO_MEMORY_FILE
+from .request_context import inject_temp_context
 
 
 class ShareMixin:
@@ -537,29 +538,25 @@ class ShareMixin:
 
 
     def _inject_context_block_before_user(self, req, block):
-        messages = getattr(req, "messages", None)
-        if isinstance(messages, list):
-            ctx_message = {"role": "user", "content": block}
-            insert_at = len(messages)
-            for i in range(len(messages) - 1, -1, -1):
-                msg = messages[i]
-                role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
-                if role == "user":
-                    insert_at = i
-                    break
-            messages.insert(insert_at, ctx_message)
-            return True
+        """把临时上下文注入本次请求：不改 system_prompt，也不写进会话历史。
 
+        首选 req.extra_user_content_parts + ContentPart.mark_as_temp()，AstrBot 会把这类
+        片段并进本轮 user 内容并在落盘前过滤掉（见 core/request_context.py 的说明）。
+        环境不支持该机制时退回 req.prompt 前置——它会被本轮 user 消息吸收，代价是进历史，
+        但功能保住了。绝不再改 system_prompt：那会让系统提示词的前缀缓存每轮失效。
+        """
+        text = (block or "").strip()
+        if not text:
+            return False
+        if inject_temp_context(req, text):
+            return True
         for attr in ("prompt", "user_prompt", "query"):
             value = getattr(req, attr, None)
             if isinstance(value, str) and value.strip():
-                setattr(req, attr, f"{block}\n\n{value}")
+                setattr(req, attr, f"{text}\n\n{value}")
                 return True
-
-        # Fallback only: normal paths avoid changing system_prompt cache.
-        current = getattr(req, "system_prompt", "") or ""
-        setattr(req, "system_prompt", f"{current}\n\n{block}" if current else block)
-        return True
+        logger.debug("[BiliBot] 当前 AstrBot 不支持临时上下文注入，跳过该段背景")
+        return False
 
     def _inject_recent_group_share_into_request(self, event, req):
         share_ctx = self._get_recent_group_share_prompt(event)
