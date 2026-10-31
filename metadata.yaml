@@ -8,7 +8,10 @@ desc: >-
 version: 1.9.2
 author: GuHan-OvO
 license: AGPL-3.0-or-later
-repo: ""
+repo: "https://github.com/GuHan-OvO/astrbot_plugin_bili_scroll"
+astrbot_version: ">=4.28.1"
+support_platforms:
+  - aiocqhttp
 tags:
   - bilibili
   - B站
