@@ -44,6 +44,19 @@ def create_tools(plugin):
     def short_digest(value):
         return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:16]
 
+    def write_failure(action_label, outcome, sink):
+        """把写操作失败原因整理成一句可行动的话回给 LLM。
+
+        优先级：B站 返回的 code 提示 > 运行期异常原因 > 通用兜底。原实现只回
+        「失败」两个字，用户无法判断是 Cookie 过期、风控还是评论区关闭。
+        """
+        hint = str((sink or {}).get("hint") or "").strip()
+        if not hint:
+            reason = str(getattr(outcome, "reason", "") or "").strip()
+            if reason and reason != "handler_returned_unsuccessful":
+                hint = reason
+        return f"{action_label}失败：{hint}" if hint else f"{action_label}失败（详情见日志）。"
+
     # ── 记忆类工具 ──
 
     @dataclass
@@ -485,7 +498,7 @@ def create_tools(plugin):
         parameters: dict = Field(default_factory=lambda: {
             "type": "object",
             "properties": {
-                "oid": {"type": "string", "description": "video oid from watch_video"},
+                "oid": {"type": "string", "description": "video aid (digits), BV id, or bilibili video URL"},
                 "comment_text": {"type": "string", "description": "comment content"},
             },
             "required": ["oid", "comment_text"],
@@ -493,15 +506,19 @@ def create_tools(plugin):
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
             try:
-                oid = kwargs.get("oid", "")
+                raw_oid = kwargs.get("oid", "")
                 comment_text = kwargs.get("comment_text", "")
+                aid, error = await plugin._resolve_video_aid(raw_oid)
+                if not aid:
+                    return f"评论未发送：{error}。"
+                sink = {}
                 outcome = await execute_write_action(
-                    f"tool_comment:{oid}:{short_digest(comment_text)}",
+                    f"tool_comment:{aid}:{short_digest(comment_text)}",
                     "tool_comment",
-                    oid,
-                    lambda: plugin._send_comment(int(oid), comment_text),
+                    aid,
+                    lambda: plugin._send_comment(aid, comment_text, error_sink=sink),
                 )
-                return f"评论成功：{comment_text}" if outcome.success else "评论发送失败。"
+                return f"评论成功：{comment_text}" if outcome.success else write_failure("评论发送", outcome, sink)
             except Exception as e:
                 return f"评论出错：{e}"
 
@@ -512,23 +529,24 @@ def create_tools(plugin):
         parameters: dict = Field(default_factory=lambda: {
             "type": "object",
             "properties": {
-                "oid": {"type": "string", "description": "video oid from watch_video"},
+                "oid": {"type": "string", "description": "video aid (digits), BV id, or bilibili video URL"},
             },
             "required": ["oid"],
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            aid, error = await plugin._resolve_video_aid(kwargs.get("oid", ""))
+            if not aid:
+                return f"点赞未执行：{error}。"
             await asyncio.sleep(random.uniform(2, 5))
-            oid = str(kwargs.get("oid", "")).strip()
-            if not oid.isdigit():
-                return "oid 无效：需要 watch_video 返回的数字 oid，不是 BV 号。"
+            sink = {}
             outcome = await execute_write_action(
-                f"tool_like:{oid}",
+                f"tool_like:{aid}",
                 "like",
-                oid,
-                lambda: plugin._like_video(int(oid)),
+                aid,
+                lambda: plugin._like_video(aid, error_sink=sink),
             )
-            return "点赞成功。" if outcome.success else "点赞失败。"
+            return "点赞成功。" if outcome.success else write_failure("点赞", outcome, sink)
 
     @dataclass
     class CoinVideoTool(FunctionTool[AstrAgentContext]):
@@ -537,29 +555,30 @@ def create_tools(plugin):
         parameters: dict = Field(default_factory=lambda: {
             "type": "object",
             "properties": {
-                "oid": {"type": "string", "description": "video oid from watch_video"},
+                "oid": {"type": "string", "description": "video aid (digits), BV id, or bilibili video URL"},
                 "num": {"type": "string", "description": "1 or 2", "default": "1"},
             },
             "required": ["oid"],
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            aid, error = await plugin._resolve_video_aid(kwargs.get("oid", ""))
+            if not aid:
+                return f"投币未执行：{error}。"
             await asyncio.sleep(random.uniform(2, 5))
-            oid = str(kwargs.get("oid", "")).strip()
-            if not oid.isdigit():
-                return "oid 无效：需要 watch_video 返回的数字 oid，不是 BV 号。"
             try:
                 num = int(str(kwargs.get("num", "1")).strip())
             except ValueError:
                 num = 1
             num = 1 if num < 2 else 2
+            sink = {}
             outcome = await execute_write_action(
-                f"tool_coin:{oid}:{num}",
+                f"tool_coin:{aid}:{num}",
                 "coin",
-                oid,
-                lambda: plugin._coin_video(int(oid), num=num),
+                aid,
+                lambda: plugin._coin_video(aid, num=num, error_sink=sink),
             )
-            return f"投了{num}个币。" if outcome.success else "投币失败。"
+            return f"投了{num}个币。" if outcome.success else write_failure("投币", outcome, sink)
 
     @dataclass
     class FavVideoTool(FunctionTool[AstrAgentContext]):
@@ -568,23 +587,24 @@ def create_tools(plugin):
         parameters: dict = Field(default_factory=lambda: {
             "type": "object",
             "properties": {
-                "oid": {"type": "string", "description": "video oid from watch_video"},
+                "oid": {"type": "string", "description": "video aid (digits), BV id, or bilibili video URL"},
             },
             "required": ["oid"],
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            aid, error = await plugin._resolve_video_aid(kwargs.get("oid", ""))
+            if not aid:
+                return f"收藏未执行：{error}。"
             await asyncio.sleep(random.uniform(2, 5))
-            oid = str(kwargs.get("oid", "")).strip()
-            if not oid.isdigit():
-                return "oid 无效：需要 watch_video 返回的数字 oid，不是 BV 号。"
+            sink = {}
             outcome = await execute_write_action(
-                f"tool_favorite:{oid}",
+                f"tool_favorite:{aid}",
                 "favorite",
-                oid,
-                lambda: plugin._fav_video(int(oid)),
+                aid,
+                lambda: plugin._fav_video(aid, error_sink=sink),
             )
-            return "收藏成功。" if outcome.success else "收藏失败。"
+            return "收藏成功。" if outcome.success else write_failure("收藏", outcome, sink)
 
     @dataclass
     class FollowUpTool(FunctionTool[AstrAgentContext]):
@@ -941,7 +961,7 @@ def create_tools(plugin):
                 },
                 "target": {
                     "type": "string",
-                    "description": "video oid for comment/like/coin/favorite; UP UID or name for follow",
+                    "description": "video aid (digits), BV id or video URL for comment/like/coin/favorite; UP UID or name for follow",
                 },
                 "text": {
                     "type": "string",

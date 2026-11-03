@@ -21,6 +21,38 @@ from .config import (
 import os
 
 
+# 写操作失败时回给 LLM 的可读原因。B站 的 code 才是用户能据此行动的信息
+# （Cookie 过期 / 风控 / 评论区关闭），而这些原本只写进日志。
+_WRITE_ERROR_HINTS = {
+    -101: "Cookie 已失效（SESSDATA 过期），需要重新扫码登录",
+    -111: "CSRF 校验失败（bili_jct 不正确）",
+    -403: "访问被限制，可能触发风控，稍后再试",
+    12002: "评论区已关闭",
+    12015: "访问被限制，可能触发风控，稍后再试",
+    12025: "评论内容包含敏感词，被B站拒绝",
+}
+
+
+def _record_write_error(sink, code, message=""):
+    """把一次写操作的失败原因写进调用方私有的 sink 字典。
+
+    sink 必须由调用方每次新建、在 await 之后读取：动作队列是串行的，但调用方
+    恢复执行时下一条动作可能已经跑过，用实例字段共享状态会有竞态。
+    """
+    if sink is None:
+        return
+    try:
+        code_int = int(code) if str(code if code is not None else "").strip() else None
+    except (TypeError, ValueError):
+        code_int = None
+    detail = str(message or "").strip()
+    hint = _WRITE_ERROR_HINTS.get(code_int) if code_int is not None else ""
+    if not hint:
+        hint = f"B站返回 code={code_int} {detail}".strip() if code_int is not None else (detail or "未知原因")
+    sink.clear()
+    sink.update({"code": code_int, "message": detail, "hint": hint})
+
+
 class BilibiliAPIMixin:
     """所有 B站 HTTP API 调用。"""
 
@@ -297,12 +329,14 @@ class BilibiliAPIMixin:
         content = re.sub(r'^@[^ \t\n\r]+\s*', '', content)
         return content.strip()
 
-    async def _send_comment(self, oid, comment_text, oid_type=1, at_name_to_mid=None):
+    async def _send_comment(self, oid, comment_text, oid_type=1, at_name_to_mid=None, error_sink=None):
         """发一条顶级评论。
 
         ``at_name_to_mid`` 传 ``{昵称: uid}`` 时，请求体会带上同名字段；
         B站 只有收到它才会把正文里的 ``@昵称`` 解析成真实提及（读回评论时
         ``content.members`` 会有值），否则只是纯文本。映射由 ``core/mention.py`` 构造。
+        ``error_sink`` 传一个空字典时，失败原因（B站 code / 可读提示）会写进去，
+        供工具层回给 LLM——返回值仍只表达成功与否，调用方无需改动。
         """
         data = {
             "oid": oid,
@@ -348,9 +382,11 @@ class BilibiliAPIMixin:
                 )
             else:
                 logger.warning(f"[BiliBot] 发评论失败({oid}): code={code} {d.get('message', '')}")
+            _record_write_error(error_sink, code, d.get("message", ""))
             return False
         except Exception as e:
             logger.error(f"[BiliBot] 发送评论异常: {e}")
+            _record_write_error(error_sink, None, f"请求异常：{e}")
             return False
 
     async def _resolve_self_mid(self):
@@ -612,8 +648,39 @@ class BilibiliAPIMixin:
             pass
         return None
 
+    async def _resolve_video_aid(self, raw):
+        """把模型或用户给的视频标识解析成数字 aid。
+
+        标识形态并不统一：``watch_video`` 给的是 aid，``search_bilibili`` 给的是
+        BV 号，用户还可能直接贴整条链接。写操作接口只收 aid，所以统一在这里收口；
+        解析失败要返回可读原因，不能留给调用方 ``int()`` 崩掉——那样异常会被
+        外层吞成「操作失败」，日志里只剩一句 int() 报错。
+
+        返回 ``(aid, error)``：成功时 error 为空串。
+        """
+        text = str(raw or "").strip()
+        if not text:
+            return None, "缺少视频标识"
+        if text.isdigit():
+            return int(text), ""
+        av_match = re.search(r"(?:^|[^0-9A-Za-z])av(\d+)", text, re.IGNORECASE)
+        if av_match:
+            return int(av_match.group(1)), ""
+        aid_param = re.search(r"[?&]aid=(\d+)", text)
+        if aid_param:
+            return int(aid_param.group(1)), ""
+        match = re.search(r"BV[0-9A-Za-z]{10}", text)
+        if match:
+            # BV 号本身大小写敏感，只归一化前缀，后缀原样保留
+            bvid = "BV" + match.group(0)[2:]
+            aid = await self._get_video_oid(bvid)
+            if aid:
+                return int(aid), ""
+            return None, f"BV 号 {bvid} 解析失败（视频不存在或接口异常）"
+        return None, f"无法识别的视频标识「{text[:40]}」（需要数字 aid、BV 号或视频链接）"
+
     # ── 互动 ──
-    async def _like_video(self, aid):
+    async def _like_video(self, aid, error_sink=None):
         try:
             d, _ = await self._http_post("https://api.bilibili.com/x/web-interface/archive/like", data={"aid": aid, "like": 1, "csrf": self.config.get("BILI_JCT", "")})
             code = d.get("code", -1)
@@ -625,12 +692,14 @@ class BilibiliAPIMixin:
                 logger.warning("[BiliBot] 点赞失败：访问被限制（可能触发风控）")
             else:
                 logger.warning(f"[BiliBot] 点赞失败({aid}): code={code} {d.get('message', '')}")
+            _record_write_error(error_sink, code, d.get("message", ""))
             return False
         except Exception as e:
             logger.warning(f"[BiliBot] 点赞异常({aid}): {e}")
+            _record_write_error(error_sink, None, f"请求异常：{e}")
             return False
 
-    async def _coin_video(self, aid, num=1):
+    async def _coin_video(self, aid, num=1, error_sink=None):
         try:
             d, _ = await self._http_post("https://api.bilibili.com/x/web-interface/coin/add", data={"aid": aid, "multiply": num, "select_like": 0, "csrf": self.config.get("BILI_JCT", "")})
             code = d.get("code", -1)
@@ -642,21 +711,25 @@ class BilibiliAPIMixin:
                 logger.warning("[BiliBot] 投币失败：访问被限制（可能触发风控）")
             else:
                 logger.warning(f"[BiliBot] 投币失败({aid}): code={code} {d.get('message', '')}")
+            _record_write_error(error_sink, code, d.get("message", ""))
             return False
         except Exception as e:
             logger.warning(f"[BiliBot] 投币异常({aid}): {e}")
+            _record_write_error(error_sink, None, f"请求异常：{e}")
             return False
 
-    async def _fav_video(self, aid):
+    async def _fav_video(self, aid, error_sink=None):
         try:
             d, _ = await self._http_get("https://api.bilibili.com/x/v3/fav/folder/created/list-all", params={"up_mid": self.config.get("DEDE_USER_ID", ""), "type": 2})
             if d["code"] != 0:
                 if d["code"] == -101:
                     logger.warning("[BiliBot] 获取收藏夹失败：Cookie 已失效")
+                _record_write_error(error_sink, d.get("code"), d.get("message", ""))
                 return False
             fav_list = d.get("data", {}).get("list") or []
             if not fav_list:
                 logger.warning("[BiliBot] 收藏夹列表为空，无法收藏")
+                _record_write_error(error_sink, None, "收藏夹列表为空，需要先在B站建一个收藏夹")
                 return False
             fav_id = fav_list[0]["id"]
             d2, _ = await self._http_post("https://api.bilibili.com/x/v3/fav/resource/deal", data={"rid": aid, "type": 2, "add_media_ids": fav_id, "csrf": self.config.get("BILI_JCT", "")})
@@ -664,9 +737,11 @@ class BilibiliAPIMixin:
             if code == 0:
                 return True
             logger.warning(f"[BiliBot] 收藏失败({aid}): code={code} {d2.get('message', '')}")
+            _record_write_error(error_sink, code, d2.get("message", ""))
             return False
         except Exception as e:
             logger.warning(f"[BiliBot] 收藏异常({aid}): {e}")
+            _record_write_error(error_sink, None, f"请求异常：{e}")
             return False
 
     async def _follow_user(self, mid):
