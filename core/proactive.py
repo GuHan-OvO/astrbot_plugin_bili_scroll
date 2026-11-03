@@ -3,6 +3,7 @@ import re
 import json
 import random
 import asyncio
+import inspect
 import traceback
 import time
 from .video_diagnostics import evaluation_failure, get_call_diagnostic, set_call_diagnostic, exception_detail
@@ -66,7 +67,10 @@ class ProactiveMixin:
         async def _handler_with_sink():
             token = _write_error_sink.set(sink)
             try:
-                return await handler()
+                value = handler()
+                if inspect.isawaitable(value):
+                    value = await value
+                return value
             finally:
                 _write_error_sink.reset(token)
 
