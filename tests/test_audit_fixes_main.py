@@ -175,6 +175,84 @@ class OwnerInjectionGuardTests(unittest.IsolatedAsyncioTestCase):
             bot.memory_api.get_recent_memories.assert_not_called()
 
 
+class OwnerInjectionMemoryTests(unittest.IsolatedAsyncioTestCase):
+    """issue #1：主动刷视频写入的记忆 user_id="self"，按绑定 UID 查询会全部漏掉。"""
+
+    def _fake_redact_modules(self):
+        modules = {
+            "audit_plugin": types.ModuleType("audit_plugin"),
+            "audit_plugin.core": types.ModuleType("audit_plugin.core"),
+            "audit_plugin.core.security": types.ModuleType("audit_plugin.core.security"),
+            "audit_plugin.core.security.redact": types.ModuleType("audit_plugin.core.security.redact"),
+        }
+        modules["audit_plugin"].__path__ = [str(ROOT)]
+        modules["audit_plugin.core"].__path__ = [str(ROOT / "core")]
+        modules["audit_plugin.core.security"].__path__ = [str(ROOT / "core" / "security")]
+        redact = modules["audit_plugin.core.security.redact"]
+        redact.contains_credentials = lambda text: False
+        redact.redact_outbound = lambda text, internal=False: (text, [])
+        return modules
+
+    async def test_self_video_memory_reaches_owner_context(self):
+        with tempfile.TemporaryDirectory() as temp:
+            bindings = Path(temp) / "bindings.json"
+            bindings.write_text(json.dumps({"20002": "10001"}), encoding="utf-8")
+            namespace = {
+                "BINDING_FILE": str(bindings),
+                "logger": types.SimpleNamespace(
+                    debug=MagicMock(), info=MagicMock(), warning=MagicMock(), error=MagicMock()
+                ),
+            }
+            methods = _load_methods(["inject_bili_memory"], namespace)
+            memory_api = types.SimpleNamespace(
+                get_recent_memories=MagicMock(return_value=[
+                    {
+                        "memory_type": "video",
+                        "user_id": "self",
+                        "text": "[2026-11-01 23:00] Bot看了视频《手工皮具保姆级新手指南》评分 7.5/10",
+                    },
+                ])
+            )
+            injected = {}
+            bot = types.SimpleNamespace(
+                config={
+                    "OWNER_MID": "10001",
+                    "ENABLE_CROSS_PLATFORM_ACTIVITY_STATUS": False,
+                    "MEMORY_ISOLATION_MODE": "safe_share",
+                    "ENABLE_SAFE_CROSS_PLATFORM_MEMORY": True,
+                    "CROSS_PLATFORM_MEMORY_PROMPT": "只当轻量背景",
+                    "MEMORY_BLOCKED_PREFIXES": [],
+                    "MEMORY_BLOCKED_KEYWORDS": [],
+                },
+                _maybe_trigger_proactive_from_llm=AsyncMock(),
+                _inject_recent_group_share_into_request=MagicMock(return_value=False),
+                _load_json=lambda path, default=None: json.loads(bindings.read_text(encoding="utf-8")),
+                _cross_platform_activity_context=lambda: "",
+                _inject_context_block_before_user=MagicMock(
+                    side_effect=lambda req, block: injected.setdefault("block", block) or True
+                ),
+                memory_api=memory_api,
+            )
+            req = types.SimpleNamespace(prompt="今天做了什么", system_prompt="")
+            event = Event("今天做了什么", admin=True)
+
+            modules = self._fake_redact_modules()
+            saved = {name: sys.modules.get(name) for name in modules}
+            sys.modules.update(modules)
+            try:
+                await methods["inject_bili_memory"](bot, event, req)
+            finally:
+                for name, value in saved.items():
+                    if value is None:
+                        sys.modules.pop(name, None)
+                    else:
+                        sys.modules[name] = value
+
+            # 按绑定 UID 查询时必须并入 self 活动，否则主动看视频的记忆永远查不到
+            self.assertIs(memory_api.get_recent_memories.call_args.kwargs.get("include_self"), True)
+            self.assertIn("手工皮具", injected.get("block", ""))
+
+
 def _load_schedule_mixin(temp_dir):
     package = types.ModuleType("audit_sched_core")
     package.__path__ = [str(ROOT / "core")]

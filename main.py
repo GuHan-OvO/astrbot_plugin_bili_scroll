@@ -1653,6 +1653,9 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
                 hours=24 * 7,
                 limit=12,
                 reader_scope="admin",
+                # 主动刷视频/发动态写入的记忆 user_id 是 "self"（人格自己），
+                # 不并进来就一条都看不到，注入会静默失效。
+                include_self=True,
             )
             for item in recent:
                 if str(item.get("memory_type", "chat")) not in {"chat", "video", "dynamic", "user_summary"}:

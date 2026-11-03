@@ -123,16 +123,29 @@ class BiliBotMemoryAPI:
         hours: int = 24,
         limit: int = 20,
         reader_scope: str = "bili_comment",
+        include_self: bool = False,
     ) -> list[dict]:
-        """获取最近 N 小时的记忆（无需语义，按时间倒序）。"""
+        """获取最近 N 小时的记忆（无需语义，按时间倒序）。
+
+        ``include_self=True`` 时把 Bot 自身产生的活动（``user_id="self"``，例如
+        主动刷视频、发动态写入的记忆）也算进这个人的时间线。默认关闭：调用方
+        大多在查「某位用户的记忆」，只有「把人格自己的B站日常讲给主人听」这种
+        场景才需要合并自我活动。
+        """
         from datetime import timedelta
         cutoff = datetime.now() - timedelta(hours=hours)
         results = []
         for m in reversed(self.bot._memory):
             if not self.bot._memory_visible_to(m, reader_scope, str(user_id or "")):
                 continue
-            if user_id and m.get("user_id") != str(user_id):
-                continue
+            if user_id:
+                allowed_uids = {str(user_id)}
+                if include_self:
+                    # 人格自己的B站活动不属于任何外部用户，按 uid 精确比对会
+                    # 把它们整批漏掉，这里按需并入。
+                    allowed_uids.add("self")
+                if str(m.get("user_id") or "") not in allowed_uids:
+                    continue
             if source and m.get("source") != source:
                 continue
             if memory_types and not self.bot._match_memory_type(m, memory_types):
