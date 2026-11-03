@@ -3,6 +3,42 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 指向本仓库、不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v1.9.6 — 2026-11-01
+
+### 修复：B站 写操作只认数字 aid，传 BV 号必失败（issue #2）
+
+- 现象：模型调 `bili_action(action=comment, target="BV1QZxWerE3F")`，工具只回
+  「评论发送失败。」；真实原因 `invalid literal for int() with base 10: 'BV…'` 只留在
+  `bilibot.sqlite3` 的 `actions` 表里。搜索结果是 BV 号、用户也会直接贴链接，而四个写工具
+  都直接把入参 `int()`，必然踩中。
+- 新增 `BilibiliAPIMixin._resolve_video_aid()`：统一接受数字 aid、`av` 号、BV 号、以及含
+  BV/av 或用 `?aid=` 的完整链接；解析失败返回可读原因，不再让 `int()` 抛异常。
+  `post_comment` / `like_video` / `coin_video` / `fav_video` 与聚合入口 `bili_action` 全部
+  走它，写队列的 key 也改用 aid（同一视频的不同写法能正确去重）。
+- 失败原因透传：`_send_comment` / `_like_video` / `_coin_video` / `_fav_video` 新增
+  `error_sink` 参数，把 B站 `code` 映射成人话（Cookie 失效 / 风控 / 评论区关闭 / 敏感词），
+  工具改回「评论发送失败：评论区已关闭」这类可行动信息，`ActionOutcome.reason` 作兜底。
+  sink 是**每次调用私有**的字典：动作队列虽然串行，但调用方恢复执行时下一条动作可能已经
+  跑过，用实例字段共享状态会有竞态。
+
+### 修复：QQ ↔ B站 记忆互通失效（issue #1）
+
+- 现象：主动刷完视频后在 QQ 问「刚才看了什么」，bot 不知道、甚至编造标题，日志里也没有
+  「已向主人侧注入脱敏后的B站趣事摘要」——因为注入函数在 `safe_memories` 为空时直接 return。
+- 根因：主动看视频/发动态写入的记忆 `user_id="self"`（人格自己），而注入按 QQ 绑定的B站 UID
+  查询，`get_recent_memories` 里 `m["user_id"] != user_id` 把自我活动整批滤掉。
+- 修法：`memory_api.get_recent_memories()` 加 `include_self`（默认 `False`，语义不变），
+  注入点传 `True` 把人格自己的B站活动并入主人时间线。默认关闭保证「查某位用户的记忆」不会
+  顺带带出别人的对话——这一点有用例守着。
+
+### 测试
+
+- 新增 `tests/test_write_tools.py`（13 条：标识解析 7 条 + 四个工具走 aid 与 B站 code 透传 6 条）。
+- 新增 `tests/test_memory_cross_platform.py`（4 条：`include_self` 语义、默认隔离、跨用户不外泄、时间窗）。
+- `tests/test_audit_fixes_main.py` 加 `OwnerInjectionMemoryTests`：验证注入点传 `include_self=True`
+  且自我活动真的进了上下文块（去掉该参数即失败，已实测）。
+- 全量：**620 passed, 2 skipped, 94 subtests passed**。
+
 ## v1.9.5 — 2026-11-01
 
 ### 仅版本号：配合平台重新提交
