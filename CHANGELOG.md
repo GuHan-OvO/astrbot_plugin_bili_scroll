@@ -3,6 +3,47 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 指向本仓库、不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v1.9.7 — 2026-11-03
+
+### 修复：工具看片必然撞 AstrBot 的 120 秒工具超时（上游 #60）
+
+- AstrBot 的工具调用默认限时 **120 秒**（`astrbot/core/agent/run_context.py:19`、
+  `core/config/agent_runner.py:33`、`core/pipeline/.../internal.py:84` 三处默认值一致，本实例
+  没有覆盖），超时是把整条协程取消。`watch_video` 原本同步 await 整个下载 + 切片 + 多模态分析，
+  长视频必然被杀：下载白做、视频记忆不写，模型只收到一句 timeout。
+- `core/tools.py` 新增后台看片任务：先同步等 30 秒，没看完就返回「还在看」并把任务留在后台跑完；
+  同一个 BV 只跑一份（重复调用等已有任务）、最多同时挂 3 个；跑完后用 `context.send_message`
+  在**原会话**回一句话（成功发「看完啦：…」，失败发「没看完」）。`watch_and_share_video_private`
+  走同一套。`main.py` 的 `terminate()` 会取消这些任务，停用插件不会留着下载。
+
+### 修复：下载超时固定 120 秒，长视频必然失败（上游 #58）
+
+- `core/video.py` 新增 `_video_download_timeout()`：单个格式的等待时间 =
+  `min(3600, max(120, 视频时长 / 2))`。观看、QQ 分享解析、评论视频检查三处都按视频时长传
+  `duration`。
+- 下载超时（`code == 124`）：短视频继续换格式重试；已经放宽过的长视频直接放弃，不再把同一个
+  视频从头再下一遍。`_compress_video` 与切片时限也随片段长度放宽，长单段不再被 300 秒砍掉。
+
+### 变更：日志与 `recall_today` 不再截断（上游 #52）
+
+- 新增 `core/chat_text.py::split_for_chat`；`/bili日志` 改为按行分条发送（每条约 1500 字，
+  **绝不切断行**），视频感想/评论、番剧感想/评论、`recall_today` 的 review/comment 去掉了
+  `[:40]/[:60]/[:80]` 截断——此前问「今天看了什么」只能拿到半句。
+
+### 修复：写操作失败原因终于进 `actions` 表
+
+- `core/bilibili.py` 用 `contextvars` 给「当前动作」挂一个失败原因收集器；`_execute_proactive_action`
+  在 handler 运行期间把它注入上下文，判定失败时把提示抛给运行时——于是 `actions.detail` 记的是
+  「评论区已关闭 / Cookie 已失效 / 触发风控」，不再永远是 `handler_returned_unsuccessful`。
+  工具层仍走显式 `error_sink`，两条路互不影响。
+
+### 测试
+
+- 新增 `tests/test_a_package.py`（17 条：超时伸缩、124 分支、看片后台/去重/并发上限/跟进消息、
+  分条发送、失败原因入账）；修了 `test_video_diagnostics.py`、`test_comment_context.py` 里
+  `_download_video` 桩的签名（新增可选 `duration`）。
+- 全量：**637 passed, 2 skipped, 94 subtests passed**。
+
 ## v1.9.6 — 2026-11-03
 
 ### 修复：B站 写操作只认数字 aid，传 BV 号必失败（issue #2）
