@@ -179,7 +179,7 @@ class VideoDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(info["_media_diagnostics"][0]["stage"], "vision_config")
 
     async def test_failed_download_records_underlying_reason(self):
-        async def download(_):
+        async def download(_, **kwargs):
             set_call_diagnostic(reason="HTTP 403")
             return None
         # vision_key / dead-reason probes are part of _analyze_video_media now; the stub

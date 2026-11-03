@@ -664,7 +664,9 @@ class ShareMixin:
         skipped = False
         try:
             max_height = max(144, int(self.config.get("BILI_SHARE_PARSE_VIDEO_MAX_HEIGHT", 720)))
-            video_path = await self._download_video(bvid, max_height=max_height)
+            video_path = await self._download_video(
+                bvid, max_height=max_height, duration=info.get("duration")
+            )
             if not video_path:
                 yield event.plain_result("⚠️ 原视频下载失败，先看解析卡和链接吧。")
                 return

@@ -15,6 +15,7 @@ from .config import (
     DYNAMIC_WATCH_LOG_FILE, PREFERENCE_STATE_FILE,
 )
 from .runtime import ActionRequest, EventPriority
+from .bilibili import _write_error_sink
 from .video_evaluation import (
     VIDEO_EVALUATION_SCHEMA_PROMPT, VideoEvaluationError,
     parse_video_evaluation,
@@ -56,6 +57,27 @@ class ProactiveMixin:
     ):
         """Route proactive work and writes through the shared action queue."""
 
+        # 写操作只返回 True/False，失败原因（B站 code）只会进日志，
+        # actions.detail 永远是 handler_returned_unsuccessful。这里给本次动作挂一个
+        # 收集器：handler 运行期间写操作会把原因写进去，判定失败时再把原因抛出去，
+        # 运行时就会把它记成 reason → detail。
+        sink = {}
+
+        async def _handler_with_sink():
+            token = _write_error_sink.set(sink)
+            try:
+                return await handler()
+            finally:
+                _write_error_sink.reset(token)
+
+        def _success(value):
+            if value:
+                return True
+            hint = str(sink.get("hint") or "").strip()
+            if hint:
+                raise RuntimeError(hint)
+            return False
+
         outcome = await self.event_runtime.execute(
             ActionRequest(
                 key=str(key),
@@ -65,7 +87,8 @@ class ProactiveMixin:
                 priority=EventPriority.BACKGROUND,
                 metadata={"proactive": True, **dict(metadata or {})},
             ),
-            handler,
+            _handler_with_sink,
+            success=_success,
         )
         if not outcome.success and str(outcome.reason).startswith("budget_exhausted:"):
             logger.info(f"[BiliBot] 🧭 统一行为预算已满，跳过 {kind}: {outcome.reason}")

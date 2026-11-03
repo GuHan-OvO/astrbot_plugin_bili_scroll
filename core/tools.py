@@ -15,6 +15,16 @@ from astrbot.api import logger
 from .config import USER_PROFILE_FILE, AFFECTION_FILE, LEVEL_NAMES, DATA_DIR
 from .runtime import ActionRequest, EventPriority
 
+# AstrBot 给每次工具调用限时（默认 120 秒，见 astrbot/core/agent/run_context.py），
+# 而一次看片要下载 + 切片 + 多模态分析，长视频必然超过；超时是把整条协程取消，
+# 下载白做、记忆也不写。所以先同步等一小会儿，没看完就把任务留在后台继续跑完。
+WATCH_INLINE_WAIT = 30
+WATCH_MAX_JOBS = 3
+WATCH_PENDING_MESSAGE = (
+    "[还在看] 这个视频比较长，已转到后台继续，看完会写入视频记忆并在原会话回一句话。"
+    "现在还不知道视频内容，不要编造；告诉对方你正在看、看完会说一声就好，不要重复调用这个工具。"
+)
+
 
 def create_tools(plugin):
     """创建所有工具实例，通过闭包捕获 plugin 引用。"""
@@ -25,6 +35,70 @@ def create_tools(plugin):
     owner_name = plugin.config.get("OWNER_NAME", "未知")
     private_share_last_sent = {}
     private_share_lock = asyncio.Lock()
+    # 后台看片任务：同一个 BV 只跑一份，最多同时挂 3 个。
+    plugin._tool_watch_jobs = {}
+    plugin._tool_watch_followup_tasks = set()
+    watch_followups = {}
+
+    def _watch_followup_text(message, failed):
+        """把工具结果整理成一句能直接发进会话的话。"""
+        if failed:
+            return "刚才那个视频没看完（分析流程出错），下次再试。"
+        text = str(message or "").strip()
+        cut = text.find("（如需互动")
+        if cut > 0:
+            text = text[:cut].strip()
+        if not text:
+            return "刚才那个视频看完了，内容已经写进记忆。"
+        return f"看完啦：\n{text}"
+
+    async def _send_watch_followup(umo, message, *, failed):
+        try:
+            from astrbot.api.event import MessageChain
+            await plugin.context.send_message(
+                umo, MessageChain().message(_watch_followup_text(message, failed))
+            )
+        except Exception as exc:
+            logger.warning(f"[BiliBot] 后台看片结果发送失败: {exc}")
+
+    def _finish_watch_job(key, task):
+        plugin._tool_watch_jobs.pop(key, None)
+        waiting = watch_followups.pop(key, {})
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            logger.warning(f"[BiliBot] 工具后台看片失败({key}): {error}")
+        message = "" if error is not None else str(task.result() or "")
+        for umo in waiting:
+            followup = asyncio.create_task(
+                _send_watch_followup(umo, message, failed=error is not None)
+            )
+            plugin._tool_watch_followup_tasks.add(followup)
+            followup.add_done_callback(plugin._tool_watch_followup_tasks.discard)
+
+    async def _run_watch_job(key, start_job, event):
+        """同一个视频只跑一份：模型重复调用时等已有任务，不重新下载。"""
+        task = plugin._tool_watch_jobs.get(key)
+        if task is None:
+            if len(plugin._tool_watch_jobs) >= WATCH_MAX_JOBS:
+                return "⚠️ 手头还有几个视频没看完，先不接新的，晚点再试。"
+            task = asyncio.create_task(start_job())
+            plugin._tool_watch_jobs[key] = task
+            task.add_done_callback(lambda done: _finish_watch_job(key, done))
+        # asyncio.wait 超时或被取消都不会取消 task：工具调用结束后它照常跑完。
+        await asyncio.wait({task}, timeout=WATCH_INLINE_WAIT)
+        if not task.done():
+            umo = str(getattr(event, "unified_msg_origin", "") or "")
+            if umo:
+                watch_followups.setdefault(key, {})[umo] = True
+            return WATCH_PENDING_MESSAGE
+        if task.cancelled():
+            return "⚠️ 看片被中断了。"
+        return task.result()
+
+    async def _watch_video_message(bvid, *, force_rewatch=False):
+        return (await _watch_video_for_tool(bvid, force_rewatch=force_rewatch))["message"]
 
     async def execute_write_action(key, kind, target_id, handler, *, metadata=None):
         """Put every LLM-triggered Bilibili write through the shared queue."""
@@ -413,8 +487,12 @@ def create_tools(plugin):
                     force = bool(event.is_admin()) and bool(re.search(r"重新\s*看|重看", text))
                 except Exception:
                     force = False
-            result = await _watch_video_for_tool(kwargs.get("bvid", ""), force_rewatch=force)
-            return result["message"]
+            bvid = str(kwargs.get("bvid", "") or "").strip()
+            return await _run_watch_job(
+                f"watch:{bvid.lower()}",
+                lambda: _watch_video_message(bvid, force_rewatch=force),
+                event,
+            )
 
     @dataclass
     class WatchAndShareVideoPrivateTool(FunctionTool[AstrAgentContext]):
@@ -454,40 +532,45 @@ def create_tools(plugin):
             except (TypeError, ValueError):
                 cooldown = 60
             key = f"{receiver_mid}:{requested_bvid.lower()}"
-            async with private_share_lock:
-                now = time.monotonic()
-                remaining = cooldown - (now - private_share_last_sent.get(key, 0))
-                if remaining > 0:
-                    return f"⚠️ 该视频刚刚已分享，约 {int(remaining) + 1} 秒后才能再次测试。"
 
-                result = await _watch_video_for_tool(requested_bvid)
-                if not result["ok"]:
-                    return result["message"]
-                share_bucket = int(time.time() // max(1, cooldown or 1))
-                share_outcome = await execute_write_action(
-                    f"tool_private_share:{receiver_mid}:{result['bvid']}:{share_bucket}",
-                    "private_video_share",
-                    receiver_mid,
-                    lambda: plugin._send_bili_private_video_share(
-                        receiver_mid, result["video_info"]
-                    ),
-                )
-                if not share_outcome.success:
-                    return (
-                        f"{result['message']}\n\n"
-                        "⚠️ 视频已看完并写入记忆，但 B站原生视频卡片发送失败；请检查 Cookie、CSRF、接收 UID 和风控日志。"
+            async def _watch_and_share():
+                async with private_share_lock:
+                    now = time.monotonic()
+                    remaining = cooldown - (now - private_share_last_sent.get(key, 0))
+                    if remaining > 0:
+                        return f"⚠️ 该视频刚刚已分享，约 {int(remaining) + 1} 秒后才能再次测试。"
+
+                    result = await _watch_video_for_tool(requested_bvid)
+                    if not result["ok"]:
+                        return result["message"]
+                    share_bucket = int(time.time() // max(1, cooldown or 1))
+                    share_outcome = await execute_write_action(
+                        f"tool_private_share:{receiver_mid}:{result['bvid']}:{share_bucket}",
+                        "private_video_share",
+                        receiver_mid,
+                        lambda: plugin._send_bili_private_video_share(
+                            receiver_mid, result["video_info"]
+                        ),
                     )
-                actual_key = f"{receiver_mid}:{result['bvid'].lower()}"
-                sent_at = time.monotonic()
-                private_share_last_sent[key] = sent_at
-                private_share_last_sent[actual_key] = sent_at
-                return (
-                    f"[已看完并私信分享给主人]\n"
-                    f"视频：{result['video_info'].get('title', result['bvid'])}\n"
-                    f"BV号：{result['bvid']}\n"
-                    f"接收 UID：{receiver_mid}\n"
-                    "已先完成视频分析和记忆写入，再发送 B站原生视频卡片。"
-                )
+                    if not share_outcome.success:
+                        return (
+                            f"{result['message']}\n\n"
+                            "⚠️ 视频已看完并写入记忆，但 B站原生视频卡片发送失败；请检查 Cookie、CSRF、接收 UID 和风控日志。"
+                        )
+                    actual_key = f"{receiver_mid}:{result['bvid'].lower()}"
+                    sent_at = time.monotonic()
+                    private_share_last_sent[key] = sent_at
+                    private_share_last_sent[actual_key] = sent_at
+                    return (
+                        f"[已看完并私信分享给主人]\n"
+                        f"视频：{result['video_info'].get('title', result['bvid'])}\n"
+                        f"BV号：{result['bvid']}\n"
+                        f"接收 UID：{receiver_mid}\n"
+                        "已先完成视频分析和记忆写入，再发送 B站原生视频卡片。"
+                    )
+
+            event = getattr(getattr(context, "context", None), "event", None)
+            return await _run_watch_job(key=f"share:{key}", start_job=_watch_and_share, event=event)
 
     # ── B站操作工具 ──
 

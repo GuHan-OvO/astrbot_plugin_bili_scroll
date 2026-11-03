@@ -1,4 +1,5 @@
 """B站 API 交互：Cookie管理、WBI签名、扫码登录、评论、视频信息、互动。"""
+import contextvars
 import json
 import re
 import time
@@ -33,12 +34,21 @@ _WRITE_ERROR_HINTS = {
 }
 
 
+# 动作队列在跑 handler 期间把「这次动作的失败原因收集器」放进上下文变量，
+# 写操作即使没显式传 sink 也能记录——这样 actions.detail 才能写清 Cookie 失效 /
+# 风控 / 评论区关闭，而不是永远一句 handler_returned_unsuccessful。
+_write_error_sink = contextvars.ContextVar("bilibili_write_error_sink", default=None)
+
+
 def _record_write_error(sink, code, message=""):
     """把一次写操作的失败原因写进调用方私有的 sink 字典。
 
     sink 必须由调用方每次新建、在 await 之后读取：动作队列是串行的，但调用方
     恢复执行时下一条动作可能已经跑过，用实例字段共享状态会有竞态。
+    ``sink`` 传 None 时退回到当前动作的上下文变量（见 ``_write_error_sink``）。
     """
+    if sink is None:
+        sink = _write_error_sink.get()
     if sink is None:
         return
     try:

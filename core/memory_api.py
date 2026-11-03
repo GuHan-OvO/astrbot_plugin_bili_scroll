@@ -189,7 +189,7 @@ class BiliBotMemoryAPI:
             for item in watch:
                 lines.append(
                     f"  [{item.get('time', '?').split(' ', 1)[-1]}] 「{item.get('title', '?')[:30]}」"
-                    f"{item.get('score', '?')}分 {item.get('mood', '?')} {item.get('review', '')[:40]}"
+                    f"{item.get('score', '?')}分 {item.get('mood', '?')} {item.get('review', '')}"
                 )
             parts.append("\n".join(lines))
         bangumi = [item for item in self.bot._load_json(BANGUMI_WATCH_LOG_FILE, []) if item.get("time", "").startswith(target_date)]
@@ -216,7 +216,7 @@ class BiliBotMemoryAPI:
             for item in comments[-10:]:
                 lines.append(
                     f"  [{item.get('time', '?').split(' ', 1)[-1]}] 「{item.get('title', '')[:20]}」"
-                    f"{item.get('comment', '')[:40]}"
+                    f"{item.get('comment', '')}"
                 )
             parts.append("\n".join(lines))
         dynamics = [item for item in self.bot._load_json(DYNAMIC_LOG_FILE, []) if item.get("time", "").startswith(target_date)]

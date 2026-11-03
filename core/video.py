@@ -597,7 +597,7 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
         if dead_reason:
             media_failure(video_info, "vision_config", f"视觉模型此前已判定不可用，跳过整段分析: {dead_reason}", self.config)
             return None
-        video_path = await self._download_video(bvid)
+        video_path = await self._download_video(bvid, duration=video_info.get("duration"))
         if not video_path:
             media_failure(video_info, "download", get_call_diagnostic().get("reason") or "未取得视频文件", self.config)
             return None
@@ -911,6 +911,23 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
     _VIDEO_FILE_EXTS = {".mp4", ".mkv", ".webm", ".mov"}
     _AUDIO_FILE_EXTS = {".m4a", ".mp3", ".aac", ".opus", ".flac", ".wav"}
     _VIDEO_DOWNLOAD_FORMAT_TIMEOUT = 120
+    _VIDEO_DOWNLOAD_MAX_TIMEOUT = 3600
+
+    def _video_download_timeout(self, duration):
+        """单个格式的下载等待秒数：至少 120 秒，长视频按时长的一半放宽。
+
+        固定 120 秒只够下几分钟的片子：40 分钟的视频在 480p + 2M 限速下要下十几
+        分钟，到点必然被杀，然后换格式从头再下一遍。上限 1 小时避免异常时长把任务
+        挂死在后台。
+        """
+        try:
+            seconds = float(duration or 0)
+        except (TypeError, ValueError):
+            seconds = 0
+        return int(min(
+            self._VIDEO_DOWNLOAD_MAX_TIMEOUT,
+            max(self._VIDEO_DOWNLOAD_FORMAT_TIMEOUT, seconds / 2),
+        ))
 
     def _pick_downloaded_video_file(self, bvid, output_dir=None):
         output_dir = output_dir or TEMP_VIDEO_DIR
@@ -936,8 +953,9 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
         candidates.sort(reverse=True)
         return candidates[0][2]
 
-    async def _download_video(self, bvid, max_height=480, *, output_dir=None):
+    async def _download_video(self, bvid, max_height=480, *, output_dir=None, duration=None):
         set_call_diagnostic()
+        timeout = self._video_download_timeout(duration)
         download_dir = output_dir or TEMP_VIDEO_DIR
         proxy_args = download_proxy_args(self.config)
         output_template = os.path.join(download_dir, f"{bvid}.%(ext)s")
@@ -973,7 +991,7 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
                 self._cleanup_partial_downloads(bvid, output_dir=output_dir) if output_dir else self._cleanup_partial_downloads(bvid)
                 logger.info(
                     f"[BiliBot] 开始下载({bvid})，格式 {format_index}/{total_formats}，"
-                    f"单次最多等待 {self._VIDEO_DOWNLOAD_FORMAT_TIMEOUT} 秒"
+                    f"单次最多等待 {timeout} 秒"
                 )
                 code, _, stderr = await self._run_process(
                     "yt-dlp", "-o", output_template,
@@ -985,7 +1003,7 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
                     "--limit-rate", "2M",
                     *proxy_args,
                     f"https://www.bilibili.com/video/{bvid}",
-                    timeout=self._VIDEO_DOWNLOAD_FORMAT_TIMEOUT,
+                    timeout=timeout,
                 )
                 if code == 0:
                     fp = self._pick_downloaded_video_file(bvid, output_dir=output_dir) if output_dir else self._pick_downloaded_video_file(bvid)
@@ -995,6 +1013,13 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
                     last_err = "yt-dlp 成功退出，但没有产出可发送的视频文件（可能只下载到音频）"
                     next_step = "尝试下一个格式" if format_index < total_formats else "已无后续格式"
                     logger.info(f"[BiliBot] {last_err}({bvid})，{next_step}")
+                    continue
+                if code == 124:
+                    last_err = f"下载超时（等了 {timeout} 秒）"
+                    if timeout > self._VIDEO_DOWNLOAD_FORMAT_TIMEOUT:
+                        # 长视频已经等够久了，换格式只会从头再下一遍
+                        logger.info(f"[BiliBot] {last_err}({bvid})，不再尝试其他格式")
+                        break
                     continue
                 last_err = redact_proxy_error(stderr, self.config)[:200] if stderr else "unknown error"
                 next_step = "尝试下一个格式" if format_index < total_formats else "已无后续格式"
@@ -1039,14 +1064,14 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
         except ValueError:
             return 0.0
 
-    async def _compress_video(self, input_path):
+    async def _compress_video(self, input_path, timeout=300):
         """压缩单段视频，AI分析用，极速编码优先。"""
         output_path = input_path.rsplit(".", 1)[0] + "_compressed.mp4"
         code, _, stderr = await self._run_process(
             "ffmpeg", "-y", "-i", input_path,
             "-vf", "scale=360:-2", "-an",
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "35",
-            output_path, timeout=300,
+            output_path, timeout=timeout,
         )
         if code != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
             logger.warning(f"[BiliBot] 视频压缩失败或输出为空，回退原视频: {stderr[:160] if stderr else ''}")
@@ -1065,8 +1090,8 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
             duration = segment_sec  # 拿不到时长就当一段处理
 
         if duration <= segment_sec:
-            # 短视频：直接压缩整段
-            compressed = await self._compress_video(video_path)
+            # 短视频：直接压缩整段；压缩时限跟着时长放宽，否则长单段会被 300 秒砍掉
+            compressed = await self._compress_video(video_path, timeout=max(300, int(duration)))
             return [compressed]
 
         # 长视频：切片
@@ -1081,7 +1106,7 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
                 "-t", str(segment_sec),
                 "-vf", "scale=360:-2", "-an",
                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "35",
-                seg_path, timeout=300,
+                seg_path, timeout=max(300, int(segment_sec)),
             )
             if code == 0 and os.path.exists(seg_path):
                 segments.append(seg_path)
