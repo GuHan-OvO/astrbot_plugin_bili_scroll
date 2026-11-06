@@ -150,6 +150,45 @@ async def read_companion_context(context, umo: str = "", *, limit: int = 600) ->
     return text.strip()[:limit]
 
 
+async def remember_watch_context(context, umo: str = "", prompt: str = "") -> bool:
+    """把一次观看写进「她」的记忆：约她一句感想，再用 record 落盘。只记不发。
+
+    与 ``deliver_via_pc`` 的区别是不走发送通道——观看记录不该刷屏，
+    但她的记忆里要能接上「我昨天刷到过一个…」。任何一步失败返回 False。
+    """
+    api = find_pc_api(context)
+    if api is None or not str(prompt or "").strip():
+        return False
+    user_id = user_id_from_umo(umo)
+    if not user_id:
+        return False
+    generate = getattr(api, "generate_reality_touch_text", None)
+    record = getattr(api, "record_reality_touch_output", None)
+    if not callable(generate) or not callable(record):
+        return False
+
+    try:
+        text = await asyncio.wait_for(
+            generate(prompt, user_id=user_id, umo=umo), timeout=GENERATE_TIMEOUT
+        )
+    except asyncio.TimeoutError:
+        logger.debug("[BiliBot] 陪伴记忆注入超时，跳过")
+        return False
+    except Exception as exc:
+        logger.debug(f"[BiliBot] 陪伴记忆注入失败（不影响本轮）：{exc}")
+        return False
+
+    text = str(text or "").strip()
+    if not text:
+        return False
+    try:
+        await record(user_id, text)
+    except Exception as exc:
+        logger.debug(f"[BiliBot] 陪伴记忆落盘失败：{exc}")
+        return False
+    return True
+
+
 async def share_via_pc(context, umo: str, prompt: str, fallback_text: str) -> tuple[bool, str]:
     """完整桥接：取实例 → 生成 → 发送。
 

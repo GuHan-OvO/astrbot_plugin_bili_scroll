@@ -1449,6 +1449,39 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             "不要出现「推荐」「筛选」「候选」「判重」这类词。"
         )
 
+    @staticmethod
+    def _build_pc_watch_prompt(entry):
+        """给陪伴插件的一句话提示：让她用自己的口吻记下这次观看。"""
+        review = str(entry.get("review", "") or "")[:200]
+        return (
+            "你刚在B站看完一个视频，想在心里记一笔（不用发给谁，也不用回应谁）。\\n"
+            f"标题：{entry.get('title', '')}\\n"
+            f"UP主：{entry.get('up_name', '')}\\n"
+            f"分区：{entry.get('tname', '')}\\n"
+            f"内容：{entry.get('content_summary', '')}\\n"
+            f"你的评价：{entry.get('score', '')}/10，{entry.get('comment', '')} {review}\\n"
+            "用一句话（不超过 50 字）写下你现在的感受，第一人称口语，不要罗列要点。"
+        )
+
+    async def _inject_watch_into_companion(self, entry):
+        """把这次观看写进陪伴记忆；开关关或失败都不影响本轮。"""
+        if not (
+            self.config.get("LINK_COMPANION_ENABLE", False)
+            and self.config.get("LINK_COMPANION_INJECT_WATCH", False)
+        ):
+            return False
+        try:
+            from .pc_bridge import remember_watch_context
+
+            umo = str(self.config.get("OWNER_QQ_UMO", "") or "").strip()
+            ok = await remember_watch_context(self.context, umo, self._build_pc_watch_prompt(entry))
+            if ok:
+                logger.info(f"[BiliBot] 🧠 已写进陪伴记忆：{entry.get('bvid', '')}")
+            return ok
+        except Exception as exc:
+            logger.debug(f"[BiliBot] 观看记忆注入失败（不影响本轮）：{exc}")
+            return False
+
     async def _send_owner_recommend_qq(self, text, bvid):
         umo = str(self.config.get("OWNER_QQ_UMO", "") or "").strip()
         if not umo:
@@ -1889,6 +1922,8 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                 "actions": [],
             }
             watch_log = append_watch_entry(self, log_entry)
+            # 观看已经落账，此时注入陪伴记忆；不影响后续互动
+            await self._inject_watch_into_companion(log_entry)
             if oid:
                 # 交互前快速校验 Cookie
                 cookie_ok, _ = await self.check_cookie()

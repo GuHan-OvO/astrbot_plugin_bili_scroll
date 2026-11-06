@@ -17,6 +17,7 @@ from core.pc_bridge import (  # noqa: E402
     compose_with_persona,
     deliver_via_pc,
     find_pc_api,
+    remember_watch_context,
     share_via_pc,
     user_id_from_umo,
 )
@@ -99,6 +100,46 @@ class UserIdTests(unittest.TestCase):
 
 
 UMO = "aiocqhttp:FriendMessage:10000000001"
+
+
+class RememberWatchTests(unittest.IsolatedAsyncioTestCase):
+    """观看记忆注入：只记不发，任何一步失败都不抛。"""
+
+    async def test_记下但不发送(self):
+        api = _FakeApi("今天看了个木工视频，手艺真好")
+        with patch("core.pc_bridge.find_pc_api", return_value=api):
+            self.assertTrue(await remember_watch_context(object(), UMO, "p"))
+        self.assertEqual(api.recorded, [("10000000001", "今天看了个木工视频，手艺真好")])
+        self.assertEqual(api.sent, [], "观看记录不该刷屏")
+
+    async def test_没有调用就直接返回False(self):
+        api = _FakeApi("x")
+        self.assertFalse(await remember_watch_context(object(), UMO, "p"))
+        self.assertEqual(api.generated, [], "没有 api 时不该发起生成")
+
+    async def test_prompt为空不发起生成(self):
+        api = _FakeApi("x")
+        with patch("core.pc_bridge.find_pc_api", return_value=api):
+            self.assertFalse(await remember_watch_context(object(), UMO, "   "))
+        self.assertEqual(api.generated, [])
+
+    async def test_umo解析不出user_id就不记(self):
+        api = _FakeApi("x")
+        with patch("core.pc_bridge.find_pc_api", return_value=api):
+            self.assertFalse(await remember_watch_context(object(), "bad", "p"))
+        self.assertEqual(api.recorded, [])
+
+    async def test_生成失败就不记(self):
+        api = _FakeApi(gen_raises=RuntimeError("模型挂了"))
+        with patch("core.pc_bridge.find_pc_api", return_value=api):
+            self.assertFalse(await remember_watch_context(object(), UMO, "p"))
+        self.assertEqual(api.recorded, [])
+
+    async def test_生成空文本就不记(self):
+        api = _FakeApi("   ")
+        with patch("core.pc_bridge.find_pc_api", return_value=api):
+            self.assertFalse(await remember_watch_context(object(), UMO, "p"))
+        self.assertEqual(api.recorded, [])
 
 
 class ComposeTests(unittest.IsolatedAsyncioTestCase):

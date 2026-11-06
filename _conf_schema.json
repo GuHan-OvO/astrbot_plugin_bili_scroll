@@ -62,6 +62,15 @@
     "default": "",
     "hint": "用于当前活动同步和 QQ 推荐分享；在主人 QQ 私聊中执行 /biliUMO 可取得该值。"
   },
+  "LINK_COMPANION_INJECT_WATCH": {
+    "description": "【联动】把看过的视频写进她的记忆",
+    "type": "bool",
+    "default": false,
+    "hint": "每看完一个视频，把标题、UP、简介和你的评价交给她，让她用自己的口吻记一句；只记不发，不刷屏。需同时打开强联动总开关。",
+    "condition": {
+      "LINK_COMPANION_ENABLE": true
+    }
+  },
   "LINK_COMPANION_SCHEDULE": {
     "description": "【联动】生成日程时避让她已有的安排",
     "type": "bool",
