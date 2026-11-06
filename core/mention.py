@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 AT_NAME_MAX_LEN = 32
 """B站 昵称最长 32 字节，超过就不可能有效。"""

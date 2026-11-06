@@ -26,7 +26,7 @@ AstrBot 为此提供了 ``req.extra_user_content_parts``：这些片段会被并
 
 from __future__ import annotations
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 
 def _get_text_part():

@@ -3,6 +3,60 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 指向本仓库、不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v1.9.8 — 2026-11-06
+
+### 修复：模型输出没被当结构化数据处理（同一类根因的四处）
+
+- **评分 JSON 容错**（`core/video_evaluation.py`）：解析前先从任意文本里取第一个配对完整的
+  `{...}`。实测 3 次 `invalid_json` 都是 `json_error_position: 0`——模型在 JSON 前面加了一句
+  「Thinking Process:」，整段 `json.loads` 必然失败、本来有效的评分整条丢掉。
+- **搜索词过滤**（`core/proactive.py::_parse_proactive_search_queries`）：回落到按行切分时，
+  会把模型的「Thinking Process:」「**Analyze the Request:**」当成 B站 搜索词（实测刷出过
+  《Design Thinking Process》《Ansys ISO26262 培训》）。现在剥掉 markdown 修饰后再判定：
+  以冒号结尾、以 `#`/`**`/```` 开头、或命中思考过程前缀的行一律丢弃。
+
+### 修复：评价失败吃光每日额度（`core/proactive.py`）
+
+- 每日看片额度只统计「评价成功」的观看；失败另算，由新配置 `PROACTIVE_FAILED_WATCH_MAX`
+  （默认 6）限制。此前模型一侧抖动时，一天 4 次失败就把额度吃满，之后整天不再重试
+  （实测 10-28 起每天恰好 4 条、全是 `score=0`）。
+
+### 修复：推荐被互动失败连带吞掉（`core/proactive.py`）
+
+- `owner_recommend_ready` 在进入互动前算好，推荐块改为 `if not interaction_failed or owner_recommend_ready:`；
+  投币/收藏/评论仍受 `not interaction_failed` 保护。此前点赞失败或 Cookie 校验失败会连
+  「分享给主人」一起跳过（含 QQ 通道）。
+
+### 修复：依赖「装了但找不到」+ 缺了静默降级（`core/utils.py`、`main.py`）
+
+- `_find_command()` 现在也会查 **解释器同目录（venv 的 Scripts）** 和 **插件数据目录下的 `bin/`**。
+  `requirements.txt` 一直声明了 `yt-dlp`，但 AstrBot 不激活 venv、PATH 里没有它——这解释了
+  为什么「依赖明明装了，下载却一直 `yt-dlp not found`」。
+- 新增启动自愈：缺 yt-dlp 时后台用当前解释器 `pip install yt-dlp` 一次，失败只告警。
+  `main.py::initialize` 里起任务，`terminate` 时取消。
+
+### 修复：子进程弹控制台窗口（`core/utils.py::_run_process`）
+
+- Windows 上给 yt-dlp / ffmpeg 加 `CREATE_NO_WINDOW`，不再每跑一次弹一个黑框。
+
+### 修复：带 emoji 的日志整行被吞（`core/safe_logger.py`）
+
+- AstrBot 的 loguru sink 用 GBK 写盘，emoji 触发 `UnicodeEncodeError`，**整行日志丢失**。
+  实测「📢 已在评论区@主人」「✉️ 已通过B站私信给主人分享」在日志里 0 命中，但 B站 侧确有记录，
+  排查时会误判成「没发生」。新增 `core/safe_logger.py` 包装：写入前把不可编码字符替换成 `?`，
+  31 个 core 模块与 `main.py` 改为从这里取 `logger`。
+
+### 测试
+
+- 新增 `tests/test_release_fixes.py`（19 条：JSON 容错、搜索词过滤、配额/推荐解耦契约、
+  命令解析两个搜索目录、无窗子进程参数、补装只做一次、日志安全）。
+- 全量：**656 passed, 2 skipped, 97 subtests passed**。
+
+### 用户侧需要准备什么
+
+- 不需要手动 `pip install`：缺 yt-dlp 会自动补一次。
+- 仍需 `ffmpeg`/`ffprobe` 在 PATH 或常见目录（体积大、不自动下载）；缺失时日志会明确点名。
+
 ## v1.9.7 — 2026-11-03
 
 ### 修复：工具看片必然撞 AstrBot 的 120 秒工具超时（上游 #60）

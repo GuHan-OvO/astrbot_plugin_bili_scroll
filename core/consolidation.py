@@ -15,7 +15,7 @@
 
 import json
 from datetime import datetime, timedelta
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import (
     MEMORY_FILE,
     CONSOLIDATION_DISCARD_THRESHOLD,

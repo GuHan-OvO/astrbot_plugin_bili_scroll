@@ -10,7 +10,7 @@ import aiohttp
 from .network import plugin_http_session
 from .verify import schedule_verify
 from functools import reduce
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import (
     BILI_COOKIE_CONFIRM_URL, BILI_COOKIE_INFO_URL, BILI_COOKIE_REFRESH_URL,
     BILI_DYNAMIC_IMAGE_URL, BILI_DYNAMIC_TEXT_URL, BILI_NAV_URL,

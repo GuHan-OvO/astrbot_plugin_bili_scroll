@@ -943,6 +943,17 @@
     },
     "hint": "所有来源合计的每日看片上限；填 0 表示只受每轮数量限制。"
   },
+  "PROACTIVE_FAILED_WATCH_MAX": {
+    "description": "【主动看片·数量】每天评价失败多少次后暂停自动刷视频（0=不限制）",
+    "type": "int",
+    "default": 6,
+    "min": 0,
+    "max": 100,
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    },
+    "hint": "评价失败的观看不占每日看片额度；这里单独限制失败次数，避免模型持续故障时反复重试、把一天的时间窗全烧掉。"
+  },
   "PROACTIVE_FAV_FOLDERS": {
     "description": "【主动看片·来源】收藏夹投喂池（media_id 或收藏夹链接）",
     "type": "list",

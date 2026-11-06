@@ -6,7 +6,7 @@ import re
 import shutil
 from .video_diagnostics import media_failure, get_call_diagnostic, set_call_diagnostic, exception_detail, safe_detail
 from datetime import datetime
-from astrbot.api import logger
+from .safe_logger import logger
 from .network import download_proxy_args, redact_proxy_error
 from .video_inspection import VideoInspectionMixin
 from .config import VIDEO_MEMORY_FILE, TEMP_VIDEO_DIR, EXTERNAL_MEMORY_FILE

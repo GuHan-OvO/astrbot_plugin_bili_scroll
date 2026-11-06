@@ -2,7 +2,7 @@
 import asyncio
 import time
 
-from astrbot.api import logger
+from .safe_logger import logger
 from .video_diagnostics import set_call_diagnostic, exception_detail, safe_detail
 
 

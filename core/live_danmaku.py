@@ -7,7 +7,7 @@ import time
 from collections import deque
 from datetime import datetime
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 from .config import (
     AFFECTION_FILE,

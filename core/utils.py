@@ -1,14 +1,16 @@
 """基础工具方法：HTTP请求、JSON读写、进程管理、环境检测、临时文件清理。"""
 import os
+import sys
 import json
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
 import asyncio
 import aiohttp
 from .network import plugin_http_session
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import DATA_DIR, TEMP_IMAGE_DIR, TEMP_VIDEO_DIR, USER_AGENT
 try:
     from .config import WEB_SEARCH_CACHE_FILE
@@ -123,10 +125,18 @@ class UtilsMixin:
         if os.name == "nt" and not command_name.lower().endswith(".exe"):
             names.append(command_name + ".exe")
         search_dirs = [
+            # 插件所在 venv 的 Scripts：pip 装的命令行工具默认落在这里，而 AstrBot
+            # 启动时不会激活 venv、PATH 里没有它 —— requirements.txt 里的 yt-dlp
+            # 因此一直「装了但找不到」。
+            os.path.dirname(sys.executable),
+            # 插件自己的数据目录：留给自动补装/手工放置的独立可执行文件
+            os.path.join(DATA_DIR, "bin"),
             "/usr/local/bin", "/usr/bin", "/bin", "/opt/homebrew/bin",
             r"C:\\ffmpeg\\bin", r"C:\\Program Files\\ffmpeg\\bin", r"C:\\ProgramData\\chocolatey\\bin",
         ]
         for folder in search_dirs:
+            if not folder:
+                continue
             for name in names:
                 path = os.path.join(folder, name)
                 if os.path.isfile(path) and os.access(path, os.X_OK):
@@ -216,11 +226,17 @@ class UtilsMixin:
         if args:
             resolved = self._find_command(args[0]) or args[0]
             args = (resolved, *args[1:])
+        # Windows 上父进程没有控制台时，子进程会新开一个黑框窗口；yt-dlp / ffmpeg
+        # 每跑一次就弹一次。用 CREATE_NO_WINDOW 让它们静默运行。
+        creationflags = 0
+        if os.name == "nt":
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
         try:
             proc = await asyncio.create_subprocess_exec(
                 *args,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                creationflags=creationflags,
             )
         except FileNotFoundError:
             logger.warning(f"[BiliBot] 命令不存在：{args[0]}")
@@ -243,6 +259,40 @@ class UtilsMixin:
             proc.returncode,
             stdout.decode("utf-8", errors="ignore"),
             stderr.decode("utf-8", errors="ignore"),
+        )
+
+    async def _ensure_external_tools(self):
+        """缺 yt-dlp 时用当前解释器补装一次（进程内只尝试一次）。
+
+        requirements.txt 已经声明 yt-dlp，但手工拷贝部署的实例不会跑 pip；
+        补装成功后再用 _find_command 复查（它现在会看 venv 的 Scripts）。
+        失败只告警，不影响字幕/纯文本回退。
+        """
+        if getattr(self, "_external_tools_checked", False):
+            return
+        self._external_tools_checked = True
+        found = self._find_command("yt-dlp")
+        if found:
+            logger.info(f"[BiliBot] yt-dlp 就绪: {found}")
+            return
+        logger.warning("[BiliBot] 未找到 yt-dlp，尝试用当前解释器自动安装（只试一次）…")
+        try:
+            code, out, err = await self._run_process(
+                sys.executable, "-m", "pip", "install",
+                "--disable-pip-version-check", "-q", "yt-dlp",
+                timeout=300,
+            )
+        except Exception as exc:
+            logger.warning(f"[BiliBot] yt-dlp 自动安装异常: {exc}")
+            return
+        found = self._find_command("yt-dlp")
+        if code == 0 and found:
+            logger.info(f"[BiliBot] yt-dlp 自动安装成功: {found}")
+            return
+        logger.warning(
+            "[BiliBot] yt-dlp 自动安装未成功(code=%s)。视频下载/切片将不可用；"
+            "可手动执行 `%s -m pip install yt-dlp` 后重载插件。输出: %s",
+            code, sys.executable, (err or out or "")[-200:],
         )
 
     # ── 环境状态检测 ──

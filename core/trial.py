@@ -17,7 +17,7 @@ import asyncio
 import time
 from typing import Any
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 MAX_CANDIDATES = 5
 """只回前几条，够看口味就行。"""

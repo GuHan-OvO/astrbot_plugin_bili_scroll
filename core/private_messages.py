@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urlsplit
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 from .config import (
     AFFECTION_FILE,

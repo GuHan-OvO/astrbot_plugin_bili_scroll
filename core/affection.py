@@ -2,7 +2,7 @@
 import re
 import random
 from datetime import datetime
-from astrbot.api import logger
+from .safe_logger import logger
 from .security import readable_scopes
 from .config import (
     AFFECTION_FILE, BLOCK_KEYWORDS, INJECTION_PATTERNS,

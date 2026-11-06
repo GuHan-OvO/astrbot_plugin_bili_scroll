@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, unquote, urlparse, urljoin
 
 import aiohttp
 from .network import plugin_http_session
-from astrbot.api import logger
+from .safe_logger import logger
 
 from .config import TEMP_VIDEO_DIR, VIDEO_MEMORY_FILE
 from .request_context import inject_temp_context

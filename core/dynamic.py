@@ -13,7 +13,7 @@ import hashlib
 import aiohttp
 from .network import plugin_http_session
 from datetime import datetime, timedelta
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import (
     DAILY_SUMMARY_FILE, DEFAULT_DYNAMIC_TOPICS, DYNAMIC_LOG_FILE,
     PERMANENT_MEMORY_FILE, TEMP_IMAGE_DIR, WATCH_LOG_FILE, WEEKLY_SUMMARY_FILE,

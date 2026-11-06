@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from astrbot.api import logger
+from .safe_logger import logger
 from astrbot.api.star import Context
 from astrbot.api.web import error_response, json_response, request
 from .network import normalize_proxy_url

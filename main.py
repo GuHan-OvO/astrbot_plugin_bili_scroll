@@ -9,9 +9,10 @@ from datetime import datetime
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star
 from astrbot.api.message_components import Image, Plain
-from astrbot.api import logger, AstrBotConfig
+from astrbot.api import AstrBotConfig
 from astrbot.api.provider import ProviderRequest, LLMResponse
 from .core.config import *
+from .core.safe_logger import logger
 from .core.chat_text import split_for_chat
 from .core.selftest import plugin_version
 from .core import (
@@ -120,6 +121,11 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
 
     async def initialize(self):
         """Start background work only after AstrBot has formally activated the plugin."""
+        # 外部命令自愈：缺 yt-dlp 时后台补装一次，不阻塞启动也不影响字幕回退。
+        try:
+            self._tool_provision_task = asyncio.create_task(self._ensure_external_tools())
+        except RuntimeError:
+            self._tool_provision_task = None
         try:
             await self.layered_runtime.open()
             logger.info("[BiliBot] 四层运行服务已连接")
@@ -437,6 +443,9 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
 
     async def terminate(self):
         # 后台看片任务不随工具调用结束而结束，停用插件时要一起取消
+        provision = getattr(self, "_tool_provision_task", None)
+        if provision is not None and not provision.done():
+            provision.cancel()
         for task in list(getattr(self, "_tool_watch_jobs", {}).values()):
             task.cancel()
         for task in list(getattr(self, "_tool_watch_followup_tasks", set()) or []):

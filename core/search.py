@@ -5,7 +5,7 @@ import time
 from collections import OrderedDict
 import aiohttp
 from .network import plugin_http_session, openai_proxy_kwargs, redact_proxy_error
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import WEB_SEARCH_CACHE_FILE
 
 

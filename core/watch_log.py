@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 from .config import DATA_DIR, WATCH_LOG_FILE
 

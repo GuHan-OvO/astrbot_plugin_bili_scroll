@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 PC_PLUGIN_NAME = "astrbot_plugin_private_companion"
 """PC 的插件名（StarMetadata.name），与它的 metadata.yaml 一致。"""

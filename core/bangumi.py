@@ -4,7 +4,7 @@ import random
 import asyncio
 import traceback
 from datetime import datetime
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import (
     BANGUMI_MEMORY_FILE, BANGUMI_WATCH_LOG_FILE, PROACTIVE_LOG_FILE,
     WATCH_LOG_FILE,

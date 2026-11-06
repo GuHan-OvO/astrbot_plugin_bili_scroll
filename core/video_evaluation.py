@@ -35,6 +35,39 @@ def _text(value: Any, field: str, limit: int, *, empty=True) -> str:
     return value
 
 
+def _extract_json_object(text):
+    """从任意文本里取第一个配对完整的 ``{...}``。
+
+    模型经常在 JSON 前后夹一句前言/思考过程（实测 4545 字符的响应在第 0 位就
+    不是 ``{``），整段 ``json.loads`` 必然失败，把本来有效的评分整条丢掉。
+    """
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_string = False
+        escaped = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:index + 1]
+        start = text.find("{", start + 1)
+    return ""
+
+
 def parse_video_evaluation(raw: str) -> dict[str, Any]:
     text = str(raw or "").strip()
     if text.startswith("```json") and text.endswith("```"):
@@ -43,8 +76,15 @@ def parse_video_evaluation(raw: str) -> dict[str, Any]:
         text = text[3:-3].strip()
     try:
         value = json.loads(text)
-    except (TypeError, ValueError) as exc:
-        raise VideoEvaluationError("invalid_json") from exc
+    except (TypeError, ValueError):
+        # 夹带前言时先取出第一个完整对象再试；仍失败才判 invalid_json。
+        candidate = _extract_json_object(text)
+        try:
+            value = json.loads(candidate) if candidate else None
+        except (TypeError, ValueError):
+            value = None
+        if not isinstance(value, dict):
+            raise VideoEvaluationError("invalid_json") from None
     if not isinstance(value, dict) or set(value) != EVALUATION_KEYS:
         raise VideoEvaluationError("evaluation_schema_mismatch")
 

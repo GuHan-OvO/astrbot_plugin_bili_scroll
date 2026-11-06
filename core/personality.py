@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Any
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 from .config import (
     DAILY_SUMMARY_FILE,

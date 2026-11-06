@@ -3,7 +3,7 @@ import math
 import base64
 import aiohttp
 from .network import plugin_http_session, openai_proxy_kwargs, redact_proxy_error
-from astrbot.api import logger
+from .safe_logger import logger
 from .video_diagnostics import set_call_diagnostic, exception_detail, safe_detail
 
 

@@ -5,7 +5,7 @@ import re
 import time
 from datetime import datetime
 
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import COMMENT_CONTEXT_LOG_FILE
 from .output_protocol import ReplyProtocolError, parse_reply_envelope, reply_schema_instruction
 from .security.redact import wrap_untrusted

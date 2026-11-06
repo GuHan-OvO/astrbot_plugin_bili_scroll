@@ -30,7 +30,7 @@ import json
 import time
 from datetime import datetime
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 from .config import VERIFY_LOG_FILE
 

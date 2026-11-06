@@ -18,7 +18,7 @@ import re
 import time
 from datetime import datetime, timedelta
 from collections import Counter
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import (
     WATCH_LOG_FILE, BANGUMI_WATCH_LOG_FILE, DYNAMIC_LOG_FILE,
     PROACTIVE_LOG_FILE, WEEKLY_SUMMARY_FILE, DAILY_SUMMARY_FILE, TEMP_IMAGE_DIR,

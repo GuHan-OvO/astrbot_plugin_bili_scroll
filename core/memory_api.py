@@ -17,7 +17,7 @@
 from copy import deepcopy
 from datetime import datetime
 import uuid
-from astrbot.api import logger
+from .safe_logger import logger
 from .security import readable_scopes
 from .config import (
     USER_PROFILE_FILE, WATCH_LOG_FILE, BANGUMI_WATCH_LOG_FILE,

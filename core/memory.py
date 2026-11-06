@@ -9,7 +9,7 @@ import hashlib
 import re
 import json
 from datetime import datetime
-from astrbot.api import logger
+from .safe_logger import logger
 from .security import readable_scopes
 from .config import (
     MAX_SEMANTIC_RESULTS, MEMORY_FILE, MEMORY_SYNC_STATE_FILE, PERMANENT_MEMORY_FILE,

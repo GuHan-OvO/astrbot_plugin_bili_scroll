@@ -11,7 +11,7 @@ from pydantic.dataclasses import dataclass
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import USER_PROFILE_FILE, AFFECTION_FILE, LEVEL_NAMES, DATA_DIR
 from .runtime import ActionRequest, EventPriority
 

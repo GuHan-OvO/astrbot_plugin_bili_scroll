@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 # 前端渲染顺序与中文名。AstrBot 的 ProviderType 枚举见
 # astrbot/core/provider/entities.py（chat_completion / speech_to_text /

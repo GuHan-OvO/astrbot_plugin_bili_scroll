@@ -5,7 +5,7 @@ import json
 import random
 import re
 from datetime import datetime, timedelta
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import (
     AUTONOMOUS_PLAN_FILE, BANGUMI_SCHEDULE_FILE, DYNAMIC_SCHEDULE_FILE,
     DYNAMIC_WATCH_SCHEDULE_FILE, SCHEDULE_FILE, SPECIAL_FOLLOW_SCHEDULE_FILE,

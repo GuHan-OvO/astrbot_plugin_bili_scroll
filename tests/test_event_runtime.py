@@ -17,7 +17,8 @@ SPEC.loader.exec_module(runtime)
 def load_private_message_module(data_dir):
     package_name = "bilibot_private_runtime_test"
     package = types.ModuleType(package_name)
-    package.__path__ = []
+    # 允许 `from .safe_logger import logger` 解析到真实的 core/safe_logger.py
+    package.__path__ = [str(MODULE_PATH.parent)]
     sys.modules[package_name] = package
     sys.modules[f"{package_name}.runtime"] = runtime
 

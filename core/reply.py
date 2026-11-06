@@ -6,7 +6,7 @@ import time
 import random
 import traceback
 from datetime import datetime
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import (
     AFFECTION_FILE, DATA_DIR, LEVEL_NAMES,
     REPLIED_AT_FILE, REPLIED_FILE,

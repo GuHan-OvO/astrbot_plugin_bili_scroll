@@ -8,7 +8,7 @@ import traceback
 import time
 from .video_diagnostics import evaluation_failure, get_call_diagnostic, set_call_diagnostic, exception_detail
 from datetime import datetime, timedelta
-from astrbot.api import logger
+from .safe_logger import logger
 from .config import (
     OWNER_RECOMMEND_LOG_FILE,
     BILI_ZONES, COMMENTED_FILE, EXTERNAL_MEMORY_FILE, PROACTIVE_LOG_FILE,
@@ -731,6 +731,17 @@ class ProactiveMixin:
             query = re.sub(r"^\s*(?:[-*•]|\d+[.)、])\s*", "", str(item or ""))
             query = re.sub(r"\s+", " ", query).strip(" \t\r\n\"'“”‘’[]")
             if not query or len(query) > 40:
+                continue
+            probe = query.strip("*_`# ").strip()
+            lowered = probe.lower()
+            # 回落到按行切分时，模型回答里的「思考过程 / 请求分析」标题会被当成搜索词：
+            # 实测刷出过《Design Thinking Process》《Ansys ISO26262 培训》。
+            if not probe or probe.endswith(":") or probe.endswith("："):
+                continue
+            if any(lowered.startswith(prefix) for prefix in (
+                "thinking process", "analyze the request", "analysis", "reasoning",
+                "思考过程", "分析过程", "分析：", "要求：",
+            )):
                 continue
             if re.search(r"https?://|b23\.tv|\bBV[0-9A-Za-z]+", query, re.IGNORECASE):
                 continue
@@ -1511,8 +1522,25 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
         daily_comment_limit = max(0, int(daily_comment_limit or 0))
         watch_log = self._load_json(WATCH_LOG_FILE, [])
         today_str = datetime.now().strftime("%Y-%m-%d")
-        # 日限检查：所有来源（含手动/LLM触发）均计入总量
-        today_watched = [l for l in watch_log if l.get("time", "").startswith(today_str)]
+        # 日限检查：所有来源（含手动/LLM触发）均计入总量。
+        # 但「评价失败」的观看不算看过：否则模型一侧抖动时，一天 4 次失败就把额度吃光，
+        # 之后再也不会重试（实测 10-28 起每天恰好 4 条、全是 score=0）。
+        today_entries = [l for l in watch_log if l.get("time", "").startswith(today_str)]
+        today_watched = [
+            l for l in today_entries
+            if str(l.get("evaluation_status") or "") != "failed"
+            and str(l.get("comment") or "") != "评价失败"
+        ]
+        today_failed = len(today_entries) - len(today_watched)
+        try:
+            failed_limit = int(self.config.get("PROACTIVE_FAILED_WATCH_MAX", 6) or 0)
+        except (TypeError, ValueError):
+            failed_limit = 6
+        if failed_limit and today_failed >= failed_limit:
+            logger.info(
+                f"[BiliBot] 今天评价已失败 {today_failed} 次（上限{failed_limit}），暂停自动刷视频"
+            )
+            return
         recommend_ledger, owner_recommend_count = self._load_owner_recommendation_state(watch_log)
         daily_limit = max(0, int(self.config.get("PROACTIVE_DAILY_LIMIT", 0) or 0))
         autonomous_limit = self._autonomous_limit_max("proactive") if hasattr(self, "_autonomous_limit_max") else max(0, int(self.config.get("AUTONOMOUS_PROACTIVE_DAILY_LIMIT", daily_limit) or 0))
@@ -1786,8 +1814,13 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                     else:
                         # 点赞是最轻量的操作，如果连这个都失败大概率是风控
                         interaction_failed = True
-                if not interaction_failed:
-                    if score >= self._proactive_score_threshold("PROACTIVE_COIN_MIN_SCORE", 8) and self.config.get("PROACTIVE_COIN", False):
+                # 推荐独立于互动结果：点赞失败或 Cookie 校验失败不该连「分享给主人」一起吞掉。
+                owner_recommend_ready = (
+                    bvid not in getattr(self, "_owner_recommended_bvids", set())
+                    and self._can_recommend_owner(evaluation, score, owner_recommend_count)
+                )
+                if not interaction_failed or owner_recommend_ready:
+                    if not interaction_failed and score >= self._proactive_score_threshold("PROACTIVE_COIN_MIN_SCORE", 8) and self.config.get("PROACTIVE_COIN", False):
                         if (
                             await self._execute_proactive_action(
                                 f"proactive_coin:{bvid}",
@@ -1798,7 +1831,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                         ).success:
                             actions.append("🪙投币")
                             logger.info("[BiliBot] 🪙 投币成功")
-                    if score >= self._proactive_score_threshold("PROACTIVE_FAV_MIN_SCORE", 8) and self.config.get("PROACTIVE_FAV", True):
+                    if not interaction_failed and score >= self._proactive_score_threshold("PROACTIVE_FAV_MIN_SCORE", 8) and self.config.get("PROACTIVE_FAV", True):
                         if (
                             await self._execute_proactive_action(
                                 f"proactive_favorite:{bvid}",
@@ -1809,7 +1842,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                         ).success:
                             actions.append("⭐收藏")
                             logger.info("[BiliBot] ⭐ 收藏成功")
-                    if per_video_comment and score >= self._proactive_score_threshold("PROACTIVE_COMMENT_MIN_SCORE", 7) and comment_count < daily_comment_limit and self.config.get("PROACTIVE_COMMENT", True):
+                    if not interaction_failed and per_video_comment and score >= self._proactive_score_threshold("PROACTIVE_COMMENT_MIN_SCORE", 7) and comment_count < daily_comment_limit and self.config.get("PROACTIVE_COMMENT", True):
                         proactive_comment = await self._generate_proactive_comment(analysis_info, video_description)
                         if proactive_comment and (
                             await self._execute_proactive_action(
@@ -1828,7 +1861,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
                             pl = self._load_json(PROACTIVE_LOG_FILE, [])
                             pl.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "bvid": bvid, "title": video.get("title", ""), "comment": proactive_comment})
                             self._save_json(PROACTIVE_LOG_FILE, pl[-100:])
-                    if bvid not in getattr(self, "_owner_recommended_bvids", set()) and self._can_recommend_owner(evaluation, score, owner_recommend_count):
+                    if owner_recommend_ready:
                         on = self.config.get("OWNER_NAME", "") or "主人"
                         owner_mid = str(self.config.get("OWNER_MID", "") or "").strip()
                         owner_bili = self.config.get("OWNER_BILI_NAME", "")

@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from astrbot.api import logger
+from .safe_logger import logger
 
 from .config import DATA_DIR, PLUGIN_NAME, WATCH_LOG_FILE, VERIFY_LOG_FILE
 
