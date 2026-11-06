@@ -1548,9 +1548,13 @@ input.activity-slider::-webkit-slider-runnable-track {
 }
 
 input.activity-slider::-webkit-slider-thumb {
-  /* 尺寸交回全局的 18px（原样）：用户在 28px 下觉得太大，18 与 26px 轨道的水面关系
-     才和设计稿一致。这里只保留「按下回弹」所需的过渡与交互反馈。 */
+  /* 轨道是 26px（不是全局那条 6px），所以 thumb 必须自己定尺寸与居中偏移：
+     18px/22px 配 26px 轨道时若沿用全局的 margin-top:-6px，圆点会浮在轨道上方 10px。
+     28px + margin-top:-1px = (26-28)/2，视觉压在轨道正中、略大于轨道。 */
   appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -1px;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.06);
