@@ -185,25 +185,96 @@ QQ 推荐这条链路会改成：
 
 注意 `user_id` 是 7.0.0 的必填关键字参数，由 `OWNER_QQ_UMO` 解析而来（`platform:MessageType:session_id` 的最后一段）。**没配 `OWNER_QQ_UMO` 时联动不会触发**——QQ 推荐本身也依赖这个配置。
 
-## 快速开始
+## 配置引导
 
-1. 把本仓库放进 AstrBot 的 `data/plugins/astrbot_plugin_bili_scroll`
-2. 重载插件
-3. 填必填配置（下表）
-4. QQ 里发 `bili主动` 跑一轮
+从零开始，五步能用起来。
 
-### 必填
+### 第一步：给 Bot 一个 B站 账号
 
-| 配置 | 说明 |
+**别用你自己的号。** 它要自己发评论、@ 人、投币收藏；用主人的号会变成「自己 @ 自己」，评论区身份也乱。
+注册个小号即可。
+
+### 第二步：装插件
+
+把本仓库放进 AstrBot 的 `data/plugins/astrbot_plugin_bili_scroll`，然后在 AstrBot 里重载插件。
+
+### 第三步：扫码登录
+
+QQ 私聊 Bot 发 `/bili登录` → 用 B站 App 扫弹出的二维码 → 手机确认后发 `/bili确认`。
+
+成功后会自动写入 `SESSDATA` / `BILI_JCT` / `DEDE_USER_ID` / `REFRESH_TOKEN`，并自动启动后台任务，
+**不需要手填 Cookie**。
+
+> **扫码一次长期复用，不要反复登。** B站 对频繁登录有风控累积，只有 Cookie 真失效（报 `-101`）才重扫。
+
+### 第四步：填主人身份
+
+| 配置 | 填什么 | 怎么取 |
+|---|---|---|
+| `OWNER_MID` | 你的 B站 UID | B站 个人空间链接里的数字 |
+| `OWNER_BILI_NAME` | 你的 B站 昵称 | 与上一项配对，用于评论区真实 @ 你 |
+
+不填这两项，它不知道该 @ 谁。
+
+### 第五步：打开总开关
+
+`ENABLE_PROACTIVE` 默认是**关**的，打开它。之后可以发 `/bili主动` 手动跑一轮，
+也可以在「自主与作息」页调整每日计划。
+
+到这里已经能用了，下面是可选项。
+
+### 可选配置
+
+| 配置 | 作用 | 怎么取 |
+|---|---|---|
+| `OWNER_QQ_UMO` | 把推荐的视频私聊推给你 | QQ 私聊发 `/biliUMO` |
+| `PROACTIVE_FAV_FOLDERS` | 收藏夹投喂池，塞进去的视频优先看 | 收藏夹链接或 media_id |
+| `LLM_PROVIDER_ID` | 指定判断用的模型 | 留空用 AstrBot 默认聊天模型 |
+| `PROXY_URL` | 网络需要代理时填 | 留空不动 |
+| `TASTE_PROFILE_ENABLE` | 让兴趣画像影响挑片 | 「兴趣画像」页顶部开关，改完即时生效 |
+| `PROACTIVE_TASTE_RANK_ENABLE` | 候选按命中度排序，不再随机 | 全部配置 → 主动看片·筛选 |
+| `LINK_COMPANION_ENABLE` | 借陪伴插件的人设与通道发推荐 | 基础设置第一组「联动插件配置」，需陪伴 7.0.0+ |
+
+**兴趣画像**可以先用页面右上角「从人设总结」让模型按角色设定推一版，勾选加进去，
+再打开页面顶部那个开关。
+
+### 检查依赖
+
+| 依赖 | 是否需要手动装 |
 |---|---|
-| `SESSDATA` / `BILI_JCT` | B站 登录态，用 `bili登录` 扫码获取。**扫码一次长期复用**，反复登录会累积风控 |
-| `OWNER_BILI_NAME` | 你的 B站 昵称，用于真实 @ 提及 |
-| `OWNER_MID` | 你的 B站 UID，与昵称配对 |
-| `ENABLE_PROACTIVE` | 主动看片总开关，**默认关** |
+| `yt-dlp` | 不用，缺失时启动会后台自愈 |
+| `ffmpeg` / `ffprobe` | **需要**，体积大不自动下载；缺了只影响视频直读，字幕分析照常 |
 
-可选：`OWNER_QQ_UMO`（推荐私信地址，用 `biliUMO` 取）、
-`PROACTIVE_FAV_FOLDERS`（收藏夹投喂池，填 media_id 或收藏夹链接，留空不启用）、
-`TASTE_PROFILE_ENABLE` + `PROACTIVE_TASTE_RANK_ENABLE`（让兴趣画像影响挑片，见「一、刷 B 站」）。
+### 验证
+
+| 命令 | 看什么 |
+|---|---|
+| `/bili状态` | Cookie 是否有效、各开关状态 |
+| `/bili主动` | 立即跑一轮，日志里应有「触发主动视频」 |
+| 页面「自检」 | 模块、配置、数据、路由自检 |
+
+### 常见问题
+
+**发了 `/bili主动` 没反应**：先看 `ENABLE_PROACTIVE` 是否打开，再看 `/bili状态` 里 Cookie 是否有效。
+
+**Cookie 失效**：`/bili状态` 会显示 `-101`。重新 `/bili登录` → `/bili确认` 即可，不用清数据。
+
+**评论区没有真的 @ 到我**：`OWNER_BILI_NAME` 要和你 B站 昵称一字不差；名字对的才会被解析成真实提及并通知。
+
+**它看的视频都很杂**：先配兴趣画像并打开 `TASTE_PROFILE_ENABLE`；还不够就开
+`PROACTIVE_TASTE_RANK_ENABLE` 让候选按画像排序。
+
+### 不想自己配？
+
+可以把这一页丢给 AI Agent（能读文件、执行命令的那种，比如 Claude Code、Codex、DeepSeek Harness）：
+
+> 帮我配好 AstrBot 的 `astrbot_plugin_bili_scroll` 插件，目录是 `<插件路径>`，按 README 的「配置引导」来。
+
+它能替你改配置、装依赖、读日志排错。但有三件事必须你自己做：
+
+- **扫码登录**：要手机相机，Agent 拿不到
+- **提供 `OWNER_MID` / `OWNER_BILI_NAME`**：你的 B站 UID 和昵称
+- **决定开哪些开关**：默认全关，开哪些由你定
 
 ## 命令
 
