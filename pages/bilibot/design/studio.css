@@ -6,7 +6,10 @@
  * ========================================================================== */
 
 html[data-mode="extension"] body {
-  background: var(--bg);
+  /* 必须透明：底色由 html 的 --ambient-base 提供，
+     否则这层不透明背景会把 z-index:-1 的 .ambient 整个盖住（旧版光斑就因此从没显示过）。
+     extension 的 --bg 与 --ambient-base 同为 #070a12，透明不会改变观感。 */
+  background: transparent;
 }
 
 /* ── 工作室侧边栏 ──────────────────────────────────────────────────── */
@@ -14,8 +17,8 @@ html[data-mode="extension"] body {
 .sidebar.creator-sidebar {
   gap: var(--sp-4);
   padding: var(--sp-4) var(--sp-3) var(--sp-3);
-  border-color: var(--line);
-  background: var(--surface-glass);
+  border-color: var(--glass-border);
+  background: var(--glass-fill-strong);
 }
 
 .creator-brand-lockup {
@@ -704,8 +707,8 @@ html[data-mode="extension"] body {
   padding: var(--sp-5);
   border: 1px solid var(--accent-ring);
   border-radius: 50%;
-  background: var(--surface-glass-strong);
-  box-shadow: 0 0 60px -18px var(--accent-ring);
+  background: var(--glass-fill-strong);
+  box-shadow: var(--glass-hi-line), var(--glass-edge), 0 0 60px -18px var(--accent-ring);
 }
 
 .creator-core span {
@@ -736,11 +739,15 @@ html[data-mode="extension"] body {
   flex-direction: column;
   gap: 1px;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-md);
-  background: var(--surface-glass-strong);
-  box-shadow: var(--shadow-2);
-  backdrop-filter: blur(12px);
+  background: var(--glass-fill-strong);
+  box-shadow: var(--glass-hi-line), var(--glass-inner), var(--shadow-2);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-sat))
+    brightness(var(--glass-luma));
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-sat))
+    brightness(var(--glass-luma));
+  corner-shape: var(--glass-corner);
 }
 
 .creator-signal-card span,

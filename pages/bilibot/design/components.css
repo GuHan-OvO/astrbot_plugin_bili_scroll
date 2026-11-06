@@ -1332,8 +1332,11 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   padding: var(--sp-5);
   background: var(--backdrop);
   opacity: 0;
-  backdrop-filter: blur(8px) saturate(140%);
-  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  /* 遮罩要「糊住」后面才有层次：玻璃本体降到 6-8px，遮罩单独放大到 1.6 倍 */
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.2)) saturate(var(--glass-sat))
+    brightness(var(--glass-luma));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.2)) saturate(var(--glass-sat))
+    brightness(var(--glass-luma));
   transition: opacity var(--dur-base) var(--ease-out);
 }
 

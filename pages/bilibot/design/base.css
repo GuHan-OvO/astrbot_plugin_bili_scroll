@@ -148,9 +148,17 @@ pre {
   background-color: var(--scroll-thumb-hover);
 }
 
-/* ── 环境背景 ─────────────────────────────────────────────────────────
- * 三层极低饱和的光晕，用 26s 的缓慢漂移建立「活着」的氛围。
- * 固定定位 + transform 动画，不触发重排；prefers-reduced-motion 下静止。
+/* ── 环境背景：三色流动柔光（蓝 / 粉 / 绿） ─────────────────────────────
+ * 结构：一个多色斑漂移层（::before）+ 三个各自独立运动的色斑（.ambient-orb-a/b/c）
+ * + 一层静态颗粒（::after，压 8bit 渐变台阶）。
+ *
+ * 为什么不是一个整体旋转：色斑只在原地打转时，画面中心（正是内容区）几乎不动，
+ * 而且要转 4 分钟一圈才不显得急。现在是三个色斑各有自己的周期与方向、互相穿插，
+ * 2~3 秒就能看出颜色在移动。
+ *
+ * 性能取舍按用户要求「效果优先」：不降帧、不加 steps，
+ * 只保留两条不损观感的优化——只动 transform（合成器线程）、不做 filter: blur
+ * （柔边由多级 radial-gradient 自带）。实测开销见进度文档 T105。
  */
 
 .ambient {
@@ -159,71 +167,173 @@ pre {
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
+  /* 隔离合成：否则 mix-blend-mode 会和卡片/正文混合，浅色下出现灰斑 */
+  isolation: isolate;
   background:
     radial-gradient(120% 80% at 50% -10%, var(--accent-soft) 0%, transparent 60%),
     var(--ambient-base);
 }
 
-.ambient-orb {
+/* 漂移层：200vmax 的多色斑纹理，缓慢平移 + 轻微旋转 + 呼吸 */
+.ambient::before {
+  content: "";
   position: absolute;
-  display: block;
-  border-radius: 50%;
-  filter: blur(72px);
-  opacity: 0.9;
+  left: 50%;
+  top: 50%;
+  width: 200vmax;
+  height: 200vmax;
+  margin: -100vmax 0 0 -100vmax;
   will-change: transform;
+  pointer-events: none;
+  background:
+    radial-gradient(34% 30% at 36% 32%, var(--flow-blue) 0%,
+      color-mix(in srgb, var(--flow-blue) 40%, transparent) 42%, transparent 88%),
+    radial-gradient(32% 28% at 66% 50%, var(--flow-pink) 0%,
+      color-mix(in srgb, var(--flow-pink) 40%, transparent) 42%, transparent 88%),
+    radial-gradient(36% 32% at 46% 74%, var(--flow-green) 0%,
+      color-mix(in srgb, var(--flow-green) 40%, transparent) 42%, transparent 88%);
+  animation: ambientDrift 26s ease-in-out infinite;
+}
+
+@keyframes ambientDrift {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translate3d(5vmax, 3vmax, 0) rotate(4deg) scale(1.06);
+  }
+  50% {
+    transform: translate3d(0, 8vmax, 0) rotate(0deg) scale(1);
+  }
+  75% {
+    transform: translate3d(-5vmax, 2vmax, 0) rotate(-4deg) scale(0.96);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+}
+
+/* 三个独立色斑：周期互质（19s / 26s / 33s），方向各不相同 → 互相穿插 */
+.ambient-orb {
+  display: block;
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+  opacity: 0.9;
 }
 
 .ambient-orb-a {
-  top: -14vh;
-  left: -6vw;
-  width: 52vw;
-  height: 52vw;
-  background: var(--ambient-a);
-  animation: ambientDriftA var(--dur-ambient) var(--ease-in-out) infinite alternate;
+  top: -34vh;
+  left: -26vw;
+  width: 76vw;
+  height: 100vh;
+  background: radial-gradient(
+    closest-side,
+    var(--flow-blue) 0%,
+    color-mix(in srgb, var(--flow-blue) 38%, transparent) 40%,
+    transparent 96%
+  );
+  animation: ambientOrbA 19s ease-in-out infinite;
 }
 
 .ambient-orb-b {
-  top: 24vh;
-  right: -10vw;
-  width: 44vw;
-  height: 44vw;
-  background: var(--ambient-b);
-  animation: ambientDriftB calc(var(--dur-ambient) * 1.25) var(--ease-in-out) infinite alternate;
+  top: -18vh;
+  right: -32vw;
+  width: 72vw;
+  height: 94vh;
+  background: radial-gradient(
+    closest-side,
+    var(--flow-pink) 0%,
+    color-mix(in srgb, var(--flow-pink) 38%, transparent) 40%,
+    transparent 96%
+  );
+  animation: ambientOrbB 26s ease-in-out infinite;
 }
 
 .ambient-orb-c {
-  bottom: -18vh;
-  left: 26vw;
-  width: 40vw;
-  height: 40vw;
-  background: var(--ambient-c);
-  animation: ambientDriftC calc(var(--dur-ambient) * 1.6) var(--ease-in-out) infinite alternate;
+  bottom: -38vh;
+  left: 2vw;
+  width: 82vw;
+  height: 104vh;
+  background: radial-gradient(
+    closest-side,
+    var(--flow-green) 0%,
+    color-mix(in srgb, var(--flow-green) 38%, transparent) 40%,
+    transparent 96%
+  );
+  animation: ambientOrbC 33s ease-in-out infinite;
 }
 
-@keyframes ambientDriftA {
-  from {
+@keyframes ambientOrbA {
+  0% {
     transform: translate3d(0, 0, 0) scale(1);
   }
-  to {
-    transform: translate3d(6vw, 4vh, 0) scale(1.12);
+  33% {
+    transform: translate3d(16vmax, 11vmax, 0) scale(1.16);
+  }
+  66% {
+    transform: translate3d(5vmax, 22vmax, 0) scale(0.94);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
   }
 }
 
-@keyframes ambientDriftB {
-  from {
-    transform: translate3d(0, 0, 0) scale(1.05);
+@keyframes ambientOrbB {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1.08);
   }
-  to {
-    transform: translate3d(-7vw, 6vh, 0) scale(0.94);
+  33% {
+    transform: translate3d(-18vmax, 13vmax, 0) scale(0.92);
+  }
+  66% {
+    transform: translate3d(-30vmax, -7vmax, 0) scale(1.18);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.08);
   }
 }
 
-@keyframes ambientDriftC {
-  from {
+@keyframes ambientOrbC {
+  0% {
     transform: translate3d(0, 0, 0) scale(0.96);
   }
-  to {
-    transform: translate3d(4vw, -5vh, 0) scale(1.1);
+  40% {
+    transform: translate3d(-14vmax, -18vmax, 0) scale(1.14);
+  }
+  70% {
+    transform: translate3d(12vmax, -9vmax, 0) scale(1.02);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(0.96);
+  }
+}
+
+/* 深色/工作室：加色叠加才有发光感；浅色用 normal（白底上 screen 等于无效） */
+html[data-theme="dark"] .ambient::before,
+html[data-theme="dark"] .ambient-orb,
+html[data-mode="extension"] .ambient::before,
+html[data-mode="extension"] .ambient-orb {
+  mix-blend-mode: screen;
+}
+
+/* 静态颗粒：覆盖整个环境层，抹掉 8bit 渐变台阶。
+   60~200px 的 banding 波长正好落在 blur(16px) 玻璃的保留区，会被放大成「水渍」。 */
+.ambient::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--ambient-grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient::before,
+  .ambient-orb {
+    animation: none;
   }
 }
 

@@ -691,10 +691,10 @@
   width: 41%;
   aspect-ratio: 1;
   padding: var(--sp-3);
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 50%;
-  background: var(--surface-glass-strong);
-  box-shadow: var(--shadow-2);
+  background: var(--glass-fill-strong);
+  box-shadow: var(--glass-hi-line), var(--glass-edge), var(--shadow-2);
   text-align: center;
   transform: translate(-50%, -50%);
   transition: transform var(--dur-base) var(--ease-spring), box-shadow var(--dur-base) var(--ease-out);

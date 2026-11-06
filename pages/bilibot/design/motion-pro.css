@@ -50,23 +50,10 @@
   /* 指针光照在卡片上的半径与强度 */
   --light-radius: 360px;
   --light-strength: 0.22;
-
-  /* 液态玻璃：半透明填充、内缘描边、上缘镜面、背景模糊 */
-  --glass-fill: color-mix(in srgb, var(--surface) 76%, transparent);
-  --glass-edge: color-mix(in srgb, var(--text) 9%, transparent);
-  --glass-blur: 20px;
-  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  --glass-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
-  --glass-shade: inset 0 -22px 34px -30px rgba(16, 24, 40, 0.4);
 }
 
 html[data-theme="dark"],
 html[data-mode="extension"] {
-  --glass-fill: color-mix(in srgb, var(--surface) 62%, transparent);
-  --glass-edge: color-mix(in srgb, #ffffff 11%, transparent);
-  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  --glass-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --glass-shade: inset 0 -24px 36px -30px rgba(0, 0, 0, 0.55);
   --light-strength: 0.2;
 }
 
@@ -125,17 +112,16 @@ html[data-mode="extension"] [data-light]::before {
 }
 
 /* ============================================================================
- * 一·五、液态玻璃：半透明填充 + 背景模糊 + 上缘镜面 + 内缘描边
- * 只作用于「卡片这一层容器」，卡片内部的列表行保持实色，避免层层叠玻璃糊成一片。
+ * 一·五、液态玻璃：半透明填充 + 背景模糊 + 上缘受光 + 内缘描边
+ * 只作用于「页面级容器」。卡片内部的行/子卡（capability/behavior/event/
+ * mode-picker/ring-event）**不上玻璃**——玻璃叠玻璃会让下层发灰发糊，
+ * iOS 也是「容器里放不透明行」的做法。
  * ========================================================================== */
 
 .card,
 .section-card,
 .metric-card,
-.capability-card,
-.behavior-card,
 .ring-card,
-.event-card,
 .settings-group,
 .qr-card,
 .cache-card,
@@ -143,14 +129,15 @@ html[data-mode="extension"] [data-light]::before {
 .security-hero,
 .account-hero,
 .activity-panel,
-.tool-access-card,
-.mode-picker-card,
-.ring-event-group {
+.tool-access-card {
   background-color: var(--glass-fill);
-  border-color: var(--glass-edge);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
-  box-shadow: var(--glass-hi), var(--glass-rim), var(--glass-shade), var(--shadow-1);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-luma));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-luma));
+  box-shadow: var(--glass-hi-line), var(--glass-hi-band), var(--glass-inner), var(--glass-edge),
+    var(--shadow-1);
+  /* 连续圆角：不支持的浏览器只会丢掉这一条声明，其余材质照常生效，无需 @supports 包一层 */
+  corner-shape: var(--glass-corner);
   transition: background-color var(--t3) var(--ease-enter), border-color var(--t3) var(--ease-enter),
     box-shadow var(--t3) var(--ease-enter);
 }
@@ -160,10 +147,7 @@ html[data-mode="extension"] [data-light]::before {
   .card,
   .section-card,
   .metric-card,
-  .capability-card,
-  .behavior-card,
   .ring-card,
-  .event-card,
   .settings-group,
   .qr-card,
   .cache-card,
@@ -171,9 +155,7 @@ html[data-mode="extension"] [data-light]::before {
   .security-hero,
   .account-hero,
   .activity-panel,
-  .tool-access-card,
-  .mode-picker-card,
-  .ring-event-group {
+  .tool-access-card {
     background-color: var(--surface);
   }
 }
@@ -190,7 +172,7 @@ html[data-mode="extension"] [data-light]::before {
 [data-tilt]:hover {
   --tilt-lift: -4px;
   /* 抬升阴影要带上玻璃的内缘与镜面，否则 hover 时玻璃感会「掉」成实心卡 */
-  box-shadow: var(--glass-hi), var(--glass-rim), var(--shadow-3);
+  box-shadow: var(--glass-hi-line), var(--glass-hi-band), var(--glass-edge), var(--shadow-3);
 }
 
 [data-tilt] > * {
@@ -462,14 +444,15 @@ html[data-vt-dir] ::view-transition-new(vt-layer-0) {
 @keyframes veilIn {
   from {
     opacity: 0;
-    backdrop-filter: blur(0px) saturate(100%);
+    /* 函数列表必须与终态同长（blur/saturate/brightness），否则插值退化成跳变 */
+    backdrop-filter: blur(0px) saturate(100%) brightness(1);
   }
 }
 
 @keyframes veilOut {
   to {
     opacity: 0;
-    backdrop-filter: blur(0px) saturate(100%);
+    backdrop-filter: blur(0px) saturate(100%) brightness(1);
   }
 }
 
@@ -576,9 +559,12 @@ html[data-vt-dir] ::view-transition-new(vt-layer-0) {
 
 .topbar.is-scrolled {
   height: 52px;
-  background: var(--surface-glass-strong);
+  background: var(--glass-fill-strong);
   box-shadow: 0 1px 0 var(--line), 0 10px 30px -22px rgba(0, 0, 0, 0.35);
-  backdrop-filter: saturate(200%) blur(26px);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-sat))
+    brightness(var(--glass-luma));
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-sat))
+    brightness(var(--glass-luma));
 }
 
 .topbar.is-scrolled .crumb {
@@ -641,18 +627,10 @@ html[data-vt-dir] ::view-transition-new(vt-layer-0) {
   }
 }
 
-/* 环境层随滚动缓慢位移，形成视差（幅度很小，只做纵深） */
-.ambient-orb-a {
-  transform: translate3d(0, calc(var(--scroll-y, 0px) * 0.05), 0);
-}
-
-.ambient-orb-b {
-  transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.035), 0);
-}
-
-.ambient-orb-c {
-  transform: translate3d(0, calc(var(--scroll-y, 0px) * 0.075), 0);
-}
+/* 环境层随滚动缓慢位移，形成视差（幅度很小，只做纵深）
+   T104 起环境背景改成两层旋转柔光（.ambient::before/::after），
+   它们自己带 transform 动画，不能再叠滚动视差；原 .ambient-orb-a/b/c 的
+   视差规则随之删除（.ambient-orb-a 现在是静态颗粒层，移动它会露出纹理接缝）。 */
 
 /* 滚动到顶部的回位按钮：只在滚动后浮现 */
 .scroll-top {
@@ -664,12 +642,15 @@ html[data-vt-dir] ::view-transition-new(vt-layer-0) {
   place-items: center;
   width: 42px;
   height: 42px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 50%;
-  background: var(--surface-glass-strong);
+  background: var(--glass-fill-strong);
   box-shadow: var(--shadow-2);
   color: var(--text-secondary);
-  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(var(--glass-sat))
+    brightness(var(--glass-luma));
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(var(--glass-sat))
+    brightness(var(--glass-luma));
   opacity: 0;
   transform: translate3d(0, 14px, 0) scale(0.9);
   pointer-events: none;
@@ -1406,10 +1387,7 @@ html[data-mode="extension"] .creator-grid-noise {
 
   .page-head > div:first-child,
   .page-title,
-  .page-actions,
-  .ambient-orb-a,
-  .ambient-orb-b,
-  .ambient-orb-c {
+  .page-actions {
     transform: none !important;
   }
 

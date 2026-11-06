@@ -715,7 +715,8 @@ select:focus {
   /* 必须高于宿主顶栏(30)、侧栏(40)与保存条(50)，否则抽屉头部的关闭按钮会被顶栏盖住。 */
   z-index: 60;
   background: var(--backdrop);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.6)) saturate(var(--glass-sat))
+    brightness(var(--glass-luma));
   opacity: 0;
   transition: opacity var(--dur-base) var(--ease-out);
 }
