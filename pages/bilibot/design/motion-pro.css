@@ -1510,25 +1510,44 @@ html[data-mode="extension"] .creator-grid-noise {
 }
 
 /* 滑杆：给上下留出 10px 命中区，轨道本身靠 background-clip 保持在内容盒里 */
-.behavior-range {
-  height: auto;
-  min-height: 44px;
-  padding-block: 10px;
-  background-clip: content-box;
-}
+/* 行为评分滑条（.behavior-range）保持原生尺寸：改成 height/padding 撑命中区会把
+   轨道相对标签下移，视觉上是「歪的」，所以这里不再放大盒子。
+   命中区靠 thumb 本身（Chrome 默认 16px）+ 整行高度承担，见 T67 记录。 */
 /* 活跃度滑杆：轨道只有 26px 且 overflow:hidden，input 原本在轨道内部命中区被裁掉。
    把 input 移到轨道外，上下各外扩 8px 拿到 42px 命中区，垂直中心与轨道对齐。 */
+/* 权重更正（T67）：components.css 写的是 `input[type="range"]`（元素+属性，权重 0,1,1），
+   页面里用 `.activity-slider`（0,1,0）根本压不住它 —— 于是 height/track/thumb 全被
+   全局规则接管，滑块的 thumb 落在离轨道 8~10px 的位置，看起来就是「歪」。
+   这里一律用 `input.类名`（0,1,1 + 后加载）把几何钉回来。
+   padding 8px 让内容盒仍是 26px（= .activity-track 的高度），轨道中心与视觉轨道重合，
+   同时 input 盒子 42px 保住命中区。 */
 .activity-slider-wrap {
   position: relative;
 }
 
-.activity-slider {
+input.activity-slider {
   position: absolute;
   inset: -8px 0 auto;
   width: 100%;
   height: 42px;
+  padding-block: 8px;
   margin: 0;
   z-index: 2;
+  box-sizing: border-box;
+}
+
+input.activity-slider::-webkit-slider-runnable-track {
+  height: 26px;
+  background: transparent;
+}
+
+input.activity-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: #fff;
 }
 
 @media (prefers-reduced-motion: reduce) {
