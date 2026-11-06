@@ -1510,17 +1510,11 @@ html[data-mode="extension"] .creator-grid-noise {
 }
 
 /* 滑杆：给上下留出 10px 命中区，轨道本身靠 background-clip 保持在内容盒里 */
-/* 行为评分滑条的进度填充（T102）：pages.css 里 `.behavior-range::-webkit-slider-runnable-track`
-   是类选择器（0,1,0），被 components.css 的 `input[type="range"]::-webkit-slider-runnable-track`
-   （0,1,1）整条压掉，结果是五条滑条永远只有灰底、看不到蓝色进度。
-   用 `input.类名` 提权（0,1,1 + 后加载）把渐变钉回来；percent 与 thumb 行程会有半个
-   thumb 的误差（160px 轨道约 9px），可接受，彻底对齐要把 --score 改成无单位值。 */
-input.behavior-range::-webkit-slider-runnable-track {
-  background: linear-gradient(
-    90deg,
-    var(--accent) var(--score, 0%),
-    color-mix(in srgb, var(--text) 10%, transparent) var(--score, 0%)
-  );
+/* 行为评分滑条的进度填充：不覆盖伪元素，只喂令牌（见 components.css 的 --range-fill）。
+   pages.css 里那条类选择器的渐变仍被属性选择器压着，留着无害但不起作用。 */
+input.behavior-range {
+  --range-fill: var(--accent);
+  --range-fill-to: var(--score, 0%);
 }
 /* 行为评分滑条（.behavior-range）保持原生尺寸：改成 height/padding 撑命中区会把
    轨道相对标签下移，视觉上是「歪的」，所以这里不再放大盒子。

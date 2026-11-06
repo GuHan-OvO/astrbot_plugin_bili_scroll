@@ -1036,7 +1036,13 @@ input[type="range"] {
 input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--text) 10%, transparent);
+  /* 进度填充走自定义属性：页面在 input 上设 --range-fill / --range-fill-to 即可，
+     不必再和这条规则抢权重。历史上活跃度滑条、行为滑条都栽在「类选择器打不过属性选择器」上。 */
+  background: linear-gradient(
+    90deg,
+    var(--range-fill, var(--accent)) var(--range-fill-to, 0%),
+    color-mix(in srgb, var(--text) 10%, transparent) var(--range-fill-to, 0%)
+  );
 }
 
 input[type="range"]::-webkit-slider-thumb {
