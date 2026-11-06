@@ -2236,3 +2236,85 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   font-size: var(--fs-xs);
   color: var(--text-secondary);
 }
+
+
+/* ── 首屏引导弹窗 ─────────────────────────────────────────────────────── */
+.button.plain {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+  padding-inline: var(--sp-2);
+}
+
+.button.plain:hover {
+  color: inherit;
+}
+
+.onboarding-modal {
+  width: min(540px, 100%);
+}
+
+.onboarding-intro {
+  margin: 0 0 var(--sp-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+}
+
+.onboarding-steps {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 10px);
+}
+
+.onboarding-step strong {
+  display: block;
+  font-size: var(--fs-body);
+  line-height: 1.5;
+}
+
+.onboarding-step small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+}
+
+.onboarding-index {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+}
+
+.onboarding-step.is-done {
+  border-color: var(--green);
+}
+
+.onboarding-step.is-done .onboarding-index {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.onboarding-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--sp-3);
+}

@@ -3709,6 +3709,52 @@ function renderToolPickerModal() {
   search?.focus();
 }
 
+const ONBOARDING_STEPS = [
+  { key: "login", label: "扫码登录 Bot 的 B站 账号", hint: "QQ 里发 /bili登录，扫码后发 /bili确认" },
+  { key: "owner", label: "填主人的 B站 UID 与昵称", hint: "OWNER_MID / OWNER_BILI_NAME，评论区 @ 你靠这两项" },
+  { key: "proactive", label: "打开主动看片总开关", hint: "ENABLE_PROACTIVE，默认是关的" },
+];
+
+async function maybeShowOnboarding() {
+  if (isPreview || state.mode !== "host") return;
+  try {
+    const data = await apiGet("onboarding");
+    if (!data?.should_show) return;
+    showOnboarding(data.completed || {});
+  } catch (error) {
+    // 引导只是提示，读不到就当没有，不打扰使用者
+    console.debug("[bilibot] onboarding skipped", error);
+  }
+}
+
+function showOnboarding(completed) {
+  const rows = ONBOARDING_STEPS.map((step, index) => {
+    const done = Boolean(completed[step.key]);
+    return `<li class="onboarding-step${done ? " is-done" : ""}"><span class="onboarding-index">${done ? "✓" : index + 1}</span><div><strong>${esc(step.label)}</strong><small>${esc(step.hint)}</small></div></li>`;
+  }).join("");
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><div class="modal onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><span class="modal-icon">${icon("star")}</span><h2 id="onboarding-title">先配这几项就能用了</h2><p class="onboarding-intro">完成下面三项，它才会真的出去刷；其余设置之后再调也没关系。</p><ol class="onboarding-steps">${rows}</ol><div class="modal-actions"><button class="button soft" data-onboarding-later type="button">稍后</button><button class="button primary" data-onboarding-goto="account" type="button">去账号页</button></div><div class="onboarding-footer"><button class="button plain" data-onboarding-goto="allconfig" type="button">去全部配置</button><button class="button plain" data-onboarding-dismiss type="button">不再弹出</button></div></div></div>`;
+  const backdrop = modalRoot.querySelector(".modal-backdrop");
+  window.requestAnimationFrame(() => backdrop?.classList.add("is-visible"));
+  pushScrollLock();
+  const close = () => { popScrollLock(); modalRoot.innerHTML = ""; };
+  modalRoot.querySelector("[data-onboarding-later]")?.addEventListener("click", close);
+  modalRoot.querySelector("[data-onboarding-dismiss]")?.addEventListener("click", async () => {
+    close();
+    try {
+      await apiPost("onboarding", { action: "dismiss" });
+      toast("已设为不再弹出", "想恢复的话，删掉插件数据目录里的 onboarding_state.json");
+    } catch (error) {
+      toast("没记住", error.message || "下次仍会弹出", "error");
+    }
+  });
+  modalRoot.querySelectorAll("[data-onboarding-goto]").forEach((node) => {
+    node.addEventListener("click", () => {
+      close();
+      navigate(node.dataset.onboardingGoto);
+    });
+  });
+}
+
 function confirmModal(title, message, confirmText, danger = false) {
   return new Promise((resolve) => {
     const returnFocus = document.activeElement;
@@ -3876,6 +3922,7 @@ function init() {
     updateSaveDock();
     // 内嵌视图在 token 还新鲜时就取回来（插件页资源带 60 秒有效期的 asset_token）
     preloadEmbeddedModules();
+    maybeShowOnboarding();
   }).catch((error) => {
     app.classList.remove("is-booting");
     content.innerHTML = renderErrorState("无法加载 BiliBot 控制中心", error.message || "请检查 AstrBot 页面权限");

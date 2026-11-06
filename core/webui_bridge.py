@@ -29,6 +29,7 @@ from .config import (
     DYNAMIC_LOG_FILE,
     DYNAMIC_SCHEDULE_FILE,
     DYNAMIC_WATCH_SCHEDULE_FILE,
+    ONBOARDING_FILE,
     PREFERENCE_STATE_FILE,
     PROACTIVE_LOG_FILE,
     REPLY_LOG_FILE,
@@ -140,6 +141,8 @@ def register_webui(plugin_instance: Any, context: Context):
         ("taste/profile", "GET", handle_get_taste_profile, "BiliBot taste profile"),
         ("taste/profile", "POST", handle_save_taste_profile, "Save BiliBot taste profile"),
         ("taste/summarize", "POST", handle_summarize_taste_profile, "Summarize taste from persona"),
+        ("onboarding", "GET", handle_get_onboarding, "BiliBot first-run onboarding state"),
+        ("onboarding", "POST", handle_save_onboarding, "Dismiss BiliBot first-run onboarding"),
         ("config/schema", "GET", handle_get_config_schema, "BiliBot configuration schema"),
         ("config/groups", "GET", handle_get_config_groups, "BiliBot configuration groups"),
         ("model-options", "GET", handle_get_model_options, "Models configured in AstrBot"),
@@ -547,6 +550,45 @@ async def handle_get_interest_status(plugin: Any):
             "stale": True,
             "read_only": True,
         })
+
+
+async def handle_get_onboarding(plugin: Any):
+    """首屏引导状态：没点过「不再弹出」就每次都弹，并带上三项关键配置的完成度。"""
+    try:
+        state = plugin._load_json(ONBOARDING_FILE, {})
+        state = state if isinstance(state, dict) else {}
+        dismissed = bool(state.get("dismissed"))
+        return _response({
+            "should_show": not dismissed,
+            "dismissed": dismissed,
+            "completed": {
+                "login": bool(str(plugin.config.get("SESSDATA", "") or "").strip()),
+                "owner": bool(str(plugin.config.get("OWNER_MID", "") or "").strip())
+                and bool(str(plugin.config.get("OWNER_BILI_NAME", "") or "").strip()),
+                "proactive": bool(plugin.config.get("ENABLE_PROACTIVE", False)),
+            },
+        })
+    except Exception as exc:
+        logger.exception(f"[BiliBot WebUI] onboarding read failed: {exc}")
+        return _failure(str(exc), 500)
+
+
+async def handle_save_onboarding(plugin: Any):
+    """``dismiss`` 记下「不再弹出」；``later`` 只关当前弹窗，下次仍会弹。"""
+    try:
+        body = await request.json(default={})
+        action = str((body or {}).get("action") or "").strip()
+        if action not in {"dismiss", "later"}:
+            return _failure("未知操作", 400)
+        if action == "dismiss":
+            plugin._save_json(ONBOARDING_FILE, {
+                "dismissed": True,
+                "dismissed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            })
+        return _response({"dismissed": action == "dismiss"})
+    except Exception as exc:
+        logger.exception(f"[BiliBot WebUI] onboarding save failed: {exc}")
+        return _failure(str(exc), 500)
 
 
 async def handle_get_taste_profile(plugin: Any):
