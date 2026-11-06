@@ -375,6 +375,38 @@ class ProactiveMixin:
                 break
         return "\n".join(lines)
 
+    def _exploration_ratio(self):
+        """探索配额比例；排序与看前筛选必须用同一个数字。"""
+        try:
+            return max(0.0, min(1.0, float(self.config.get("PROACTIVE_EXPLORATION_RATIO", 0.3))))
+        except (TypeError, ValueError):
+            return 0.3
+
+    def _taste_profile_block(self):
+        """兴趣画像压成的提示词片段；开关关掉或画像为空时返回空串。"""
+        if not self.config.get("TASTE_PROFILE_ENABLE", False):
+            return ""
+        try:
+            from .taste_profile import load_profile, profile_prompt_block
+
+            return profile_prompt_block(load_profile(self))
+        except Exception as exc:
+            logger.debug(f"[BiliBot] 兴趣画像读取失败，跳过注入：{exc}")
+            return ""
+
+    def _taste_seeds(self):
+        """画像里的探索种子；开关关掉或没有画像时返回空，由内置题材表兜底。"""
+        if not self.config.get("TASTE_PROFILE_ENABLE", False):
+            return []
+        try:
+            from .taste_profile import load_profile
+
+            seeds = load_profile(self).get("explore_seeds") or []
+            return [str(item).strip() for item in seeds if str(item).strip()][:5]
+        except Exception as exc:
+            logger.debug(f"[BiliBot] 探索种子读取失败，改用内置题材：{exc}")
+            return []
+
     def _lifecycle_preference_items(self):
         loader = getattr(self, "_load_json", None)
         lifecycle = loader(PREFERENCE_STATE_FILE, {}) if callable(loader) else {}
@@ -782,10 +814,7 @@ class ProactiveMixin:
         history_block = "\n".join(recent_lines) if recent_lines else "- 暂无观看记录，可以完全自由探索"
         taste_block = self._format_recent_taste_summary(history)
         preference_block = self._format_recent_preference_summary(history)
-        if hasattr(self, "_get_today_mood"):
-            today_mood, today_mood_reason = self._get_today_mood()
-        else:
-            today_mood, today_mood_reason = "平静", ""
+        profile_block = self._taste_profile_block()
         evidence = f"""
 
 【最近{self._taste_window_days()}天按评分归纳的分区口味（用于倾向，不是硬性限制）】
@@ -794,15 +823,17 @@ class ProactiveMixin:
 【近期具体兴趣与疲劳信号（只是倾向，仍需保留探索）】
 {preference_block}
 
-【当前情绪（可以影响这一次想看什么，不等于长期偏好）】
-- {today_mood}{f'：{today_mood_reason}' if today_mood_reason else ''}
-
 【近期观看记录（仅供参考，不是限制）】
 {history_block}
 
 """
+        profile_section = (
+            "\n【长期兴趣画像（在「兴趣画像」页维护，优先于近期记录）】\n" + profile_block + "\n"
+            if profile_block
+            else ""
+        )
         prompt = f"""管理员的搜索偏好：{decision_prompt[:1600]}
-
+{profile_section}
 {wrap_untrusted(evidence, 'watch_evidence')}
 
 近期评分与情绪只是一次次观察，不是固定人设，也不是主人的爱好。
@@ -819,7 +850,7 @@ class ProactiveMixin:
         if not queries:
             queries = self._fallback_proactive_search_queries(history)
             logger.warning("[BiliBot] Bot 未返回可用搜索词，使用本地兴趣与探索兜底")
-        queries = prepare_discovery_queries(queries, history)
+        queries = prepare_discovery_queries(queries, history, self._taste_seeds())
         logger.info(f"[BiliBot] 🧭 搜索方向（按候选优先顺序）：{', '.join(queries)}")
         return queries
 
@@ -873,8 +904,19 @@ class ProactiveMixin:
         logger.info(f"[BiliBot] 🔎 搜索候选：{len(videos)} 个（关键词: {', '.join(queries[:5])}）")
         return videos
 
-    def _merge_proactive_source_candidates(self, candidates, quotas, target):
-        """先兑现各来源配额，再按关注、搜索、视频池顺序补足空缺。"""
+    def _merge_proactive_source_candidates(self, candidates, quotas, target, rank_index=None):
+        """先兑现各来源配额，再按关注、搜索、视频池顺序补足空缺。
+
+        ``rank_index`` 非空时先按命中度给各来源内部排序（fav 保序），
+        让「先看哪个」不再取决于 shuffle 的顺序。
+        """
+        if rank_index is not None:
+            from .taste_rank import rank_candidates
+
+            try:
+                candidates = rank_candidates(candidates, rank_index, self._exploration_ratio())
+            except Exception as exc:
+                logger.warning(f"[BiliBot] 候选排序失败，退回原顺序：{exc}")
         order = ("fav", "follow", "search", "pool")
         indexes = {source: 0 for source in order}
         selected = []
@@ -939,7 +981,13 @@ class ProactiveMixin:
         title = video.get("title", "")
         if not title:
             return True, "标题为空，默认看看"
+        taste_block = self._taste_profile_block()
+        preference_block = self._format_recent_preference_summary()
+        taste_hint = ""
+        if taste_block or preference_block:
+            taste_hint = "\\n你偏好的方向（来自兴趣画像与近期观看）：\\n" + (taste_block or "- 暂无画像") + "\\n" + (preference_block or "") + "\\n"
         prompt = f"""你正在给自己挑一个B站视频看。请只根据标题、UP主、分区和简介判断你现在想不想看这个视频。
+{taste_hint}
 
 标题：{title}
 UP主：{video.get('up_name', '')}
@@ -1083,29 +1131,34 @@ UP主：{video.get('up_name', '')}
         pools = self.config.get("PROACTIVE_VIDEO_POOLS", ["popular"])
         if not pools:
             pools = ["popular"]
-        all_videos = []
+        buckets: dict[str, list] = {}
         resolved_sources = []
         for pool_raw in pools:
             pool, ids, raw = self._resolve_video_pool_spec(pool_raw)
             resolved_sources.append(self._format_resolved_video_pool(pool, ids, raw))
+            fetched = []
             if pool == "popular":
-                all_videos.extend(await self._get_hot_videos(min_pubdate))
+                fetched = await self._get_hot_videos(min_pubdate)
             elif pool == "weekly":
-                all_videos.extend(await self._get_weekly_videos())
+                fetched = await self._get_weekly_videos()
             elif pool == "precious":
-                all_videos.extend(await self._get_precious_videos())
+                fetched = await self._get_precious_videos()
             elif pool == "rcmd":
-                all_videos.extend(await self._get_rcmd_videos())
+                fetched = await self._get_rcmd_videos()
             elif pool == "ranking":
                 for rid in (ids or [0]):
-                    all_videos.extend(await self._get_ranking_videos(rid))
+                    fetched.extend(await self._get_ranking_videos(rid))
             elif pool == "newlist":
                 if not ids:
                     logger.warning("[BiliBot] 最新分区需要指定中文分区或 tid，如 最新:单机游戏 / newlist:17")
                 for tid in ids:
-                    all_videos.extend(await self._get_newlist_videos(tid, min_pubdate))
+                    fetched.extend(await self._get_newlist_videos(tid, min_pubdate))
             else:
                 logger.warning(f"[BiliBot] 未知视频池: {raw}，可填 热门/推荐/排行榜:游戏/最新:单机游戏")
+            if fetched:
+                buckets.setdefault(pool, []).extend(fetched)
+
+        all_videos = self._apply_pool_weights(buckets)
         before = len(all_videos)
         all_videos = dedupe_by_bvid(all_videos)
         if self.config.get("DEDUPE_SIMILAR_TITLES", False):
@@ -1113,6 +1166,37 @@ UP主：{video.get('up_name', '')}
         if len(all_videos) != before:
             logger.info(f"[BiliBot] 🧹 候选去重：{before} → {len(all_videos)}")
         logger.info(f"[BiliBot] 📦 视频池合计: {len(all_videos)} 个（来源: {', '.join(resolved_sources)}）")
+
+    def _apply_pool_weights(self, buckets):
+        """按 ``PROACTIVE_POOL_WEIGHTS`` 裁剪各池候选量；没配权重就原样拼接。
+
+        形如 ``["popular:3", "rcmd:1"]``，权重只决定各池各留多少，默认 1。
+        裁剪时保留各池原有顺序（B站 返回顺序）。
+        """
+        weights = {}
+        for item in self.config.get("PROACTIVE_POOL_WEIGHTS", []) or []:
+            text = str(item or "").strip()
+            if not text:
+                continue
+            name, _, value = text.partition(":")
+            name = name.strip().lower()
+            try:
+                weight = max(0.0, float(value.strip()))
+            except (TypeError, ValueError):
+                weight = 1.0
+            if name:
+                weights[name] = weight
+        if not weights or not buckets:
+            return [video for items in buckets.values() for video in items]
+        scale = max(weights.values()) or 1.0
+        result = []
+        kept = []
+        for pool, items in buckets.items():
+            keep = max(1, int(round(len(items) * weights.get(pool, 1.0) / scale)))
+            result.extend(items[:keep])
+            kept.append(f"{pool}={keep}/{len(items)}")
+        logger.info(f"[BiliBot] ⚖️ 池权重：{", ".join(kept)}")
+        return result
         return all_videos
 
     @staticmethod
@@ -1237,7 +1321,7 @@ UP主：{video.get('up_name', '')}
 {video_material}
 {owner_context_block}
 
-你当前的状态：{today_mood}（{today_mood_reason}）
+你此刻的表达基调：{today_mood}（{today_mood_reason}）——只影响措辞和语气，不参与打分，也不决定挑什么
 你最近按真实评分形成的分区倾向：
 {recent_taste}
 你最近的具体兴趣、好奇、厌恶或疲劳信号：
@@ -1371,7 +1455,9 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             logger.warning("[BiliBot] 跳过 QQ 推荐：未配置 OWNER_QQ_UMO")
             return False
         # 开启联动时优先用「她」的人格与通道；失败再回退到本插件直发
-        if self.config.get("PC_BRIDGE_ENABLE", False):
+        # 强联动总开关（LINK_COMPANION_ENABLE）或旧的单项开关任一打开即启用；
+        # 总开关的说明见 README「强联动陪伴插件」。
+        if self.config.get("LINK_COMPANION_ENABLE", False) or self.config.get("PC_BRIDGE_ENABLE", False):
             try:
                 ok, _sent = await share_via_pc(
                     self.context,
@@ -1670,10 +1756,19 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             "search": search_candidates,
             "pool": pool_candidates,
         }
+        rank_index = None
+        if self.config.get("PROACTIVE_TASTE_RANK_ENABLE", False):
+            try:
+                from .taste_rank import build_index
+
+                rank_index = build_index(self)
+            except Exception as exc:
+                logger.warning(f"[BiliBot] 排序索引构建失败，本轮不排序：{exc}")
         unique = self._merge_proactive_source_candidates(
             candidates,
             source_quotas,
             candidate_target,
+            rank_index=rank_index,
         )
         selected_counts = {
             source: sum(1 for video in unique[:daily_watch] if video.get("_source") == source)

@@ -32,6 +32,7 @@ OPTIONAL_CONFIG = {
     "ENABLE_PROACTIVE": "主动看片总开关（默认关）",
     "OWNER_QQ_UMO": "QQ 推荐投递地址",
     "ANALYSIS_DEPTH": "看多细",
+    "LINK_COMPANION_ENABLE": "强联动陪伴插件（需 7.0.0+）",
     "PC_BRIDGE_ENABLE": "借陪伴插件的人格与通道",
 }
 

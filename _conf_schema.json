@@ -62,6 +62,21 @@
     "default": "",
     "hint": "用于当前活动同步和 QQ 推荐分享；在主人 QQ 私聊中执行 /biliUMO 可取得该值。"
   },
+  "LINK_COMPANION_SCHEDULE": {
+    "description": "【联动】生成日程时避让她已有的安排",
+    "type": "bool",
+    "default": false,
+    "hint": "生成每日计划时读一次她当前的语境，把刷片时段排进空档；取不到就不注入，日程按原样生成。需同时打开强联动总开关。",
+    "condition": {
+      "LINK_COMPANION_ENABLE": true
+    }
+  },
+  "LINK_COMPANION_ENABLE": {
+    "description": "【联动】强联动陪伴插件",
+    "type": "bool",
+    "default": false,
+    "hint": "打开后，QQ 推荐先交给陪伴插件（7.0.0 及以上）用她的人设生成、走她的通道发出，并让她记得自己说过；没装、版本不符或任何一步失败都会自动回退成本插件直发，不影响刷视频本身。"
+  },
   "PC_BRIDGE_ENABLE": {
     "description": "【联动】借用陪伴插件的人格与通道发推荐",
     "type": "bool",
@@ -1020,6 +1035,15 @@
       "step": 0.05
     }
   },
+  "PROACTIVE_POOL_WEIGHTS": {
+    "description": "【主动看片·来源】各视频池的取用权重",
+    "type": "list",
+    "default": [],
+    "hint": "形如 popular:3,rcmd:1，值越大留的候选越多；留空表示各池等权。只影响候选量，不改变已配置的池种类。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
+  },
   "PROACTIVE_VIDEO_POOLS": {
     "description": "【主动看片·来源】视频池/地址池（可填中文，不用记 rid/tid）",
     "type": "list",
@@ -1028,6 +1052,24 @@
       "rcmd"
     ],
     "hint": "可填：热门 / 推荐 / 每周必看 / 入站必刷 / 排行榜:游戏 / 最新:单机游戏；也可直接填主分区名如 游戏（等同排行榜:游戏）或子分区名如 单机游戏（等同最新:单机游戏）。旧写法 ranking:4、newlist:17 仍兼容。用 /bili分区 查看完整中文名称。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
+  },
+  "PROACTIVE_TASTE_RANK_ENABLE": {
+    "description": "【主动看片·筛选】按喜好给候选排序",
+    "type": "bool",
+    "default": false,
+    "hint": "打开后，关注/搜索/视频池的候选按「口味分区 + 画像 + 近期负向信号」重排，收藏夹投喂池保持原顺序。只调整顺序、不过滤；关掉就回到随机顺序。",
+    "condition": {
+      "ENABLE_PROACTIVE": true
+    }
+  },
+  "TASTE_PROFILE_ENABLE": {
+    "description": "【主动看片·筛选】用「兴趣画像」影响挑片",
+    "type": "bool",
+    "default": false,
+    "hint": "画像在「兴趣画像」页维护：可手改，也可从人设让模型总结一版再决定要不要用。关掉时画像只保存、不参与挑片。",
     "condition": {
       "ENABLE_PROACTIVE": true
     }

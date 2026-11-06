@@ -109,6 +109,10 @@ const state = {
   memory: {},
   profiles: [],
   interest: {},
+  taste: { profile: null, promptBlock: "" },
+  tasteDraft: null,
+  tasteCandidate: null,
+  tasteSelection: new Set(),
   security: {},
   cache: {},
   availableTools: [],
@@ -147,6 +151,7 @@ const NAV_ITEMS = [
   ["selftest", "refresh", "自检", "模块、配置、数据与路由自检"],
   ["models", "lightning", "模型配置", "各项功能所使用的模型"],
   ["basics", "settings", "基础设置", "人设、模型与长期配置"],
+  ["taste", "heart", "兴趣画像", "手动维护或从人设总结喜欢的题材"],
   ["allconfig", "menu", "全部配置", "全部配置按大类折叠浏览"],
 ];
 
@@ -158,7 +163,7 @@ const NAV_GROUPS = [
   ["数据", ["memory"]],
   ["安全与账号", ["security", "account"]],
   ["页面", ["history", "selftest"]],
-  ["配置", ["models", "basics", "allconfig"]],
+  ["配置", ["taste", "models", "basics", "allconfig"]],
 ];
 
 
@@ -932,6 +937,12 @@ async function refreshPageData(page) {
     state.cache = await apiGet("cache/stats") || {};
     // 基础设置页同样包含模型项：清单未就绪时回退为文本输入框，避免出现空白下拉
     if (!state.modelOptions) await loadModelOptions();
+  } else if (page === "taste") {
+    const result = await apiGet("taste/profile");
+    state.taste = { profile: result?.profile || null, promptBlock: result?.prompt_block || "" };
+    // 重新读取时丢弃未保存的草稿与勾选，避免页面显示的是上一次的编辑
+    state.tasteDraft = null;
+    state.tasteSelection = new Set();
   } else if (page === "models") {
     await loadModelOptions();
   }
@@ -1680,6 +1691,7 @@ function renderPage(page) {
     account: renderAccount,
     models: renderModels,
     basics: renderBasics,
+    taste: renderTasteProfile,
     allconfig: renderAllConfig,
   }[page]?.() || renderOverview();
 }
@@ -2361,10 +2373,10 @@ function renderAccount() {
     ${renderConfigSection("主人身份", "用于私信推荐、@主人和安全的跨平台记忆共享校验", ["OWNER_MID", "OWNER_NAME", "OWNER_BILI_NAME"], "heart")}`;
 }
 
-const BASIC_GROUP_ORDER = ["网络代理", "人设与模型", "Embedding 与记忆", "视频分析", "图片识别", "联网搜索", "图片生成", "总结", "性格演化", "Cookie 与系统", "高级接口"];
+const BASIC_GROUP_ORDER = ["联动插件配置", "人设与模型", "Embedding 与记忆", "视频分析", "图片识别", "联网搜索", "图片生成", "总结", "性格演化", "Cookie 与系统", "高级接口"];
 
 const BASIC_KEY_ORDER = {
-  "网络代理": ["PROXY_URL"],
+  "联动插件配置": ["LINK_COMPANION_ENABLE", "PC_BRIDGE_ENABLE"],
   "人设与模型": ["USE_ASTRBOT_PERSONA", "CUSTOM_SYSTEM_PROMPT", "LLM_PROVIDER_ID", "SUMMARY_PROVIDER_ID", "SUMMARY_API_KEY", "SUMMARY_API_BASE", "SUMMARY_MODEL", "GENERATION_PROVIDER_ID", "GENERATION_API_KEY", "GENERATION_API_BASE", "GENERATION_MODEL", "LLM_CIRCUIT_FAILURE_THRESHOLD", "LLM_CIRCUIT_COOLDOWN_SECONDS"],
   "Embedding 与记忆": ["EMBED_API_KEY", "EMBED_API_BASE", "EMBED_MODEL", "EMBED_TIMEOUT_SECONDS"],
   "视频分析": ["VIDEO_VISION_PROVIDER_ID", "VIDEO_VISION_API_KEY", "VIDEO_VISION_API_BASE", "VIDEO_VISION_MODEL", "VIDEO_VISION_FORMAT", "VIDEO_VISION_FPS"],
@@ -2376,7 +2388,7 @@ const BASIC_KEY_ORDER = {
 function basicGroupFor(key, field) {
   const group = descriptionMeta(field).group;
   if (key.startsWith("SUMMARY_") || key.startsWith("GENERATION_")) return "人设与模型";
-  if (key === "PROXY_URL") return "网络代理";
+  if (key === "LINK_COMPANION_ENABLE" || key === "PC_BRIDGE_ENABLE") return "联动插件配置";
   if (/人设|模型可靠性/.test(group) || ["LLM_PROVIDER_ID", "USE_ASTRBOT_PERSONA", "CUSTOM_SYSTEM_PROMPT", "LLM_CIRCUIT_FAILURE_THRESHOLD", "LLM_CIRCUIT_COOLDOWN_SECONDS"].includes(key)) return "人设与模型";
   if (/性格演化/.test(group) || key.startsWith("EVOLVE_")) return "性格演化";
   if (/高级·记忆/.test(group) || key.startsWith("EMBED_")) return "Embedding 与记忆";
@@ -2482,17 +2494,18 @@ function renderBasics() {
     <div class="accordion-list">${BASIC_GROUP_ORDER.map((name, index) => {
       const keys = groups[name];
       if (!keys.length) return "";
-      const iconName = { "人设与模型": "heart", "性格演化": "star", "Embedding 与记忆": "memory-card", "视频分析": "video", "图片识别": "sun", "图片生成": "sun", "联网搜索": "search", "总结": "calendar", "Cookie 与系统": "settings", "高级接口": "controller" }[name] || "settings";
+      const iconName = { "联动插件配置": "controller", "人设与模型": "heart", "性格演化": "star", "Embedding 与记忆": "memory-card", "视频分析": "video", "图片识别": "sun", "图片生成": "sun", "联网搜索": "search", "总结": "calendar", "Cookie 与系统": "settings", "高级接口": "controller" }[name] || "settings";
       const evolutionToggle = name === "性格演化" && hasKey("ENABLE_PERSONALITY_EVOLUTION") ? `<div class="settings-inline-toggle"><div><strong>旧版每日性格演化</strong><small>实验性功能，建议先关闭并积累几天真实反馈；已有数据会保留。</small></div>${renderControl("ENABLE_PERSONALITY_EVOLUTION", state.schema.ENABLE_PERSONALITY_EVOLUTION)}</div>` : "";
       const evolutionKeys = name === "性格演化" ? keys.filter((key) => key !== "ENABLE_PERSONALITY_EVOLUTION") : keys;
       return `<details class="settings-group card" ${query || index < 2 ? "open" : ""}><summary><span class="section-icon">${icon(iconName)}</span><div><strong>${esc(name)}</strong><small>${evolutionKeys.length + (evolutionToggle ? 1 : 0)} 项配置</small></div>${icon("arrow-right")}</summary><div class="settings-group-body"><div class="settings-group-inner">${evolutionToggle}${renderFields(evolutionKeys)}</div></div></details>`;
     }).join("") || `<div class="card empty-search">${icon("search")}<strong>没有匹配的配置</strong><span>换一个关键词试试。</span></div>`}</div>`;
 }
 
-const ALL_CONFIG_GROUPS = ["账号与连接", "人设与模型", "回复与互动", "私信", "直播", "分享解析", "好感度与心情", "番剧与动态", "视频与看片", "推荐与主动行为", "总结", "自主安排与作息", "行为调度", "性格演化", "安全与记忆隔离", "联网搜索", "高级能力", "兼容与系统"];
+const ALL_CONFIG_GROUPS = ["联动插件配置", "账号与连接", "人设与模型", "回复与互动", "私信", "直播", "分享解析", "好感度与心情", "番剧与动态", "视频与看片", "推荐与主动行为", "总结", "自主安排与作息", "行为调度", "性格演化", "安全与记忆隔离", "联网搜索", "高级能力", "网络代理", "兼容与系统"];
 
 const ALL_CONFIG_GROUP_ICONS = {
-  "账号与连接": "user", "人设与模型": "heart", "回复与互动": "message", "私信": "message",
+  "联动插件配置": "controller", "网络代理": "settings", "账号与连接": "user", "人设与模型": "heart",
+  "回复与互动": "message", "私信": "message",
   "直播": "video", "分享解析": "arrow-right", "好感度与心情": "heart", "番剧与动态": "star",
   "视频与看片": "video", "推荐与主动行为": "lightning", "总结": "calendar", "自主安排与作息": "clock",
   "行为调度": "clock", "性格演化": "star", "安全与记忆隔离": "shield", "联网搜索": "search",
@@ -2500,7 +2513,8 @@ const ALL_CONFIG_GROUP_ICONS = {
 };
 
 const ALL_CONFIG_TAG_GROUP = {
-  "账号": "账号与连接", "网络代理": "兼容与系统", "兼容": "兼容与系统",
+  "账号": "账号与连接", "网络代理": "网络代理", "兼容": "兼容与系统",
+  "联动": "联动插件配置",
   "人设": "人设与模型", "模型可靠性": "人设与模型", "总结模型": "人设与模型", "生成模型": "人设与模型",
   "回复": "回复与互动", "回复筛选": "回复与互动", "自主查询": "回复与互动",
   "私信": "私信", "直播": "直播", "直播互动": "直播", "分享解析": "分享解析",
@@ -2544,6 +2558,243 @@ function renderAllConfig() {
     <section class="settings-search card"><span>${icon("search")}</span><input id="allconfig-search" type="search" value="${esc(state.allConfigSearch)}" placeholder="搜索配置名称、说明或 KEY" aria-label="搜索全部配置" />${state.allConfigSearch ? `<button data-action="clear-allconfig-search" type="button">清除</button>` : ""}</section>
     <div class="settings-summary"><span>共 ${entries.length} 项配置</span><span>当前显示 ${matched.length} 项</span><span>${state.dirtyKeys.size} 项待保存</span></div>
     <div class="accordion-list">${body || `<div class="card empty-search">${icon("search")}<strong>没有匹配的配置</strong><span>换一个关键词试试。</span></div>`}</div>`;
+}
+
+// ── 兴趣画像 ──────────────────────────────────────────────────────────
+// 画像只在「保存」时落盘；「从人设总结」的结果先放 state.tasteCandidate，
+// 用户在候选卡里勾选、点「全部增加 / 选择增加」才并入画像，避免误点冲掉手改内容。
+
+function tasteDraftRef() {
+  if (!state.tasteDraft) {
+    const profile = state.taste?.profile || {};
+    state.tasteDraft = {
+      interests: structuredClone(profile.interests || []),
+      dislikes: structuredClone(profile.dislikes || []),
+      explore_seeds: structuredClone(profile.explore_seeds || []),
+    };
+  }
+  return state.tasteDraft;
+}
+
+function tasteTopic(item) {
+  return typeof item === "string" ? item : String(item?.topic || "");
+}
+
+function renderTasteChips(kind, items, emptyText, readonly = false) {
+  const entries = Array.isArray(items) ? items : [];
+  if (!entries.length) return `<div class="empty-inline">${esc(emptyText)}</div>`;
+  return `<div class="taste-chips">${entries.map((item, index) => {
+    const topic = tasteTopic(item);
+    const remove = readonly ? "" : `<button data-action="taste-remove" data-kind="${kind}" data-index="${index}" type="button" aria-label="移除 ${esc(topic)}">${icon("trash")}</button>`;
+    return `<span class="taste-chip">${esc(topic)}${remove}</span>`;
+  }).join("")}</div>`;
+}
+
+function renderTasteAdd(kind, placeholder) {
+  return `<div class="taste-add"><input class="input" data-taste-input="${kind}" type="text" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" /><button class="button soft" data-action="taste-add" data-kind="${kind}" type="button">${icon("save")}添加</button></div>`;
+}
+
+function tasteSection(title, subtitle, kind, items, emptyText, placeholder) {
+  return `<section class="card section-card">${sectionHead(title, subtitle, "heart")}
+    ${renderTasteChips(kind, items, emptyText)}
+    ${renderTasteAdd(kind, placeholder)}
+  </section>`;
+}
+
+function renderTasteProfile() {
+  const draft = tasteDraftRef();
+  const candidate = state.tasteCandidate?.profile || null;
+  const profile = state.taste?.profile || {};
+  const enabled = Boolean(currentValue("TASTE_PROFILE_ENABLE"));
+
+  const meta = profile.generated_at
+    ? `来源：${esc(profile.source || "未知")} ｜ 更新于 ${esc(profile.generated_at)}`
+    : "还没有保存过画像";
+  const preview = state.taste?.promptBlock || "";
+  const candidateCard = candidate
+    ? `<section class="card section-card">${sectionHead("模型建议的这一版（还没加进画像）", "点条目可以勾上，再决定全部增加还是只加勾选的；加进去是往现有画像里追加，不会冲掉已经写好的内容。", "lightning")}
+        ${renderTasteCandidate(candidate)}
+      </section>`
+    : "";
+  return `${pageHead("TASTE", "兴趣画像",
+      "这里写的是「打算多看点 / 少看点」，和「看过什么」是两回事。可手改，也可从人设让模型总结一版再决定要不要用。",
+      button("从人设总结", "taste-summarize", "lightning"))}
+    <section class="card section-card">${sectionHead("影响挑片", "关掉时画像只保存、不参与挑片；打开后，下一次刷视频会把画像写进「生成搜索词」的提示词。", "lightning")}
+      <div class="taste-enable-row">
+        <label class="switch-control"><input id="taste-enable-switch" type="checkbox" ${enabled ? "checked" : ""} /><span class="switch-track"><i></i></span><span class="sr-only">切换兴趣画像影响挑片</span></label>
+        <div class="taste-enable-copy"><strong>${enabled ? "正在影响挑片" : "未参与挑片"}</strong><span>${meta}</span></div>
+      </div>
+    </section>
+    ${candidateCard}
+    ${tasteSection("多留意", "挑片时会优先往这些方向找。", "interests", draft.interests, "还没有条目；可以先加一条，或点右上角从人设总结。", "例如：独立游戏开发幕后")}
+    ${tasteSection("少看或不看", "只会降低权重，不会硬性拦截。", "dislikes", draft.dislikes, "还没有条目。", "例如：标题党营销号")}
+    ${tasteSection("探索种子", "故意试试的新方向。", "explore_seeds", draft.explore_seeds, "还没有条目。", "例如：冷门语言学")}
+    ${preview ? `<section class="card section-card">${sectionHead("实际喂给模型的文字", "勾上开关后，这段会随选片提示词一起发出去。", "message")}<pre class="taste-preview">${esc(preview)}</pre></section>` : ""}
+    <div class="save-dock-inline">${button("保存画像", "taste-save", "save", "primary")}</div>`;
+}
+
+function tasteAdd(source) {
+  const kind = source?.dataset?.kind;
+  const input = content.querySelector(`[data-taste-input="${kind}"]`);
+  const value = String(input?.value || "").trim();
+  if (!value) { toast("先写点内容", "输入框还是空的", "error"); return; }
+  const draft = tasteDraftRef();
+  const list = draft[kind] || (draft[kind] = []);
+  const exists = list.some((item) => tasteTopic(item).toLowerCase() === value.toLowerCase());
+  if (exists) { toast("已经有了", "不用重复添加", "error"); return; }
+  if (kind === "explore_seeds") list.push(value);
+  else list.push({ topic: value, type: "theme", weight: 0.6, evidence: "手动添加" });
+  state.tasteDraft = draft;
+  renderCurrentPage();
+}
+
+function tasteRemove(source) {
+  const kind = source?.dataset?.kind;
+  const index = Number.parseInt(source?.dataset?.index, 10);
+  const draft = tasteDraftRef();
+  const list = draft[kind];
+  if (!Array.isArray(list) || !Number.isInteger(index) || index < 0 || index >= list.length) return;
+  list.splice(index, 1);
+  state.tasteDraft = draft;
+  renderCurrentPage();
+}
+
+function tastePayload(result) {
+  return result?.profile ? result : result?.data || {};
+}
+
+async function tasteSave(options = {}) {
+  try {
+    const payload = tastePayload(await apiPost("taste/profile", { profile: tasteDraftRef() }));
+    state.taste = { profile: payload.profile || null, promptBlock: payload.prompt_block || "" };
+    state.tasteDraft = null;
+    renderCurrentPage();
+    if (!options.silent) toast("兴趣画像已保存", "开关打开后，下次挑片就会按它来找");
+    return true;
+  } catch (error) {
+    toast("保存失败", error.message || "请检查插件日志", "error");
+    return false;
+  }
+}
+
+async function tasteSummarize(source) {
+  const trigger = source instanceof HTMLButtonElement ? source : null;
+  if (trigger) { trigger.disabled = true; spinIcon(trigger); }
+  toast("正在按人设总结", "需要调用一次模型，可能要十几秒…");
+  try {
+    const payload = tastePayload(await apiPost("taste/summarize", {}));
+    state.tasteCandidate = { profile: payload.profile || null, promptBlock: payload.prompt_block || "" };
+    renderCurrentPage();
+    toast("已生成候选", "点条目勾选，再用「全部增加」或「选择增加」并入画像");
+  } catch (error) {
+    toast("总结失败", error.message || "请检查模型配置或人设是否已设置", "error");
+  } finally {
+    if (trigger) trigger.disabled = false;
+  }
+}
+
+function renderTasteCandidate(candidate) {
+  const selected = state.tasteSelection instanceof Set ? state.tasteSelection : new Set();
+  const groups = [
+    ["interests", "兴趣", "挑片时会优先往这些方向找"],
+    ["dislikes", "不想看", "只降低权重，不会硬性拦截"],
+    ["explore_seeds", "搜索方向", "加进「探索种子」，故意试试的新题材"],
+  ];
+  const rows = groups.map(([kind, label, hint]) => {
+    const items = candidate[kind] || [];
+    const options = items.map((item, index) => {
+      const on = selected.has(`${kind}:${index}`);
+      return `<button class="taste-option${on ? " is-on" : ""}" data-action="taste-toggle" data-kind="${kind}" data-index="${index}" type="button" aria-pressed="${on}">${esc(tasteTopic(item))}</button>`;
+    }).join("");
+    return `<div class="taste-option-group"><div class="taste-option-head"><strong>${label}</strong><span>${hint} · ${items.length} 条</span></div><div class="taste-options">${options || `<span class="empty-inline">模型没有给出这一类</span>`}</div></div>`;
+  }).join("");
+  return `<div class="taste-candidate">${rows}
+    <div class="cache-actions"><div><strong>加进画像</strong><span>全部增加会把三组都追加；选择增加只加你勾上的。已经存在的条目会跳过，不会重复。</span></div>
+      ${button("全部增加", "taste-add-all", "save")}${button("选择增加", "taste-add-selected", "save", "primary")}${button("放弃", "taste-discard", "trash")}</div>
+  </div>`;
+}
+
+async function tasteSetEnabled(enabled) {
+  // 这个开关不走 setDraft：它要立即生效，不该等用户再点一次「保存」
+  try {
+    await apiPost("config", { TASTE_PROFILE_ENABLE: enabled });
+    state.config.TASTE_PROFILE_ENABLE = enabled;
+    if (state.draft && typeof state.draft === "object") state.draft.TASTE_PROFILE_ENABLE = enabled;
+    state.dirtyKeys.delete("TASTE_PROFILE_ENABLE");
+    renderCurrentPage();
+    toast(enabled ? "已开启影响挑片" : "已关闭影响挑片", enabled
+      ? "下一次刷视频时，画像会参与生成搜索词"
+      : "画像继续保存，但不再参与挑片");
+  } catch (error) {
+    toast("开关没保存成功", error.message || "请检查插件日志", "error");
+    renderCurrentPage();
+  }
+}
+
+function tasteToggle(source) {
+  const kind = source?.dataset?.kind;
+  const index = Number.parseInt(source?.dataset?.index, 10);
+  if (!kind || !Number.isInteger(index)) return;
+  if (!(state.tasteSelection instanceof Set)) state.tasteSelection = new Set();
+  const key = `${kind}:${index}`;
+  if (state.tasteSelection.has(key)) state.tasteSelection.delete(key);
+  else state.tasteSelection.add(key);
+  renderCurrentPage();
+}
+
+function tasteMerge(kind, items) {
+  const draft = tasteDraftRef();
+  const list = draft[kind] || (draft[kind] = []);
+  const existing = new Set(list.map((item) => tasteTopic(item).toLowerCase()));
+  let added = 0;
+  for (const item of items) {
+    const topic = tasteTopic(item).trim();
+    if (!topic) continue;
+    const key = topic.toLowerCase();
+    if (existing.has(key)) continue;
+    existing.add(key);
+    if (kind === "explore_seeds") {
+      list.push(topic);
+    } else {
+      const source = typeof item === "string" ? {} : item;
+      list.push({
+        topic,
+        type: source.type || "other",
+        weight: typeof source.weight === "number" ? source.weight : 0.6,
+        evidence: source.evidence || "人设总结",
+      });
+    }
+    added += 1;
+  }
+  state.tasteDraft = draft;
+  return added;
+}
+
+async function tasteMergeAndSave(pick) {
+  const candidate = state.tasteCandidate?.profile;
+  if (!candidate) return;
+  const kinds = ["interests", "dislikes", "explore_seeds"];
+  let added = 0;
+  for (const kind of kinds) {
+    const items = (candidate[kind] || []).filter((item, index) => pick(kind, index));
+    added += tasteMerge(kind, items);
+  }
+  state.tasteSelection = new Set();
+  state.tasteCandidate = null;
+  if (!(await tasteSave({ silent: true }))) return;
+  renderCurrentPage();
+  if (added) toast("已加入画像", `新增 ${added} 条，已保存`);
+  else toast("没有新增", "这些条目本来就在画像里");
+}
+
+function tasteAddAll() {
+  return tasteMergeAndSave(() => true);
+}
+
+function tasteAddSelected() {
+  const selected = state.tasteSelection instanceof Set ? state.tasteSelection : new Set();
+  if (!selected.size) { toast("还没勾选", "先点几条，或者直接用「全部增加」", "error"); return; }
+  return tasteMergeAndSave((kind, index) => selected.has(`${kind}:${index}`));
 }
 
 function bindConfigControls(root = content) {
@@ -3059,6 +3310,15 @@ function bindContent() {
       toast("操作未完成", error?.message || "请检查插件日志后重试", "error");
     });
   }));
+  const tasteSwitch = content.querySelector("#taste-enable-switch");
+  if (tasteSwitch) tasteSwitch.addEventListener("change", (event) => {
+    tasteSetEnabled(Boolean(event.target.checked));
+  });
+  content.querySelectorAll("[data-taste-input]").forEach((node) => node.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    tasteAdd({ dataset: { kind: node.dataset.tasteInput } });
+  }));
   content.querySelectorAll("[data-page-target]").forEach((node) => node.addEventListener("click", () => navigate(node.dataset.pageTarget)));
   content.querySelectorAll("[data-plan-mode]").forEach((node) => node.addEventListener("click", () => {
     const autonomous = node.dataset.planMode === "autonomous";
@@ -3177,6 +3437,14 @@ async function handleAction(action, source = null) {
   if (action === "allconfig-expand") { state.allConfigExpanded = true; renderCurrentPage(); return; }
   if (action === "allconfig-collapse") { state.allConfigExpanded = false; renderCurrentPage(); return; }
   if (action === "clear-allconfig-search") { state.allConfigSearch = ""; renderCurrentPage(); return; }
+  if (action === "taste-add") return tasteAdd(source);
+  if (action === "taste-remove") return tasteRemove(source);
+  if (action === "taste-save") return tasteSave();
+  if (action === "taste-summarize") return tasteSummarize(source);
+  if (action === "taste-toggle") return tasteToggle(source);
+  if (action === "taste-add-all") return tasteAddAll();
+  if (action === "taste-add-selected") return tasteAddSelected();
+  if (action === "taste-discard") { state.tasteCandidate = null; renderCurrentPage(); return; }
   if (action === "toggle-secret") {
     const input = source?.closest(".input-with-action")?.querySelector("[data-config-key]");
     if (input) input.type = input.type === "password" ? "text" : "password";

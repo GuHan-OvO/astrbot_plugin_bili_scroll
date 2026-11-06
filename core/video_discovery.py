@@ -47,7 +47,7 @@ def _entry_topic(entry):
     return str(query or entry.get("title") or "")[:240]
 
 
-def prepare_discovery_queries(proposed, history):
+def prepare_discovery_queries(proposed, history, seeds=None):
     """Keep familiar interests; sometimes bring a fresh direction to the front."""
     entries = [item for item in history if isinstance(item, dict)]
     recent_topics = [_entry_topic(item) for item in entries[-12:]]
@@ -59,7 +59,10 @@ def prepare_discovery_queries(proposed, history):
     def exposure(query):
         return sum(similar_topic(query, topic) for topic in recent_topics)
 
-    seeds = list(EXPLORATION_QUERIES)
+    # 画像里有「探索种子」就优先用它们，没有才退回内置题材表。
+    seeds = list(seeds) if seeds else list(EXPLORATION_QUERIES)
+    if not seeds:
+        seeds = list(EXPLORATION_QUERIES)
     random.shuffle(seeds)
     seeds.sort(key=exposure)
     exploration = seeds[0]

@@ -16,7 +16,7 @@ BASE_MANIFEST = {
     "name": "Creator",
     "version": "0.2.0",
     "extension_api": 1,
-    "host_requires": ">=1.5.0,<2.0.0",
+    "host_requires": ">=1.5.0,<3.0.0",
     "navigation": [{"page": "dashboard", "title": "创作总览"}],
     "pages": [{"id": "dashboard", "renderer": "bilibot-schema-v1"}],
     "actions": ["request-publish"],

@@ -40,6 +40,7 @@ from .config import (
 )
 
 from .config_groups import build_groups
+from . import taste_profile
 from .history import find_entry, query_history
 from .model_options import collect_model_options
 from .watch_log import load_watch_entries
@@ -136,6 +137,9 @@ def register_webui(plugin_instance: Any, context: Context):
         ("stats", "GET", handle_get_stats, "BiliBot monitoring overview"),
         ("persona/state", "GET", handle_get_persona_state, "BiliBot persona state"),
         ("interest/status", "GET", handle_get_interest_status, "BiliBot video interest status"),
+        ("taste/profile", "GET", handle_get_taste_profile, "BiliBot taste profile"),
+        ("taste/profile", "POST", handle_save_taste_profile, "Save BiliBot taste profile"),
+        ("taste/summarize", "POST", handle_summarize_taste_profile, "Summarize taste from persona"),
         ("config/schema", "GET", handle_get_config_schema, "BiliBot configuration schema"),
         ("config/groups", "GET", handle_get_config_groups, "BiliBot configuration groups"),
         ("model-options", "GET", handle_get_model_options, "Models configured in AstrBot"),
@@ -543,6 +547,48 @@ async def handle_get_interest_status(plugin: Any):
             "stale": True,
             "read_only": True,
         })
+
+
+async def handle_get_taste_profile(plugin: Any):
+    """返回当前兴趣画像，以及它压成提示词后的样子（便于核对实际会喂给模型什么）。"""
+    try:
+        profile = taste_profile.load_profile(plugin)
+        return _response({
+            "profile": profile,
+            "prompt_block": taste_profile.profile_prompt_block(profile),
+        })
+    except Exception as exc:
+        logger.exception(f"[BiliBot WebUI] taste profile read failed: {exc}")
+        return _failure(str(exc), 500)
+
+
+async def handle_save_taste_profile(plugin: Any):
+    """保存手改或已确认的画像。``{"profile": {...}}`` 与直接传画像两种 body 都接受。"""
+    try:
+        body = await request.json(default={})
+        payload = body.get("profile") if isinstance(body, dict) and "profile" in body else body
+        profile = taste_profile.save_profile(plugin, payload, source="manual")
+        return _response({"profile": profile}, "兴趣画像已保存")
+    except taste_profile.TasteProfileError as exc:
+        return _failure(str(exc), 400)
+    except Exception as exc:
+        logger.exception(f"[BiliBot WebUI] taste profile save failed: {exc}")
+        return _failure(str(exc), 500)
+
+
+async def handle_summarize_taste_profile(plugin: Any):
+    """从人设总结一版候选画像。**不落盘**：由前端展示后决定是否覆盖。"""
+    try:
+        profile = await taste_profile.summarize_from_persona(plugin)
+        return _response({
+            "profile": profile,
+            "prompt_block": taste_profile.profile_prompt_block(profile),
+        }, "已生成候选画像，尚未覆盖现有内容")
+    except taste_profile.TasteProfileError as exc:
+        return _failure(str(exc), 400)
+    except Exception as exc:
+        logger.exception(f"[BiliBot WebUI] taste profile summarize failed: {exc}")
+        return _failure(str(exc), 500)
 
 
 async def handle_memory_stats(plugin: Any):

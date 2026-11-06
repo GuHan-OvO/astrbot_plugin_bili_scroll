@@ -32,10 +32,12 @@ class _FakeApi:
         self._send_raises = send_raises
         self.sent = []
         self.recorded = []
+        self.generated = []
 
-    async def generate_reality_touch_text(self, prompt):
+    async def generate_reality_touch_text(self, prompt, **kwargs):
         if self._gen_raises:
             raise self._gen_raises
+        self.generated.append((prompt, dict(kwargs)))
         return self._text
 
     async def send_reality_touch_chat(self, umo, text):
@@ -88,7 +90,7 @@ class FindApiTests(unittest.TestCase):
 class UserIdTests(unittest.TestCase):
     def test_标准umo(self):
         self.assertEqual(
-            user_id_from_umo("aiocqhttp:FriendMessage:3698737403"), "3698737403"
+            user_id_from_umo("aiocqhttp:FriendMessage:10000000001"), "10000000001"
         )
 
     def test_空或残缺(self):
@@ -96,31 +98,45 @@ class UserIdTests(unittest.TestCase):
             self.assertEqual(user_id_from_umo(value), "")
 
 
+UMO = "aiocqhttp:FriendMessage:10000000001"
+
+
 class ComposeTests(unittest.IsolatedAsyncioTestCase):
     async def test_正常生成(self):
-        self.assertEqual(await compose_with_persona(_FakeApi("一句"), "p"), "一句")
+        self.assertEqual(await compose_with_persona(_FakeApi("一句"), "p", UMO), "一句")
+
+    async def test_把user_id和umo一起传给陪伴(self):
+        # 7.0.0 的 generate 要求 keyword-only 的 user_id；漏传会 TypeError 并被吞成"联动没生效"。
+        api = _FakeApi("一句")
+        await compose_with_persona(api, "p", UMO)
+        self.assertEqual(api.generated, [("p", {"user_id": "10000000001", "umo": UMO})])
+
+    async def test_umo解析不出user_id时不发起调用(self):
+        api = _FakeApi("一句")
+        self.assertIsNone(await compose_with_persona(api, "p"))
+        self.assertEqual(api.generated, [], "没有 user_id 就不该发起生成")
 
     async def test_空文本返回None(self):
-        self.assertIsNone(await compose_with_persona(_FakeApi("   "), "p"))
+        self.assertIsNone(await compose_with_persona(_FakeApi("   "), "p", UMO))
 
     async def test_抛错返回None(self):
         api = _FakeApi(gen_raises=RuntimeError("模型挂了"))
-        self.assertIsNone(await compose_with_persona(api, "p"))
+        self.assertIsNone(await compose_with_persona(api, "p", UMO))
 
     async def test_超时返回None(self):
         class _Slow(_FakeApi):
-            async def generate_reality_touch_text(self, prompt):
+            async def generate_reality_touch_text(self, prompt, **kwargs):
                 await asyncio.sleep(5)
                 return "太晚了"
 
         with patch("core.pc_bridge.GENERATE_TIMEOUT", 0.01):
-            self.assertIsNone(await compose_with_persona(_Slow(), "p"))
+            self.assertIsNone(await compose_with_persona(_Slow(), "p", UMO))
 
     async def test_没有该方法返回None(self):
         class _NoGen:
             pass
 
-        self.assertIsNone(await compose_with_persona(_NoGen(), "p"))
+        self.assertIsNone(await compose_with_persona(_NoGen(), "p", UMO))
 
 
 class DeliverTests(unittest.IsolatedAsyncioTestCase):

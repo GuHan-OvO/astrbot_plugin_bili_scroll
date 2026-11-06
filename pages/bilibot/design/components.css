@@ -2092,3 +2092,147 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   box-shadow: 0 0 0 3px var(--accent-soft);
   animation: statusPulse 2.4s var(--ease-in-out) infinite;
 }
+
+
+/* ── 兴趣画像 ─────────────────────────────────────────────────────────── */
+.taste-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+}
+
+.taste-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+}
+
+.taste-chip button {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.taste-chip button:hover {
+  opacity: 1;
+}
+
+.taste-chip button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.taste-add {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.taste-add .input {
+  flex: 1 1 auto;
+}
+
+.taste-chip-groups {
+  display: grid;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-3);
+}
+
+.taste-preview {
+  margin: 0;
+  padding: var(--sp-3);
+  border-radius: var(--r-md, 10px);
+  background: var(--accent-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+}
+
+.save-dock-inline {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--sp-3) 0;
+}
+
+
+/* 候选条目的勾选态 */
+.taste-candidate {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.taste-option-group {
+  margin-bottom: var(--sp-3);
+}
+
+.taste-option-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.taste-option-head span {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.taste-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.taste-option {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: var(--fs-xs);
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0.72;
+  transition: opacity 0.15s var(--ease-in-out), background 0.15s var(--ease-in-out);
+}
+
+.taste-option:hover {
+  opacity: 1;
+}
+
+.taste-option.is-on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  opacity: 1;
+}
+
+
+/* 兴趣画像：影响挑片开关行 */
+.taste-enable-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+
+.taste-enable-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.taste-enable-copy span {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
