@@ -6,6 +6,10 @@ AstrBot 插件。不是转发机器人——它按自己的口味选片、评价
 
 ---
 
+## 反馈
+
+有问题优先开 issue。想直接拷打作者：QQ `3451765072`。
+
 ## 一、刷 B 站
 
 - **主动看视频**：从收藏夹投喂池、关注更新、关键词搜索、视频池四条路径均衡选片，再评价、点赞 / 投币 / 收藏 / 关注 / 评论
@@ -160,15 +164,6 @@ QQ 推荐这条链路会改成：
 
 任何一步失败——没装、版本不对、模型挂了、发送失败——都**自动回退成原来的直发**，不会让一轮推荐变成静默丢失。日志里能看到 `✉️ 已通过陪伴插件分享`。
 
-### 做不到的（7.0.0 的边界）
-
-| 想法 | 现状 |
-|---|---|
-| 读她的心情/精力/日程 | 7.0.0 的 `get_realtime_context` 只返回一段拼好的提示词，没有结构化状态 |
-| 上报「正在看B站」让她知道 | 7.0.0 已移除 `notify_external_activity_*` |
-| 让她主动触发本插件刷一轮 | 7.0.0 已移除 `register_proactive_ability` |
-| 出现在陪伴小屋的家具里 | 需要改对方 `integration_catalog.py`，见 `patches/README.md` |
-
 ### 日程避让（可选，默认关）
 
 `LINK_COMPANION_SCHEDULE` 打开（且 `LINK_COMPANION_ENABLE` 也开）后，生成每日计划时会读一次
@@ -176,14 +171,6 @@ QQ 推荐这条链路会改成：
 
 **注意**：7.0.0 返回的是**一整段拼好的提示词**（人设 + 场景 + 最近对话），无法只取日程那部分，
 所以这段文本会进入本插件的日程生成请求。介意这类内容跨插件传递就不要开。
-
-### 原理（排查用）
-
-取实例：`context.get_all_stars()` → 找名为 `astrbot_plugin_private_companion` 的插件 → `star_cls.extension_api`，校验 `api_version == companion.product.v1`。**每次都现取**，对方热重载后旧引用会失效。
-
-用到三个方法：`generate_reality_touch_text(prompt, user_id=, umo=)`、`send_reality_touch_chat(umo, text)`、`record_reality_touch_output(user_id, text)`。
-
-注意 `user_id` 是 7.0.0 的必填关键字参数，由 `OWNER_QQ_UMO` 解析而来（`platform:MessageType:session_id` 的最后一段）。**没配 `OWNER_QQ_UMO` 时联动不会触发**——QQ 推荐本身也依赖这个配置。
 
 ## 配置引导
 
@@ -333,10 +320,6 @@ QQ 私聊 Bot 发 `/bili登录` → 用 B站 App 扫弹出的二维码 → 手�
 - 「仅自己可见」的判据里，`attr` 位图与 `state=11/18` 来自第三方实测、没有官方文档；原始值原样落盘，B站 改值后可回溯
 - 「审核中」没有独立字段，会和 ShadowBan 混在一起，两者都显示为 `self_only`
 - 画像目前只影响「生成搜索词」和（开关打开时）候选排序，不会改变候选来源与每日配额
-
-## 反馈
-
-有问题优先开 issue。想直接拷打作者：QQ `3451765072`。
 
 ## 许可
 
