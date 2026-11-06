@@ -6,7 +6,7 @@ desc: >-
   还会点赞投币、私信分享、发动态、看番、直播弹幕互动；挑片历史做成可视化页面，可按分数、心情、来源筛选。
   兴趣画像能按人设总结口味、也能手改，越刷越准；可与陪伴插件联动（7.0.0+）：用她的人设和通道发推荐。
   评论回复、语义记忆、好感度、用户画像、周总结一应俱全。
-version: 2.0.1
+version: 2.0.2
 author: GuHan-OvO
 license: AGPL-3.0-or-later
 repo: "https://github.com/GuHan-OvO/astrbot_plugin_bili_scroll"
