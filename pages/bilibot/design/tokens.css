@@ -66,12 +66,13 @@
   --gap-section: var(--sp-7);
 
   /* ── 圆角 ──────────────────────────────────────────────────────────── */
-  --r-xs: 6px;
-  --r-sm: 9px;
-  --r-md: 13px;
-  --r-lg: 18px;
-  --r-xl: 24px;
-  --r-2xl: 30px;
+  /* 2026-11-07 统一加大一档：卡片更圆润，与连续圆角（superellipse）配合更接近 iOS */
+  --r-xs: 7px;
+  --r-sm: 11px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-2xl: 36px;
   --r-pill: 999px;
 
   /* 连续圆角（超椭圆）：只描述形状，由组件层在 @supports 里启用。
@@ -191,10 +192,11 @@ html[data-theme="light"] {
   --shadow-3: 0 28px 64px -24px rgba(16, 24, 40, 0.3), 0 8px 20px -12px rgba(16, 24, 40, 0.16);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 
-  /* 环境光场：蓝 / 粉 / 绿 三色流动 + 一层静态颗粒（抹掉 8bit 渐变的 banding） */
-  --flow-blue: rgba(61, 139, 253, 0.16);
-  --flow-pink: rgba(251, 114, 153, 0.13);
-  --flow-green: rgba(52, 211, 153, 0.12);
+  /* 环境光场：蓝 / 粉 / 绿 三色流动 + 一层静态颗粒（抹掉 8bit 渐变的 banding）
+     浅色用 normal 混合、在近白底上衰减大，所以强度反而要贴近深色档，否则看不出来 */
+  --flow-blue: rgba(61, 139, 253, 0.26);
+  --flow-pink: rgba(251, 114, 153, 0.21);
+  --flow-green: rgba(52, 211, 153, 0.19);
   --ambient-grain: 0.03;
   --ambient-base: #f5f5f7;
 
