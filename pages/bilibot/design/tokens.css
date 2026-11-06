@@ -79,6 +79,24 @@
      与 border-radius 并存——border-radius 给半径，corner-shape 给轮廓族。 */
   --glass-corner: superellipse(2.4);
 
+  /* ── 环境光场：可由「外观」页调整的部分 ───────────────────────────────
+     配色 = 三个基色（rgb 三分量，便于和每主题的 alpha 组合），
+     强度 = 每主题各自的 alpha，速度 = 三个色斑 + 底纹的周期。
+     三者都由 app.js 写入 html 上的内联变量或 data-* 覆盖，不重载即可生效。 */
+  --flow-c1-rgb: 61, 139, 253;
+  --flow-c2-rgb: 251, 114, 153;
+  --flow-c3-rgb: 52, 211, 153;
+  --flow-a1: 0.26;
+  --flow-a2: 0.21;
+  --flow-a3: 0.19;
+  --flow-dur-a: 13s;
+  --flow-dur-b: 17s;
+  --flow-dur-c: 23s;
+  --flow-dur-drift: 20s;
+  --flow-blue: rgba(var(--flow-c1-rgb), var(--flow-a1));
+  --flow-pink: rgba(var(--flow-c2-rgb), var(--flow-a2));
+  --flow-green: rgba(var(--flow-c3-rgb), var(--flow-a3));
+
   /* ── 版式尺寸 ──────────────────────────────────────────────────────── */
   --sidebar-w: 268px;
   --sidebar-rail-w: 78px;
@@ -194,9 +212,9 @@ html[data-theme="light"] {
 
   /* 环境光场：蓝 / 粉 / 绿 三色流动 + 一层静态颗粒（抹掉 8bit 渐变的 banding）
      浅色用 normal 混合、在近白底上衰减大，所以强度反而要贴近深色档，否则看不出来 */
-  --flow-blue: rgba(61, 139, 253, 0.26);
-  --flow-pink: rgba(251, 114, 153, 0.21);
-  --flow-green: rgba(52, 211, 153, 0.19);
+  --flow-a1: 0.26;
+  --flow-a2: 0.21;
+  --flow-a3: 0.19;
   --ambient-grain: 0.03;
   --ambient-base: #f5f5f7;
 
@@ -273,9 +291,9 @@ html[data-theme="dark"] {
   --shadow-3: 0 32px 72px -24px rgba(0, 0, 0, 0.9), 0 10px 24px -14px rgba(0, 0, 0, 0.6);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  --flow-blue: rgba(61, 139, 253, 0.26);
-  --flow-pink: rgba(251, 114, 153, 0.2);
-  --flow-green: rgba(52, 211, 153, 0.17);
+  --flow-a1: 0.26;
+  --flow-a2: 0.2;
+  --flow-a3: 0.17;
   --ambient-grain: 0.035;
   --ambient-base: #0b0b0d;
 
@@ -348,13 +366,66 @@ html[data-mode="extension"] {
   --shadow-3: 0 40px 90px -30px rgba(0, 0, 0, 0.95);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
-  --flow-blue: rgba(61, 139, 253, 0.2);
-  --flow-pink: rgba(251, 114, 153, 0.14);
-  --flow-green: rgba(52, 211, 153, 0.12);
+  --flow-a1: 0.2;
+  --flow-a2: 0.14;
+  --flow-a3: 0.12;
   --ambient-grain: 0.042;
   --ambient-base: #070a12;
 
   --scroll-thumb: rgba(255, 255, 255, 0.16);
   --scroll-thumb-hover: rgba(255, 255, 255, 0.28);
   --backdrop: rgba(2, 4, 8, 0.66);
+}
+
+/* ============================================================================
+ * 外观页可调项：流动配色（palette）
+ * 只换三个基色，强度仍由各主题的 --flow-a1/2/3 决定，所以深浅两套都不会跑偏。
+ * ========================================================================== */
+
+html[data-flow-palette="cool"] {
+  --flow-c1-rgb: 79, 140, 255;
+  --flow-c2-rgb: 90, 200, 250;
+  --flow-c3-rgb: 52, 211, 153;
+}
+
+html[data-flow-palette="warm"] {
+  --flow-c1-rgb: 251, 114, 153;
+  --flow-c2-rgb: 255, 159, 67;
+  --flow-c3-rgb: 255, 107, 107;
+}
+
+html[data-flow-palette="mono"] {
+  --flow-c1-rgb: 84, 140, 245;
+  --flow-c2-rgb: 108, 158, 248;
+  --flow-c3-rgb: 84, 140, 245;
+}
+
+/* ============================================================================
+ * 低性能模式：去掉每帧重算的模糊与颗粒，动画全部停掉。
+ * 视觉上保留玻璃的层次（边框 / 高光 / 内阴影都还在），只砍掉持续合成开销。
+ * 放在文件最后，确保它与 html[data-mode="extension"] 同特异性时后者不反超。
+ * ========================================================================== */
+
+html[data-perf="low"] {
+  --glass-blur: 0px;
+  --glass-sat: 1;
+  --glass-luma: 1;
+  --ambient-grain: 0;
+  /* 没有模糊时，半透明会让下层内容糊成一片，直接换成不透明面板 */
+  --glass-fill: var(--surface-raised);
+  --glass-fill-strong: var(--surface-raised);
+}
+
+/* blur(0px) 仍然会建一个合成层，低性能模式要彻底摘掉 backdrop-filter */
+html[data-perf="low"] * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-perf="low"] .ambient::before,
+html[data-perf="low"] .ambient::after,
+html[data-perf="low"] .ambient-orb,
+html[data-flow-motion="off"] .ambient::before,
+html[data-flow-motion="off"] .ambient-orb {
+  animation: none !important;
 }

@@ -192,7 +192,7 @@ pre {
       color-mix(in srgb, var(--flow-pink) 40%, transparent) 42%, transparent 88%),
     radial-gradient(36% 32% at 46% 74%, var(--flow-green) 0%,
       color-mix(in srgb, var(--flow-green) 40%, transparent) 42%, transparent 88%);
-  animation: ambientDrift 20s ease-in-out infinite;
+  animation: ambientDrift var(--flow-dur-drift) ease-in-out infinite;
 }
 
 @keyframes ambientDrift {
@@ -213,7 +213,8 @@ pre {
   }
 }
 
-/* 三个独立色斑：周期互质（13s / 17s / 23s），方向各不相同 → 互相穿插 */
+/* 三个独立色斑：周期由 --flow-dur-a/b/c 给（默认 13s / 17s / 23s，互质），
+   方向各不相同 → 互相穿插；外观页可整体换档。 */
 .ambient-orb {
   display: block;
   position: absolute;
@@ -234,7 +235,7 @@ pre {
     color-mix(in srgb, var(--flow-blue) 38%, transparent) 40%,
     transparent 96%
   );
-  animation: ambientOrbA 13s ease-in-out infinite;
+  animation: ambientOrbA var(--flow-dur-a) ease-in-out infinite;
 }
 
 .ambient-orb-b {
@@ -248,7 +249,7 @@ pre {
     color-mix(in srgb, var(--flow-pink) 38%, transparent) 40%,
     transparent 96%
   );
-  animation: ambientOrbB 17s ease-in-out infinite;
+  animation: ambientOrbB var(--flow-dur-b) ease-in-out infinite;
 }
 
 .ambient-orb-c {
@@ -262,7 +263,7 @@ pre {
     color-mix(in srgb, var(--flow-green) 38%, transparent) 40%,
     transparent 96%
   );
-  animation: ambientOrbC 23s ease-in-out infinite;
+  animation: ambientOrbC var(--flow-dur-c) ease-in-out infinite;
 }
 
 @keyframes ambientOrbA {

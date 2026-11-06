@@ -77,6 +77,81 @@ function toggleTheme() {
   }
 }
 
+/* ── 外观：圆角 / 流动速度 / 流动配色 / 低性能模式 ──────────────────────────
+   纯前端偏好，存 localStorage；写的是 html 上的 CSS 变量与 data-*，
+   所以点一下立刻生效，不需要保存配置，也不需要重载插件。 */
+const APPEARANCE_KEY = "bilibot.appearance.v1";
+
+// 四档圆角：数值与 tokens.css 的 --r-xs..--r-2xl 一一对应
+const RADIUS_PRESETS = {
+  compact: { label: "紧凑", r: [6, 9, 13, 18, 24, 30] },
+  normal: { label: "标准", r: [7, 11, 16, 22, 28, 36] },
+  roomy: { label: "更大", r: [8, 12, 18, 26, 32, 42] },
+  round: { label: "超大", r: [9, 14, 22, 32, 40, 52] },
+};
+
+// 流动速度：一条底纹 + 三个色斑的周期，保持互质以免同相
+const FLOW_SPEEDS = {
+  slow: { label: "缓慢", dur: ["32s", "22s", "28s", "37s"] },
+  normal: { label: "标准", dur: ["20s", "13s", "17s", "23s"] },
+  fast: { label: "较快", dur: ["12s", "8s", "11s", "14s"] },
+  off: { label: "静止", dur: null },
+};
+
+// 流动配色：只换三个基色，强度仍由主题的 alpha 决定
+const FLOW_PALETTES = {
+  default: { label: "蓝粉绿", swatch: "linear-gradient(120deg,#3d8bfd,#fb7299,#34d399)" },
+  cool: { label: "冷调", swatch: "linear-gradient(120deg,#4f8cff,#5ac8fa,#34d399)" },
+  warm: { label: "暖调", swatch: "linear-gradient(120deg,#fb7299,#ff9f43,#ff6b6b)" },
+  mono: { label: "单色", swatch: "linear-gradient(120deg,#548cf5,#6c9ef8)" },
+};
+
+const RADIUS_KEYS = ["--r-xs", "--r-sm", "--r-md", "--r-lg", "--r-xl", "--r-2xl"];
+const FLOW_DUR_KEYS = ["--flow-dur-drift", "--flow-dur-a", "--flow-dur-b", "--flow-dur-c"];
+
+const appearance = { radius: "normal", speed: "normal", palette: "default", perf: false };
+
+function loadAppearance() {
+  try {
+    const saved = JSON.parse(readChoice(APPEARANCE_KEY) || "{}");
+    if (saved && typeof saved === "object") {
+      if (RADIUS_PRESETS[saved.radius]) appearance.radius = saved.radius;
+      if (FLOW_SPEEDS[saved.speed]) appearance.speed = saved.speed;
+      if (FLOW_PALETTES[saved.palette]) appearance.palette = saved.palette;
+      appearance.perf = saved.perf === true;
+    }
+  } catch {
+    /* 存储损坏或隐私模式不可读：保持默认 */
+  }
+}
+
+function applyAppearance() {
+  const root = document.documentElement;
+  const radius = RADIUS_PRESETS[appearance.radius] || RADIUS_PRESETS.normal;
+  RADIUS_KEYS.forEach((key, index) => root.style.setProperty(key, `${radius.r[index]}px`));
+
+  const speed = FLOW_SPEEDS[appearance.speed] || FLOW_SPEEDS.normal;
+  if (speed.dur) {
+    FLOW_DUR_KEYS.forEach((key, index) => root.style.setProperty(key, speed.dur[index]));
+    delete root.dataset.flowMotion;
+  } else {
+    // 静止：撤掉内联周期，交给 tokens.css 的 data-flow-motion="off" 停动画
+    FLOW_DUR_KEYS.forEach((key) => root.style.removeProperty(key));
+    root.dataset.flowMotion = "off";
+  }
+
+  if (appearance.palette === "default") delete root.dataset.flowPalette;
+  else root.dataset.flowPalette = appearance.palette;
+
+  if (appearance.perf) root.dataset.perf = "low";
+  else delete root.dataset.perf;
+}
+
+function saveAppearance() {
+  writeChoice(APPEARANCE_KEY, JSON.stringify(appearance));
+  applyAppearance();
+}
+
 
 function pageAssetUrl(relativePath) {
   const assetUrl = new URL(relativePath, moduleUrl);
@@ -151,6 +226,7 @@ const NAV_ITEMS = [
   ["selftest", "refresh", "自检", "模块、配置、数据与路由自检"],
   ["models", "lightning", "模型配置", "各项功能所使用的模型"],
   ["basics", "settings", "基础设置", "人设、模型与长期配置"],
+  ["appearance", "sliders", "外观", "圆角、流动速度、配色与低性能模式"],
   ["taste", "heart", "兴趣画像", "手动维护或从人设总结喜欢的题材"],
   ["allconfig", "menu", "全部配置", "全部配置按大类折叠浏览"],
 ];
@@ -163,7 +239,7 @@ const NAV_GROUPS = [
   ["数据", ["memory"]],
   ["安全与账号", ["security", "account"]],
   ["页面", ["history", "selftest"]],
-  ["配置", ["taste", "models", "basics", "allconfig"]],
+  ["配置", ["appearance", "taste", "models", "basics", "allconfig"]],
 ];
 
 
@@ -1691,6 +1767,7 @@ function renderPage(page) {
     account: renderAccount,
     models: renderModels,
     basics: renderBasics,
+    appearance: renderAppearance,
     taste: renderTasteProfile,
     allconfig: renderAllConfig,
   }[page]?.() || renderOverview();
@@ -2461,6 +2538,50 @@ function renderModels() {
   `;
 }
 
+function renderAppearance() {
+  const radiusOptions = Object.entries(RADIUS_PRESETS).map(([id, preset]) =>
+    `<button class="appearance-option ${appearance.radius === id ? "is-active" : ""}" data-action="appearance-radius" data-value="${id}" type="button">${esc(preset.label)}</button>`).join("");
+
+  const speedOptions = Object.entries(FLOW_SPEEDS).map(([id, preset]) =>
+    `<button class="appearance-option ${appearance.speed === id ? "is-active" : ""}" data-action="appearance-speed" data-value="${id}" type="button">${esc(preset.label)}</button>`).join("");
+
+  const paletteOptions = Object.entries(FLOW_PALETTES).map(([id, preset]) =>
+    `<button class="appearance-option ${appearance.palette === id ? "is-active" : ""}" data-action="appearance-palette" data-value="${id}" type="button"><i class="appearance-swatch" style="background:${preset.swatch}"></i>${esc(preset.label)}</button>`).join("");
+
+  const radiusPreview = Object.entries(RADIUS_PRESETS).map(([id, preset]) =>
+    `<div class="appearance-chip" style="border-radius:${preset.r[3]}px">${preset.r[3]}px</div>`).join("");
+
+  return `${pageHead("APPEARANCE", "外观", "圆角、流动背景与低性能模式都在这里直接切，改完立刻生效，只存在这台设备的浏览器里。")}
+    <div class="appearance-panel">
+      <section class="card">
+        <div class="appearance-row">
+          <div class="appearance-text"><strong>圆角</strong><small>数字是卡片实际用的半径（--r-lg），按钮与输入框按同一档等比缩放。</small></div>
+          <div class="appearance-options">${radiusOptions}</div>
+        </div>
+        <div class="appearance-preview">${radiusPreview}</div>
+      </section>
+      <section class="card">
+        <div class="appearance-row">
+          <div class="appearance-text"><strong>流动速度</strong><small>三个色斑各自独立运动、周期互质；看不出在动就调快一档。</small></div>
+          <div class="appearance-options">${speedOptions}</div>
+        </div>
+        <div class="appearance-row">
+          <div class="appearance-text"><strong>流动配色</strong><small>只换颜色，强度跟随深浅主题，浅色下不会因此发灰。</small></div>
+          <div class="appearance-options">${paletteOptions}</div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="appearance-row">
+          <div class="appearance-text"><strong>低性能模式</strong><small>关掉玻璃模糊、颗粒与环境动画，卡片变成不透明材质；老机器或远程桌面下更稳。</small></div>
+          <label class="switch-control"><input id="appearance-perf" type="checkbox" ${appearance.perf ? "checked" : ""} /><span class="switch-track"><i></i></span><span class="sr-only">切换低性能模式</span></label>
+        </div>
+        <div class="appearance-row">
+          <div class="appearance-text"><strong>恢复默认</strong><small>圆角标准、速度标准、配色蓝粉绿、低性能模式关闭。</small></div>
+          <button class="button soft" data-action="appearance-reset" type="button">${icon("refresh")}恢复默认</button>
+        </div>
+      </section>
+    </div>`;
+}
 function renderBasics() {
   const assigned = new Set(Object.values(PAGE_KEYS).flat());
   const allEntries = Object.entries(state.schema).filter(([key, field]) => !assigned.has(key) && !field.deprecated);
@@ -3310,7 +3431,11 @@ function bindContent() {
       toast("操作未完成", error?.message || "请检查插件日志后重试", "error");
     });
   }));
-  const tasteSwitch = content.querySelector("#taste-enable-switch");
+  const perfSwitch = content.querySelector("#appearance-perf");
+  if (perfSwitch) perfSwitch.addEventListener("change", (event) => {
+    appearance.perf = Boolean(event.target.checked);
+    saveAppearance();
+  });  const tasteSwitch = content.querySelector("#taste-enable-switch");
   if (tasteSwitch) tasteSwitch.addEventListener("change", (event) => {
     tasteSetEnabled(Boolean(event.target.checked));
   });
@@ -3433,7 +3558,24 @@ async function handleAction(action, source = null) {
   if (action === "refresh-security") return refreshAndRender("security", "安全审计已刷新");
   if (action === "open-tool-picker") return openToolPicker();
   if (action === "refresh-account") return refreshAndRender("account", state.account?.logged_in ? "账号连接正常" : "账号仍未连接");
-  if (action === "clear-settings-search") { state.settingsSearch = ""; renderCurrentPage(); return; }
+  if (action === "appearance-radius" || action === "appearance-speed" || action === "appearance-palette") {
+    const value = source?.dataset?.value || "";
+    if (action === "appearance-radius" && RADIUS_PRESETS[value]) appearance.radius = value;
+    if (action === "appearance-speed" && FLOW_SPEEDS[value]) appearance.speed = value;
+    if (action === "appearance-palette" && FLOW_PALETTES[value]) appearance.palette = value;
+    saveAppearance();
+    renderCurrentPage();
+    return;
+  }
+  if (action === "appearance-reset") {
+    appearance.radius = "normal";
+    appearance.speed = "normal";
+    appearance.palette = "default";
+    appearance.perf = false;
+    saveAppearance();
+    renderCurrentPage();
+    return;
+  }  if (action === "clear-settings-search") { state.settingsSearch = ""; renderCurrentPage(); return; }
   if (action === "allconfig-expand") { state.allConfigExpanded = true; renderCurrentPage(); return; }
   if (action === "allconfig-collapse") { state.allConfigExpanded = false; renderCurrentPage(); return; }
   if (action === "clear-allconfig-search") { state.allConfigSearch = ""; renderCurrentPage(); return; }
@@ -3863,6 +4005,8 @@ function init() {
 
   const themeButton = document.querySelector("#theme-toggle");
   themeButton?.addEventListener("click", toggleTheme);
+  loadAppearance();
+  applyAppearance();
   applyTheme();
 
   if (readChoice(RAIL_KEY) === "1") sidebar.classList.add("is-rail");
