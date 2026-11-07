@@ -1166,6 +1166,7 @@ UP主：{video.get('up_name', '')}
         if len(all_videos) != before:
             logger.info(f"[BiliBot] 🧹 候选去重：{before} → {len(all_videos)}")
         logger.info(f"[BiliBot] 📦 视频池合计: {len(all_videos)} 个（来源: {', '.join(resolved_sources)}）")
+        return all_videos
 
     def _apply_pool_weights(self, buckets):
         """按 ``PROACTIVE_POOL_WEIGHTS`` 裁剪各池候选量；没配权重就原样拼接。
@@ -1197,7 +1198,6 @@ UP主：{video.get('up_name', '')}
             kept.append(f"{pool}={keep}/{len(items)}")
         logger.info(f"[BiliBot] ⚖️ 池权重：{", ".join(kept)}")
         return result
-        return all_videos
 
     @staticmethod
     def _parse_fav_folders(raw):
