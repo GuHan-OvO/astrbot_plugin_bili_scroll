@@ -235,11 +235,11 @@ const NAV_ITEMS = [
 // 「页面」组放的是内嵌视图（views/*.js 用 Shadow DOM 渲染），与其它页一样在同一外壳内切换。
 const NAV_GROUPS = [
   ["监控", ["overview"]],
-  ["行为", ["autonomy", "interaction"]],
+  ["行为", ["autonomy", "interaction", "taste"]],
   ["数据", ["memory"]],
   ["安全与账号", ["security", "account"]],
   ["页面", ["history", "selftest"]],
-  ["配置", ["appearance", "taste", "models", "basics", "allconfig"]],
+  ["配置", ["appearance", "models", "basics", "allconfig"]],
 ];
 
 
