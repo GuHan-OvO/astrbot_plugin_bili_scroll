@@ -3,6 +3,17 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 指向本仓库、不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v2.0.4 — 2026-11-07
+
+### 修复
+
+- **主动看片每轮崩溃**（`TypeError: 'NoneType' object is not iterable`）：`_get_pool_videos` 恒返回 `None`。
+  v2.0.0 新增 `_apply_pool_weights` 时插在它的日志行与 `return all_videos` 之间，把 return 挤成了
+  新方法末尾的不可达语句；现已补回 `return` 并删掉死代码。收藏夹 / 关注 / 搜索三条来源不受影响，
+  但整轮会被这个异常中断，等于一起失效。
+- 新增 `tests/test_pool_videos.py`：锁住「视频池恒返回 `list`」的返回值契约，并用 AST 断言
+  「取数函数必须有带值 return」「`_apply_pool_weights` 末尾不得有不可达语句」，防止同类回归。
+
 ## v2.0.3 — 2026-11-07
 
 ### 新增：外观设置页
