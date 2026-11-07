@@ -232,14 +232,13 @@ const NAV_ITEMS = [
 ];
 
 // 侧边栏分组：只影响呈现顺序，导航真源仍是 NAV_ITEMS。
-// 「页面」组放的是内嵌视图（views/*.js 用 Shadow DOM 渲染），与其它页一样在同一外壳内切换。
+// 内嵌视图（views/*.js 用 Shadow DOM 渲染）按功能并进对应分组，不再单列「页面」组。
 const NAV_GROUPS = [
   ["监控", ["overview"]],
-  ["行为", ["autonomy", "interaction", "taste"]],
+  ["行为", ["autonomy", "interaction", "taste", "history"]],
   ["数据", ["memory"]],
   ["安全与账号", ["security", "account"]],
-  ["页面", ["history", "selftest"]],
-  ["配置", ["appearance", "models", "basics", "allconfig"]],
+  ["配置", ["appearance", "models", "basics", "allconfig", "selftest"]],
 ];
 
 
