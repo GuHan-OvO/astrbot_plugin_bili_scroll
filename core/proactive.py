@@ -1464,16 +1464,38 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
         )
 
     async def _inject_watch_into_companion(self, entry):
-        """把这次观看写进陪伴记忆；开关关或失败都不影响本轮。"""
-        if not (
-            self.config.get("LINK_COMPANION_ENABLE", False)
-            and self.config.get("LINK_COMPANION_INJECT_WATCH", False)
-        ):
+        """把这次观看写进「她」的记忆；开关关或失败都不影响本轮。
+
+        落点优先级：
+        1. memory_companion 的自我时间线（persona_life / visibility=bot_self）：
+           不依赖 umo、任何会话都能召回，是本机唯一真正可用的落点；
+        2. 陪伴插件的现实通道（需 7.0.0+ 且装了 reality_companion）：保留原路。
+
+        ``LINK_COMPANION_INJECT_WATCH`` 单独控制「写记忆」，不再要求
+        ``LINK_COMPANION_ENABLE``：强联动开关管的是「借她的人格与通道说话」，
+        与「把经历记下来」是两件事，捆在一起会让「只想记、不想强联动」的配置
+        无法开启。
+        """
+        if not self.config.get("LINK_COMPANION_INJECT_WATCH", False):
+            return False
+        try:
+            from .mc_bridge import remember_watch_entry
+
+            if await remember_watch_entry(self.context, entry):
+                logger.info(f"[BiliBot] 🧠 已写进她的记忆：{entry.get('bvid', '')}")
+                return True
+        except Exception as exc:
+            logger.debug(f"[BiliBot] 记忆插件写入失败，继续尝试陪伴通道：{exc}")
+
+        if not self.config.get("LINK_COMPANION_ENABLE", False):
+            return False
+        umo = str(self.config.get("OWNER_QQ_UMO", "") or "").strip()
+        if not umo:
+            logger.debug("[BiliBot] 未配置 OWNER_QQ_UMO，跳过陪伴记忆注入")
             return False
         try:
             from .pc_bridge import remember_watch_context
 
-            umo = str(self.config.get("OWNER_QQ_UMO", "") or "").strip()
             ok = await remember_watch_context(self.context, umo, self._build_pc_watch_prompt(entry))
             if ok:
                 logger.info(f"[BiliBot] 🧠 已写进陪伴记忆：{entry.get('bvid', '')}")

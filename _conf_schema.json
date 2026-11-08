@@ -66,10 +66,7 @@
     "description": "【联动】把看过的视频写进她的记忆",
     "type": "bool",
     "default": false,
-    "hint": "每看完一个视频，把标题、UP、简介和你的评价交给她，让她用自己的口吻记一句；只记不发，不刷屏。需同时打开强联动总开关。",
-    "condition": {
-      "LINK_COMPANION_ENABLE": true
-    }
+    "hint": "每看完一个视频，把标题、UP、分区和你的评价写进 memory_companion（我会牢牢记住你）的自我时间线，让她下次聊天能接上；只记不发、不刷屏。没装记忆插件时回退到陪伴插件的现实通道（需另开强联动）。"
   },
   "LINK_COMPANION_SCHEDULE": {
     "description": "【联动】生成日程时避让她已有的安排",
