@@ -2452,7 +2452,7 @@ function renderAccount() {
 const BASIC_GROUP_ORDER = ["联动插件配置", "人设与模型", "Embedding 与记忆", "视频分析", "图片识别", "联网搜索", "图片生成", "总结", "性格演化", "Cookie 与系统", "高级接口"];
 
 const BASIC_KEY_ORDER = {
-  "联动插件配置": ["LINK_COMPANION_ENABLE", "PC_BRIDGE_ENABLE"],
+  "联动插件配置": ["LINK_COMPANION_ENABLE", "PC_BRIDGE_ENABLE", "LINK_COMPANION_INJECT_WATCH", "LINK_COMPANION_SCHEDULE"],
   "人设与模型": ["USE_ASTRBOT_PERSONA", "CUSTOM_SYSTEM_PROMPT", "LLM_PROVIDER_ID", "SUMMARY_PROVIDER_ID", "SUMMARY_API_KEY", "SUMMARY_API_BASE", "SUMMARY_MODEL", "GENERATION_PROVIDER_ID", "GENERATION_API_KEY", "GENERATION_API_BASE", "GENERATION_MODEL", "LLM_CIRCUIT_FAILURE_THRESHOLD", "LLM_CIRCUIT_COOLDOWN_SECONDS"],
   "Embedding 与记忆": ["EMBED_API_KEY", "EMBED_API_BASE", "EMBED_MODEL", "EMBED_TIMEOUT_SECONDS"],
   "视频分析": ["VIDEO_VISION_PROVIDER_ID", "VIDEO_VISION_API_KEY", "VIDEO_VISION_API_BASE", "VIDEO_VISION_MODEL", "VIDEO_VISION_FORMAT", "VIDEO_VISION_FPS"],
@@ -2464,7 +2464,9 @@ const BASIC_KEY_ORDER = {
 function basicGroupFor(key, field) {
   const group = descriptionMeta(field).group;
   if (key.startsWith("SUMMARY_") || key.startsWith("GENERATION_")) return "人设与模型";
-  if (key === "LINK_COMPANION_ENABLE" || key === "PC_BRIDGE_ENABLE") return "联动插件配置";
+  // 四个联动键都要进基础设置：前两个是总开关，后两个是子功能。
+  // 早先只列了总开关，子功能键落到末尾 return null 被丢掉，基础设置页看不见。
+  if (["LINK_COMPANION_ENABLE", "PC_BRIDGE_ENABLE", "LINK_COMPANION_INJECT_WATCH", "LINK_COMPANION_SCHEDULE"].includes(key)) return "联动插件配置";
   if (/人设|模型可靠性/.test(group) || ["LLM_PROVIDER_ID", "USE_ASTRBOT_PERSONA", "CUSTOM_SYSTEM_PROMPT", "LLM_CIRCUIT_FAILURE_THRESHOLD", "LLM_CIRCUIT_COOLDOWN_SECONDS"].includes(key)) return "人设与模型";
   if (/性格演化/.test(group) || key.startsWith("EVOLVE_")) return "性格演化";
   if (/高级·记忆/.test(group) || key.startsWith("EMBED_")) return "Embedding 与记忆";
