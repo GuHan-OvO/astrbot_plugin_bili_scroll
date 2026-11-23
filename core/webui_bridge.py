@@ -136,6 +136,7 @@ def register_webui(plugin_instance: Any, context: Context):
 
     routes: list[tuple[str, str, Handler, str]] = [
         ("stats", "GET", handle_get_stats, "BiliBot monitoring overview"),
+        ("environment", "GET", handle_get_environment, "BiliBot runtime environment"),
         ("persona/state", "GET", handle_get_persona_state, "BiliBot persona state"),
         ("interest/status", "GET", handle_get_interest_status, "BiliBot video interest status"),
         ("taste/profile", "GET", handle_get_taste_profile, "BiliBot taste profile"),
@@ -492,6 +493,19 @@ async def handle_get_stats(plugin: Any):
         return _response(data)
     except Exception as exc:
         logger.exception(f"[BiliBot WebUI] stats failed: {exc}")
+        return _failure(str(exc), 500)
+
+
+async def handle_get_environment(plugin: Any):
+    """环境自检：外部命令与各类模型是否就绪。
+
+    基础设置页要把它直接摊给用户看，否则「缺 ffmpeg」「没配视觉模型」这类
+    问题只能靠读日志猜。
+    """
+    try:
+        return _response(plugin._get_environment_status())
+    except Exception as exc:
+        logger.exception(f"[BiliBot WebUI] environment failed: {exc}")
         return _failure(str(exc), 500)
 
 

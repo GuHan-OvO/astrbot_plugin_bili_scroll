@@ -173,6 +173,7 @@ const state = {
   draft: {},
   dirtyKeys: new Set(),
   stats: {},
+  environment: null,
   persona: {},
   account: null,
   schedule: { events: [] },
@@ -519,6 +520,11 @@ function buildMock() {
       { name: "qq_admin", label: "QQ 管理命令", description: "执行 QQ 管理操作", origin: "plugin", origin_name: "QQ 管理插件", active: true, compatible: false, reason: "跨平台管理能力保持隔离" },
     ],
     cache: { total_bytes: 18874368, buckets: { images: { label: "临时图片", bytes: 5242880 }, videos: { label: "临时视频", bytes: 12582912 }, search: { label: "联网搜索缓存", bytes: 1048576 }, qr: { label: "登录二维码", bytes: 2048 } }, protected: ["B站 Cookie 与扫码登录状态", "记忆与用户画像", "好感度", "日程和运行数据库"] },
+    environment: {
+      external_commands: { "yt-dlp": true, ffmpeg: true, ffprobe: true },
+      llm: { chat_provider: true, video_provider: true, video_api: false, image_provider: false, image_api: false, image_gen_api: false },
+      features: { web_search: false },
+    },
   };
 }
 
@@ -673,7 +679,7 @@ function unwrap(result) {
 async function apiGet(path, query = {}) {
   if (isPreview) {
     await sleep(70);
-    const map = { "stats": mock.stats, "persona/state": mock.persona, "config/schema": mock.schema, "config": mock.config, "account/info": mock.account, "schedule/today": mock.schedule, "schedule/stats": mock.scheduleStats, "memory/stats": mock.memory, "profiles": mock.profiles, "interest/status": mock.interest, "security/stats": mock.security, "tools/available": mock.availableTools, "cache/stats": mock.cache };
+    const map = { "stats": mock.stats, "persona/state": mock.persona, "config/schema": mock.schema, "config": mock.config, "account/info": mock.account, "schedule/today": mock.schedule, "schedule/stats": mock.scheduleStats, "memory/stats": mock.memory, "profiles": mock.profiles, "interest/status": mock.interest, "security/stats": mock.security, "tools/available": mock.availableTools, "cache/stats": mock.cache, "environment": mock.environment };
     if (path === "account/qr/generate") return { image: "", key: "preview", expires_in: 180 };
     if (path === "account/qr/poll") return { status: "waiting", message: "预览模式不连接真实账号" };
     if (path === "extensions") return [mockCreatorManifest()];
@@ -1009,7 +1015,13 @@ async function refreshPageData(page) {
     state.stats = stats || {};
     state.interest = interest || {};
   } else if (page === "basics") {
-    state.cache = await apiGet("cache/stats") || {};
+    const [cache, environment] = await Promise.all([
+      apiGet("cache/stats").catch(() => ({})),
+      apiGet("environment").catch(() => null),
+    ]);
+    state.cache = cache || {};
+    // 读不到环境就保持 null：卡片会显示「无法读取」，绝不假装就绪。
+    state.environment = environment || null;
     // 基础设置页同样包含模型项：清单未就绪时回退为文本输入框，避免出现空白下拉
     if (!state.modelOptions) await loadModelOptions();
   } else if (page === "taste") {
@@ -2583,6 +2595,56 @@ function renderAppearance() {
       </section>
     </div>`;
 }
+// 基础设置页第一屏要回答「还差什么才能跑起来」：外部命令、账号、模型三类。
+// 数据来自只读端点 environment（后端复用 _get_environment_status）。
+function renderEnvironmentCard() {
+  const env = state.environment;
+  const commands = env?.external_commands || {};
+  const llm = env?.llm || {};
+  const features = env?.features || {};
+  const accountReady = Boolean(state.stats?.account_connected);
+  const commandNames = ["yt-dlp", "ffmpeg", "ffprobe"];
+  const commandReady = commandNames.filter((name) => commands[name]).length;
+  const pill = (ok) => statusPill(ok ? "已就绪" : "未就绪", ok ? "green" : "orange");
+  const row = (label, detail, ok, action = "") => `<article class="env-row ${ok ? "is-ready" : "is-missing"}">
+      <span class="env-dot" aria-hidden="true"></span>
+      <div class="env-copy"><strong>${esc(label)}</strong><p>${esc(detail)}</p></div>
+      ${pill(ok)}${action}
+    </article>`;
+  const go = (page, label) => `<button class="button ghost env-go" data-action="open-page" data-page="${page}" type="button">${esc(label)}${icon("arrow-right")}</button>`;
+  const commandRows = [
+    ["yt-dlp", "下载视频与字幕。缺失时插件会用当前 Python 自动装一次（需要能访问 PyPI）。"],
+    ["ffmpeg", "合并音视频、切片、截帧。必须由系统提供并放进 PATH，插件不会自动安装。"],
+    ["ffprobe", "读取真实时长、决定切几段。和 ffmpeg 同源，通常一起装。"],
+  ].map(([name, detail]) => row(name, detail, Boolean(commands[name]))).join("");
+  const modelRows = [
+    ["主聊天模型", "回复、评价、纯文本回退都用它。留空时跟随 AstrBot 当前默认模型。", Boolean(llm.chat_provider), go("models", "去模型页")],
+    ["视频视觉模型", "看片与截帧分析。不配也能跑，只是看片退回字幕/简介的纯文本概括。", Boolean(llm.video_provider || llm.video_api), ""],
+    ["图片识别模型", "评论配图与动态配图识别。不配则跳过图片内容，不影响文字。", Boolean(llm.image_provider || llm.image_api), ""],
+    ["联网搜索", "可选能力。开启后需要填搜索接口密钥；关闭时其他功能照常。", Boolean(features.web_search), ""],
+  ].map(([label, detail, ok, action]) => row(label, detail, ok, action)).join("");
+  const summary = env
+    ? statusPill(`外部命令 ${commandReady}/${commandNames.length}`, commandReady === commandNames.length ? "green" : "orange")
+    : statusPill("环境状态读取失败", "red");
+  return `<section class="card env-card">
+    ${sectionHead("环境与配置", "跑起来只需要三件事：外部命令、B站 账号、一个能用的模型。下面逐项写明现状和在哪里配。", "settings", summary)}
+    <div class="env-group"><h3>外部命令（系统级）</h3><div class="env-grid">${commandRows}</div></div>
+    <div class="env-group"><h3>账号与模型（页面内配置）</h3><div class="env-grid">
+      ${row("B站 账号（Cookie）", "账号页扫码登录一次即可长期复用。反复扫码会累积风控，失败先看账号页的排查提示。", accountReady, go("account", "去账号页"))}
+      ${modelRows}
+    </div></div>
+    <div class="env-steps">
+      <strong>配置顺序</strong>
+      <ol>
+        <li><span>1</span><div><strong>扫码连接 B站 账号</strong><p>在账号页生成二维码，用 B站 客户端确认；凭据只写进本机插件配置，不回显在页面里。</p></div></li>
+        <li><span>2</span><div><strong>选一个主聊天模型</strong><p>模型页里挑 AstrBot 已启用的模型；不选就跟随 AstrBot 默认模型。</p></div></li>
+        <li><span>3</span><div><strong>按需补视觉模型与联网搜索</strong><p>这两项是可选增强：不配时看片退回纯文本、搜索不可用，其他功能不受影响。</p></div></li>
+        <li><span>4</span><div><strong>确认三项外部命令都是绿的</strong><p>主动看片要读画面，必须 yt-dlp + ffmpeg + ffprobe 齐全；缺哪个都会在日志里点名。</p></div></li>
+      </ol>
+    </div>
+  </section>`;
+}
+
 function renderBasics() {
   const assigned = new Set(Object.values(PAGE_KEYS).flat());
   const allEntries = Object.entries(state.schema).filter(([key, field]) => !assigned.has(key) && !field.deprecated);
@@ -2610,6 +2672,7 @@ function renderBasics() {
     });
   });
   return `${pageHead("FOUNDATION", "基础设置", "这里只保留完成初始化后很少需要调整的人设、模型和高级能力；常用行为已拆到对应页面。")}
+    ${renderEnvironmentCard()}
     ${renderCacheCard()}
     <section class="settings-search card"><span>${icon("search")}</span><input id="settings-search" type="search" value="${esc(state.settingsSearch)}" placeholder="搜索配置名称、说明或 KEY" aria-label="搜索基础设置" />${state.settingsSearch ? `<button data-action="clear-settings-search" type="button">清除</button>` : ""}</section>
     <div class="settings-summary"><span>共 ${allEntries.length} 项长期配置</span><span>当前显示 ${filtered.length} 项</span><span>${state.dirtyKeys.size} 项待保存</span></div>
@@ -3553,6 +3616,11 @@ function setActiveScheduleEvent(index) {
 
 async function handleAction(action, source = null) {
   if (action === "refresh") return refreshCurrent();
+  if (action === "open-page") {
+    const page = source?.dataset?.page;
+    if (page) await navigate(page);
+    return;
+  }
   if (action === "save") return saveDraft();
   if (action === "discard") return discardDraft();
   if (action === "refresh-memory") return refreshAndRender("memory", "记忆数据已刷新");

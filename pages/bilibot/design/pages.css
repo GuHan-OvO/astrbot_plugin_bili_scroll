@@ -2045,6 +2045,138 @@
   color: var(--text-secondary);
 }
 
+/* ── 环境与配置（基础设置页首屏） ──────────────────────────────────── */
+
+.env-card .env-group + .env-group {
+  margin-top: var(--sp-5);
+}
+
+.env-card .env-group > h3 {
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.env-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.env-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-sunken);
+}
+
+.env-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.env-row.is-ready .env-dot {
+  background: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+
+.env-row.is-missing .env-dot {
+  background: var(--orange);
+  box-shadow: 0 0 0 3px var(--orange-soft);
+}
+
+.env-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.env-copy strong {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.env-copy p {
+  margin-top: 2px;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.env-go {
+  flex: none;
+}
+
+.env-steps {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+
+.env-steps > strong {
+  display: block;
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.env-steps ol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.env-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+
+.env-steps li > span {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-semibold);
+}
+
+.env-steps li strong {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.env-steps li p {
+  margin-top: 2px;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .env-row {
+    flex-wrap: wrap;
+  }
+
+  .env-go {
+    width: 100%;
+  }
+}
+
 /* ── 缓存 ──────────────────────────────────────────────────────────── */
 
 .cache-card {
