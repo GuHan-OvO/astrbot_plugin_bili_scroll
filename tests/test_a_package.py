@@ -31,6 +31,7 @@ from core.runtime import EventRuntime  # noqa: E402
 from core.tools import WATCH_PENDING_MESSAGE  # noqa: E402
 from core.tools import create_tools  # noqa: E402
 from core.video import VideoMixin  # noqa: E402
+from core.video_diagnostics import get_call_diagnostic  # noqa: E402
 
 
 class DownloadTimeoutTests(unittest.TestCase):
@@ -96,6 +97,57 @@ class DownloadTimeoutWiringTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(core_video, "TEMP_VIDEO_DIR", tmp):
             await probe._download_video("BVtest", duration=60)
         self.assertEqual(probe.timeouts, [120, 120, 120])
+
+
+class _StderrDownloadProbe(_DownloadProbe):
+    """按顺序回放不同 stderr 的下载探针。"""
+
+    def __init__(self, stderrs):
+        super().__init__(codes=[1] * len(stderrs))
+        self.stderrs = list(stderrs)
+
+    async def _run_process(self, *args, timeout=None, **kwargs):
+        self.timeouts.append(timeout)
+        return 1, "", self.stderrs.pop(0)
+
+
+class DownloadFailureReportingTests(unittest.IsolatedAsyncioTestCase):
+    """全部格式失败时，留下的必须是能指向病因的那条错误。"""
+
+    async def test_后处理写盘失败不被格式缺失覆盖(self):
+        probe = _StderrDownloadProbe([
+            "ERROR: [BiliBili] BVx: Requested format is not available. Use --list-formats",
+            "ERROR: Postprocessing: Error opening output files: Permission denied",
+            "ERROR: [BiliBili] BVx: Requested format is not available. Use --list-formats",
+        ])
+        with tempfile.TemporaryDirectory() as tmp, patch.object(core_video, "TEMP_VIDEO_DIR", tmp):
+            result = await probe._download_video("BVtest", duration=60)
+        self.assertIsNone(result)
+        detail = get_call_diagnostic()
+        self.assertIn("Permission denied", detail["reason"])
+        self.assertEqual(detail["hint"], "ffmpeg 无法写入下载目录")
+
+    async def test_只有格式缺失时仍报格式缺失(self):
+        probe = _StderrDownloadProbe([
+            "ERROR: [BiliBili] BVx: Requested format is not available. Use --list-formats",
+            "ERROR: [BiliBili] BVx: Requested format is not available. Use --list-formats",
+            "ERROR: [BiliBili] BVx: Requested format is not available. Use --list-formats",
+        ])
+        with tempfile.TemporaryDirectory() as tmp, patch.object(core_video, "TEMP_VIDEO_DIR", tmp):
+            await probe._download_video("BVtest", duration=60)
+        self.assertEqual(get_call_diagnostic()["hint"], "没有匹配的清晰度格式")
+
+    def test_合并档排在单文件档之前(self):
+        formats = VideoMixin()._format_fallbacks(480)
+        merged = next(
+            i for i, f in enumerate(formats)
+            if f.startswith("bestvideo[ext=mp4][height<=360]+bestaudio")
+        )
+        single = next(
+            i for i, f in enumerate(formats)
+            if f.startswith("best[ext=mp4][vcodec!=none][acodec!=none][height<=360]")
+        )
+        self.assertLess(merged, single)
 
 
 class ChatTextTests(unittest.TestCase):

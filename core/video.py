@@ -875,7 +875,8 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
 
     # ── 视频下载 / 压缩 / 截帧 ──
 
-    # 分辨率回退链：先尝试无需合并的 MP4，避免无 ffmpeg 时只留下 m4a；再尝试高质量音视频合并。
+    # 分辨率回退链：先走音视频合并档（B 站 DASH 只下发分离流），再退到单文件档
+    # 兜底（少数老稿件/PGC 仍有自带音轨的 mp4）。
     def _format_fallbacks(self, max_height=480):
         try:
             cap = max(144, int(max_height or 480))
@@ -887,22 +888,30 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
         elif heights[-1] != cap and cap not in (360, 480, 720):
             heights.append(cap)
 
-        formats = []
+        # B 站已全面 DASH 化：视频流与音频流分开下发，`best[ext=mp4]` 这类
+        # 「单文件同时含音视频」的偏好基本一个都命中不了（实测普通稿件 -F 输出
+        # 12 个格式，全部 video only）。所以合并档必须排在单文件档前面：否则
+        # 每轮下载先白跑 3 次注定失败的格式，才轮到能成功的合并档。
+        merged_formats = []
+        single_file_formats = []
         for h in heights:
-            formats.extend([
-                # 横屏视频的短边通常是 height，竖屏视频的短边则是 width。
-                # 两种方向都纳入同一档回退，避免 360x640 这类竖屏视频
-                # 因 height>360 被误判为“没有 360p 格式”。
-                f"best[ext=mp4][vcodec!=none][acodec!=none][height<={h}]/"
-                f"best[ext=mp4][vcodec!=none][acodec!=none][width<={h}]/"
-                f"best[height<={h}][vcodec!=none][acodec!=none]/"
-                f"best[width<={h}][vcodec!=none][acodec!=none]",
+            merged_formats.append(
                 f"bestvideo[ext=mp4][height<={h}]+bestaudio[ext=m4a]/"
                 f"bestvideo[ext=mp4][width<={h}]+bestaudio[ext=m4a]/"
                 f"bestvideo[height<={h}]+bestaudio/"
                 f"bestvideo[width<={h}]+bestaudio/"
                 f"best[height<={h}]/best[width<={h}]",
-            ])
+            )
+            # 横屏视频的短边通常是 height，竖屏视频的短边则是 width。
+            # 两种方向都纳入同一档回退，避免 360x640 这类竖屏视频
+            # 因 height>360 被误判为“没有 360p 格式”。
+            single_file_formats.append(
+                f"best[ext=mp4][vcodec!=none][acodec!=none][height<={h}]/"
+                f"best[ext=mp4][vcodec!=none][acodec!=none][width<={h}]/"
+                f"best[height<={h}][vcodec!=none][acodec!=none]/"
+                f"best[width<={h}][vcodec!=none][acodec!=none]",
+            )
+        formats = merged_formats + single_file_formats
         formats.extend([
             "bestvideo+bestaudio/best",
             "worst[ext=mp4][vcodec!=none]/worst[vcodec!=none]",
@@ -928,6 +937,27 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
             self._VIDEO_DOWNLOAD_MAX_TIMEOUT,
             max(self._VIDEO_DOWNLOAD_FORMAT_TIMEOUT, seconds / 2),
         ))
+
+    # 下载失败按「信息量」保留：能指出病因的错误优先于泛化的「格式不存在」。
+    # 循环里原先 last_err 每轮覆盖，而排在最后的单文件兜底档必然报
+    # Requested format is not available，于是真正的失败原因——例如 ffmpeg 无法
+    # 写入下载目录——被盖掉，日志和用户侧都只剩一句「没有匹配格式」。
+    _DOWNLOAD_ERROR_RULES = (
+        ("error opening output files", 30, "ffmpeg 无法写入下载目录"),
+        ("error opening output file", 30, "ffmpeg 无法写入下载目录"),
+        ("permission denied", 30, "ffmpeg 无法写入下载目录"),
+        ("no space left", 25, "下载目录磁盘已满"),
+        ("disk full", 25, "下载目录磁盘已满"),
+        ("requested format is not available", 0, "没有匹配的清晰度格式"),
+    )
+
+    def _download_error_rank(self, err):
+        """返回 (rank, hint)：rank 越大越能说明病因。"""
+        text = str(err or "").lower()
+        for pattern, rank, hint in self._DOWNLOAD_ERROR_RULES:
+            if pattern in text:
+                return rank, hint
+        return 1, ""
 
     def _pick_downloaded_video_file(self, bvid, output_dir=None):
         output_dir = output_dir or TEMP_VIDEO_DIR
@@ -983,6 +1013,7 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
             return None
 
         last_err = ""
+        best_rank, best_err, best_hint = -1, "", ""
         try:
             formats = self._format_fallbacks(max_height)
             total_formats = len(formats)
@@ -1011,17 +1042,24 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
                         logger.info(f"[BiliBot] 视频下载成功({bvid})，格式: {fmt}，文件: {os.path.basename(fp)}")
                         return fp
                     last_err = "yt-dlp 成功退出，但没有产出可发送的视频文件（可能只下载到音频）"
+                    if 10 > best_rank:
+                        best_rank, best_err, best_hint = 10, last_err, "只拿到音频、没有可发送的视频流"
                     next_step = "尝试下一个格式" if format_index < total_formats else "已无后续格式"
                     logger.info(f"[BiliBot] {last_err}({bvid})，{next_step}")
                     continue
                 if code == 124:
                     last_err = f"下载超时（等了 {timeout} 秒）"
+                    if 5 > best_rank:
+                        best_rank, best_err, best_hint = 5, last_err, "下载超时"
                     if timeout > self._VIDEO_DOWNLOAD_FORMAT_TIMEOUT:
                         # 长视频已经等够久了，换格式只会从头再下一遍
                         logger.info(f"[BiliBot] {last_err}({bvid})，不再尝试其他格式")
                         break
                     continue
                 last_err = redact_proxy_error(stderr, self.config)[:200] if stderr else "unknown error"
+                rank, hint = self._download_error_rank(last_err)
+                if rank > best_rank:
+                    best_rank, best_err, best_hint = rank, last_err, hint
                 next_step = "尝试下一个格式" if format_index < total_formats else "已无后续格式"
                 logger.info(
                     f"[BiliBot] 格式 {format_index}/{total_formats} 下载失败({bvid})，"
@@ -1033,8 +1071,18 @@ UP主：{video_info.get('up_name') or video_info.get('owner_name', '未知')}
             except OSError:
                 pass
 
-        set_call_diagnostic(reason=safe_detail(last_err, self.config))
-        logger.warning(f"[BiliBot] 视频下载全部失败({bvid}): {safe_detail(last_err, self.config)}")
+        if not best_err:
+            best_err = last_err or "未知原因"
+        detail = safe_detail(best_err, self.config)
+        if best_hint == "ffmpeg 无法写入下载目录":
+            detail = (
+                f"{detail}；下载目录 {download_dir}。"
+                "ffmpeg 若被降成低完整性级别运行，就写不了普通目录"
+            )
+        elif best_hint:
+            detail = f"{best_hint}：{detail}"
+        set_call_diagnostic(reason=detail, hint=best_hint)
+        logger.warning(f"[BiliBot] 视频下载全部失败({bvid}): {safe_detail(detail, self.config)}")
         return None
 
     def _cleanup_partial_downloads(self, bvid, output_dir=None):
