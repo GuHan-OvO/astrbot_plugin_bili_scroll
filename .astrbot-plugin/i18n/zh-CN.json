@@ -1,7 +1,7 @@
 {
   "pages": {
     "bilibot": {
-      "title": "BiliBot 控制中心",
+      "title": "我会自己刷B站",
       "description": "可视化管理回复、主动行为、作息、记忆和账号连接"
     },
     "selftest": {
@@ -11,6 +11,13 @@
     "history": {
       "title": "看过的视频",
       "description": "它刷过什么、挑中什么、推荐给主人什么"
+    },
+    "config": {
+      "title": "配置 · 我会自己刷B站",
+      "description": "AstrBot 原生配置表单（与 BiliBot 控制中心共用同一份配置）"
     }
+  },
+  "metadata": {
+    "display_name": "我会自己刷B站"
   }
 }

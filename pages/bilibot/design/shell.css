@@ -685,12 +685,23 @@
 
 /* ── 启动屏 ────────────────────────────────────────────────────────── */
 
+/* 启动屏在内容区垂直居中。早先用 padding-top: 18vh 近似，视口一高整块就偏上，
+   logo 与文案看着都不在中间；改为让内容区自己居中，启动屏只保留水平内边距。 */
+.app-shell.is-booting .content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .boot-screen {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--sp-4);
-  padding: 18vh var(--sp-4) var(--sp-8);
+  padding: 0 var(--sp-4);
   text-align: center;
   animation: bootAppear var(--dur-page) var(--ease-out) both;
 }
