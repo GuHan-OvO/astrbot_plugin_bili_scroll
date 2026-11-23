@@ -706,10 +706,15 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
                 yield event.plain_result("用法：/bili直播 测试 <弹幕内容>")
                 return
             sent = await self._send_live_danmaku_text(text)
+            if not sent:
+                # 底层错误可能带接口返回与内部状态，只写日志，聊天里给一句提示。
+                logger.warning(
+                    "[BiliBot] 测试弹幕发送失败: %s", self._live_send_last_error or "未知错误"
+                )
             yield event.plain_result(
-                f"✅ 已发送 {sent} 条测试弹幕。"
+                "✅ 已发送 %d 条测试弹幕。" % sent
                 if sent
-                else f"❌ 发送失败：{self._live_send_last_error or '未知错误'}"
+                else "❌ 发送失败，详细原因见日志。"
             )
             return
         yield event.plain_result(
@@ -960,8 +965,10 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
         try:
             summary = await self._consolidation.run_daily()
             yield event.plain_result(f"🌙 清算完成\n{summary}")
-        except Exception as e:
-            yield event.plain_result(f"❌ 清算失败: {e}")
+        except Exception as exc:
+            # 异常原文可能带本机路径与接口细节；聊天里只给失败提示，细节进日志。
+            logger.exception(f"[BiliBot] 手动清算失败: {exc}")
+            yield event.plain_result("❌ 清算失败，详细原因见日志。")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("bili周总结")
@@ -978,8 +985,9 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
                 yield event.chain_result([Plain(f"📅 周总结已生成（{via}）"), Image.fromFileSystem(image_path)])
             else:
                 yield event.plain_result(f"{summary}\n\n——已投递：{via}")
-        except Exception as e:
-            yield event.plain_result(f"❌ 周总结失败: {e}")
+        except Exception as exc:
+            logger.exception(f"[BiliBot] 周总结失败: {exc}")
+            yield event.plain_result("❌ 周总结失败，详细原因见日志。")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("bili清理老化")

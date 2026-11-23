@@ -668,6 +668,8 @@ class ShareMixin:
                 bvid, max_height=max_height, duration=info.get("duration")
             )
             if not video_path:
+                # 群聊里只留一句可行动提示：具体原因（ffmpeg 写不进目录、权限被拒、
+                # 超时等）只写日志与调用诊断，不发到聊天里。
                 yield event.plain_result("⚠️ 原视频下载失败，先看解析卡和链接吧。")
                 return
             raw_send_paths, skipped = await self._split_share_video_for_chat(video_path)

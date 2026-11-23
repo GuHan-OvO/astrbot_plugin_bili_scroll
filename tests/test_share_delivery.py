@@ -26,6 +26,8 @@ def load_share_module():
         "astrbot": astrbot, "astrbot.api": api,
     }):
         spec.loader.exec_module(module)
+        # share.py 会以同一个假包名导入 video_diagnostics；把它留住，测试才能
+        # 设置下载诊断，验证「下载失败」那句用户可见文案带出可行动原因。
     return module
 
 
@@ -93,6 +95,20 @@ class ShareDeliveryTests(unittest.IsolatedAsyncioTestCase):
         if tasks:
             await asyncio.gather(*tasks)
         return messages
+
+    async def test_download_failure_message_keeps_technical_cause_out_of_chat(self):
+        """群聊只进失败提示：这句必须是固定文案，不能带任何技术原因。"""
+        probe = ShareProbe(paths=[])
+        probe._download_video = AsyncMock(return_value=None)
+        messages = await self.collect(probe)
+        texts = [
+            chunk.text for message in messages for chunk in message
+            if getattr(chunk, "type", "") == "plain"
+        ]
+        self.assertIn("⚠️ 原视频下载失败，先看解析卡和链接吧。", texts)
+        joined = " ".join(texts)
+        for leaked in ("ffmpeg", "Permission", "无法写入", "目录", "超时", "格式"):
+            self.assertNotIn(leaked, joined)
 
     async def test_card_then_video_for_all_share_entry_points(self):
         for scene in ("FriendMessage", "GroupMessage"):
