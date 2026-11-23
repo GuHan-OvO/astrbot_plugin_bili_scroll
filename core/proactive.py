@@ -1615,35 +1615,114 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
         return (result or "").strip().lower().startswith("y")
 
     async def _maybe_trigger_proactive_from_llm(self, event, req):
+        # 开关先廉价短路：功能关着时不该为每条消息都跑一次意图判断。
         if not self.config.get("ENABLE_PROACTIVE", False):
             return
-        if not self._has_cookie():
-            return
-        if self._proactive_task is not None and not self._proactive_task.done():
-            return
         msg = event.message_str or ""
+        if not msg.strip() or not self._has_cookie():
+            return
         if not await self._should_trigger_proactive_from_text(msg):
             return
-        # LLM 判断期间可能有另一条消息也通过了上面的 done() 检查，创建前需复查
-        if self._proactive_task is not None and not self._proactive_task.done():
+        sender_name = event.get_sender_name() or "用户"
+        # 受理前先过与执行同一道门禁：额度已满时既不建任务，也不告诉模型「已经去看了」。
+        ok, reason = self._proactive_gate_reason()
+        if not ok:
+            logger.info(f"[BiliBot] 未受理看视频请求：{reason}")
+            inject_temp_context(
+                req,
+                f"【系统提示】{sender_name}叫你去看B站视频，但这次没有开始：{reason}。"
+                "如实告诉对方这次没看成以及原因，不要说你已经去看了。",
+            )
             return
-        self._proactive_task = asyncio.create_task(self._run_proactive(max_watch=1))
+        self._proactive_task = asyncio.create_task(
+            self._run_proactive(max_watch=1, notify_umo=getattr(event, "unified_msg_origin", "") or "")
+        )
         trigger_log = self._load_json(PROACTIVE_TRIGGER_LOG_FILE, [])
         trigger_log.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "type": "manual_proactive_request", "scheduled": "llm_request", "status": "triggered", "content": msg[:100]})
         self._save_json(PROACTIVE_TRIGGER_LOG_FILE, trigger_log[-200:])
-        sender_name = event.get_sender_name() or "用户"
         inject_temp_context(
             req,
             f"【系统提示】{sender_name}叫你去看B站视频，你已在后台开始执行一次看视频流程。"
             "回复时让对方知道你去看了，看完后相关记忆会存入你的评论区记忆中，之后可以回忆起来。",
         )
 
+    # ── 受理门禁 ──
+    def _proactive_quota_state(self):
+        """今日观看计数与额度。受理门禁与主流程共用这一份计算。
+
+        原先受理只看「开关/cookie/任务占用」，额度则等到任务跑起来才在
+        _run_proactive_inner 里检查，于是出现「已经告诉模型去看了、后台其实直接退出」
+        （issue #3）。两处必须同源。
+        """
+        watch_log = self._load_json(WATCH_LOG_FILE, [])
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        today_entries = [l for l in watch_log if l.get("time", "").startswith(today_str)]
+        # 「评价失败」的观看不算看过：否则模型一侧抖动时，一天 4 次失败就把额度吃光，
+        # 之后再也不会重试（实测 10-28 起每天恰好 4 条、全是 score=0）。
+        today_watched = [
+            l for l in today_entries
+            if str(l.get("evaluation_status") or "") != "failed"
+            and str(l.get("comment") or "") != "评价失败"
+        ]
+        today_failed = len(today_entries) - len(today_watched)
+        try:
+            failed_limit = int(self.config.get("PROACTIVE_FAILED_WATCH_MAX", 6) or 0)
+        except (TypeError, ValueError):
+            failed_limit = 6
+        daily_limit = max(0, int(self.config.get("PROACTIVE_DAILY_LIMIT", 0) or 0))
+        autonomous_limit = (
+            self._autonomous_limit_max("proactive")
+            if hasattr(self, "_autonomous_limit_max")
+            else max(0, int(self.config.get("AUTONOMOUS_PROACTIVE_DAILY_LIMIT", daily_limit) or 0))
+        )
+        if autonomous_limit:
+            daily_limit = min(daily_limit, autonomous_limit) if daily_limit else autonomous_limit
+        return {
+            "watch_log": watch_log,
+            "today_watched": today_watched,
+            "today_failed": today_failed,
+            "failed_limit": failed_limit,
+            "daily_limit": daily_limit,
+        }
+
+    def _proactive_gate_reason(self, *, check_task=True):
+        """受理前的门禁，返回 ``(ok, 面向用户的原因)``。
+
+        原因文案会直接出现在聊天/工具结果里，所以只说状态、不带技术细节。
+        """
+        if not self.config.get("ENABLE_PROACTIVE", False):
+            return False, "主动看视频功能没开"
+        if not self._has_cookie():
+            return False, "还没登录 B站"
+        if check_task and self._proactive_task is not None and not self._proactive_task.done():
+            return False, "已经有一轮在看视频了"
+        state = self._proactive_quota_state()
+        failed_limit = state["failed_limit"]
+        if failed_limit and state["today_failed"] >= failed_limit:
+            return False, f"今天已经失败 {state['today_failed']} 次（上限{failed_limit}），先停一会儿"
+        daily_limit = state["daily_limit"]
+        if daily_limit > 0 and len(state["today_watched"]) >= daily_limit:
+            return False, f"今天已经看了 {len(state['today_watched'])} 个（上限{daily_limit}），额度用完了"
+        return True, ""
+
+    async def _notify_proactive_skipped(self, umo, reason):
+        """任务真的被拦住时补一句，别让聊天里停在「我去看了」。"""
+        if not umo:
+            return
+        try:
+            from astrbot.api.event import MessageChain
+            await self.context.send_message(umo, MessageChain().message(f"这次没看成：{reason}。"))
+        except Exception as exc:
+            logger.warning(f"[BiliBot] 看视频被拦后的提示发送失败: {exc}")
+
     # ── 主流程 ──
-    async def _run_proactive(self, max_watch=None, max_comment=None):
+    async def _run_proactive(self, max_watch=None, max_comment=None, notify_umo=""):
         if hasattr(self, "_set_cross_platform_activity"):
             self._set_cross_platform_activity("proactive", "正在挑选视频")
         try:
-            await self._run_proactive_inner(max_watch=max_watch, max_comment=max_comment)
+            skipped = await self._run_proactive_inner(max_watch=max_watch, max_comment=max_comment)
+            if skipped:
+                await self._notify_proactive_skipped(notify_umo, skipped)
         except asyncio.CancelledError:
             logger.info("[BiliBot] 主动看视频任务被取消")
         except Exception as e:
@@ -1661,35 +1740,21 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
         per_video_comment = max(0, min(1, int(self.config.get("PROACTIVE_COMMENT_COUNT", 1) or 0)))
         daily_comment_limit = max_comment if max_comment is not None else self.config.get("PROACTIVE_COMMENT_DAILY_LIMIT", 2)
         daily_comment_limit = max(0, int(daily_comment_limit or 0))
-        watch_log = self._load_json(WATCH_LOG_FILE, [])
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        # 日限检查：所有来源（含手动/LLM触发）均计入总量。
-        # 但「评价失败」的观看不算看过：否则模型一侧抖动时，一天 4 次失败就把额度吃光，
-        # 之后再也不会重试（实测 10-28 起每天恰好 4 条、全是 score=0）。
-        today_entries = [l for l in watch_log if l.get("time", "").startswith(today_str)]
-        today_watched = [
-            l for l in today_entries
-            if str(l.get("evaluation_status") or "") != "failed"
-            and str(l.get("comment") or "") != "评价失败"
-        ]
-        today_failed = len(today_entries) - len(today_watched)
-        try:
-            failed_limit = int(self.config.get("PROACTIVE_FAILED_WATCH_MAX", 6) or 0)
-        except (TypeError, ValueError):
-            failed_limit = 6
-        if failed_limit and today_failed >= failed_limit:
-            logger.info(
-                f"[BiliBot] 今天评价已失败 {today_failed} 次（上限{failed_limit}），暂停自动刷视频"
-            )
-            return
+        # 计数与额度走共享计算：受理门禁用的是同一份，两处不能各算一套。
+        state = self._proactive_quota_state()
+        watch_log = state["watch_log"]
+        today_watched = state["today_watched"]
+        failed_limit = state["failed_limit"]
+        if failed_limit and state["today_failed"] >= failed_limit:
+            reason = f"今天已失败 {state['today_failed']} 次（上限{failed_limit}），暂停自动刷视频"
+            logger.info(f"[BiliBot] {reason}")
+            return reason
         recommend_ledger, owner_recommend_count = self._load_owner_recommendation_state(watch_log)
-        daily_limit = max(0, int(self.config.get("PROACTIVE_DAILY_LIMIT", 0) or 0))
-        autonomous_limit = self._autonomous_limit_max("proactive") if hasattr(self, "_autonomous_limit_max") else max(0, int(self.config.get("AUTONOMOUS_PROACTIVE_DAILY_LIMIT", daily_limit) or 0))
-        if autonomous_limit:
-            daily_limit = min(daily_limit, autonomous_limit) if daily_limit else autonomous_limit
+        daily_limit = state["daily_limit"]
         if daily_limit > 0 and len(today_watched) >= daily_limit:
-            logger.info(f"[BiliBot] 今天已看 {len(today_watched)} 个视频（上限{daily_limit}），不再刷")
-            return
+            reason = f"今天已看 {len(today_watched)} 个视频（上限{daily_limit}），不再刷"
+            logger.info(f"[BiliBot] {reason}")
+            return reason
         # 本轮实际可看数量 = min(请求量, 剩余配额)
         if daily_limit > 0:
             remaining = daily_limit - len(today_watched)
@@ -2280,6 +2345,7 @@ recommend_owner判断：你真的喜欢、惊讶、被逗笑或发现有意思�
             f"[BiliBot] 🎉 刷B站完成！看了 {watch_count} 个视频，"
             f"本轮评论了 {max(0, comment_count - comments_before_run)} 条"
         )
+        return ""
 
     # ── 特别关注定时巡视 ──
 

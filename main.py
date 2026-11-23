@@ -782,14 +782,10 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("bili主动")
     async def cmd_proactive(self, event: AstrMessageEvent):
-        if not self._has_cookie():
-            yield event.plain_result("❌ 请先 /bili登录")
-            return
-        if not self.config.get("ENABLE_PROACTIVE", False):
-            yield event.plain_result("⚠️ 当前未开启主动看视频功能，请先用 /bili开关 主动")
-            return
-        if self._proactive_task is not None and not self._proactive_task.done():
-            yield event.plain_result("⏳ 已有主动看视频任务在运行")
+        # 与自动触发共用同一道门禁：额度用完了就别回「已触发」。
+        ok, reason = self._proactive_gate_reason()
+        if not ok:
+            yield event.plain_result(f"⚠️ 这次没开始：{reason}。")
             return
         self._proactive_task = asyncio.create_task(self._run_proactive(max_watch=1))
         trigger_log = self._load_json(PROACTIVE_TRIGGER_LOG_FILE, [])
@@ -802,12 +798,10 @@ class BiliBiliBot(Star, UtilsMixin, LLMMixin, VisionMixin, MemoryMixin, Affectio
         self._save_json(PROACTIVE_TRIGGER_LOG_FILE, trigger_log[-200:])
         yield event.plain_result("🎯 已手动触发一次主动看视频")
     async def _tool_bili_watch_videos_result(self) -> str:
-        if not self._has_cookie():
-            return "未登录B站，无法执行主动看视频。请先使用 /bili登录 完成扫码登录。"
-        if not self.config.get("ENABLE_PROACTIVE", False):
-            return "主动看视频功能当前未开启。请先使用 /bili开关 主动 开启。"
-        if self._proactive_task is not None and not self._proactive_task.done():
-            return "已有主动看视频任务正在运行，无需重复触发。"
+        # 受理前先过门禁：额度已满时不能回「已在后台触发」，否则模型会当成真的看了。
+        ok, reason = self._proactive_gate_reason()
+        if not ok:
+            return f"本次没有开始看视频：{reason}。如实告诉用户这次没看成以及原因。"
         self._proactive_task = asyncio.create_task(self._run_proactive(max_watch=1))
         trigger_log = self._load_json(PROACTIVE_TRIGGER_LOG_FILE, [])
         trigger_log.append({

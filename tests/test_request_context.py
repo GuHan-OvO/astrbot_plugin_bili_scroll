@@ -119,6 +119,8 @@ class ProactiveTriggerInjectionTests(unittest.IsolatedAsyncioTestCase):
             _proactive_task=None,
             _run_proactive=AsyncMock(),
             _should_trigger_proactive_from_text=AsyncMock(return_value=True),
+            # 受理前会先过门禁（issue #3）；这里模拟「全部通过」。
+            _proactive_gate_reason=lambda: (True, ""),
             _load_json=lambda path, default=None: [],
             _save_json=lambda path, data: None,
         )
