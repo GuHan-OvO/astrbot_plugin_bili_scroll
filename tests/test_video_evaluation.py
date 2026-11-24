@@ -72,6 +72,41 @@ class VideoEvaluationSchemaTests(unittest.TestCase):
         self.assertTrue(result["recommend_owner"])
         self.assertEqual(result["recommend_reason"], "实拍机关的做法让我很想分享")
 
+    def test_overlong_free_text_is_clipped_instead_of_rejected(self):
+        """2026-11-24 实测：score_reason 超 120 字让整条评价作废，代价太大。"""
+        result = self.parse(payload(
+            score_reason="很" * 200,
+            comment="好" * 120,
+            review="看" * 260,
+            partition="分" * 60,
+            search_keywords=["词" * 60],
+        ))
+        self.assertEqual(result["score"], 8.6)
+        self.assertEqual(len(result["score_reason"]), 120)
+        self.assertEqual(len(result["comment"]), 80)
+        self.assertEqual(len(result["review"]), 180)
+        self.assertEqual(len(result["partition"]), 30)
+        self.assertEqual(len(result["search_keywords"][0]), 40)
+
+    def test_overlong_signal_fields_are_clipped(self):
+        signals = [{
+            "type": "work", "value": "作" * 80, "polarity": "like",
+            "strength": 0.8, "evidence": "证" * 160,
+        }]
+        result = self.parse(payload(preference_signals=signals))
+        self.assertEqual(len(result["preference_signals"][0]["value"]), 50)
+        self.assertEqual(len(result["preference_signals"][0]["evidence"]), 100)
+
+    def test_enum_and_type_errors_still_reject(self):
+        """截断只对「只是啰嗦」生效；类型错与枚举错仍然判失败。"""
+        for bad in (
+            payload(mood="随便"),
+            payload(score_reason=123),
+            payload(score="8.6"),
+        ):
+            with self.subTest(bad=bad), self.assertRaises(VideoEvaluationError):
+                self.parse(bad)
+
     def test_personal_score_rejects_non_numeric_and_non_finite_values(self):
         for score in (True, "9", -1, 11, float("nan"), float("inf")):
             with self.subTest(score=score), self.assertRaises(VideoEvaluationError):
