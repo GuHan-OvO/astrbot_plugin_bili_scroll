@@ -3,6 +3,21 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 指向本仓库、不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v2.1.2 — 2026-11-24
+
+### 修复：评分字段超长不再作废整条评价
+
+- 问题：模型返回的 `score_reason` 超过 120 字符时，`parse_video_evaluation` 直接抛
+  `score_reason_too_long`，整条评价连同已下载分析（下载、截帧、多段分析）一起作废，还计入
+  `PROACTIVE_FAILED_WATCH_MAX` 的失败次数。2026-11-24 14:10 实测触发一条。
+- 根因：提示词从未交代任何字数上限，校验器却按固定字数硬卡。
+- 改法一：`_text()` 增加 `clip` 模式，自由文本字段（`score_reason` 120、`comment` 80、
+  `review` 180、`partition` 30、`recommend_reason` 80、`preference value` 50、
+  `evidence` 100、`search_keyword` 40）超长改为截断；枚举与类型校验仍然严格。
+- 改法二：评分提示词补上各字段字数（评分理由 120 字以内、review 180、comment 80、
+  recommend_reason 80），`VIDEO_EVALUATION_SCHEMA_PROMPT` 增加一行总表。
+- 新增 3 条回归测试：超长截断且分数保留、信号字段截断、枚举与类型错误仍拒绝。
+
 ## v2.1.1 — 2026-11-23
 
 ### 修复：额度已满时不再谎报「已经在看视频」
