@@ -28,7 +28,9 @@ from .content_protocol import (
 class DynamicMixin:
     """B站动态发布。"""
 
-    async def _queue_dynamic_post(self, text, handler, *, with_outcome=False):
+    async def _queue_dynamic_post(
+        self, text, handler, *, with_outcome=False, budget_exempt=False
+    ):
         digest = hashlib.sha256(str(text).encode("utf-8")).hexdigest()[:20]
         date_key = datetime.now().strftime("%Y-%m-%d")
         outcome = await self.event_runtime.execute(
@@ -38,7 +40,7 @@ class DynamicMixin:
                 event_key=f"bilibili:proactive:dynamic:{date_key}",
                 target_id=str(self.config.get("DEDE_USER_ID", "") or "self"),
                 priority=EventPriority.BACKGROUND,
-                metadata={"proactive": True},
+                metadata={"proactive": True, "budget_exempt": bool(budget_exempt)},
             ),
             handler,
         )
@@ -467,13 +469,14 @@ B站动态的感觉：
                     outcome = await self._queue_dynamic_post(
                         text,
                         lambda: self._post_dynamic_with_image(text, img_info, image_state),
-                        with_outcome=True,
+                        with_outcome=True, budget_exempt=ignore_limits,
                     )
                     success = outcome.success
                     image_sent = bool(outcome.success and image_state.get("sent"))
                 else:
                     success = await self._queue_dynamic_post(
-                        text, lambda: self._post_dynamic_text(text)
+                        text, lambda: self._post_dynamic_text(text),
+                        budget_exempt=ignore_limits
                     )
                 try:
                     os.remove(local_path)
@@ -481,11 +484,13 @@ B站动态的感觉：
                     pass
             else:
                 success = await self._queue_dynamic_post(
-                    text, lambda: self._post_dynamic_text(text)
+                    text, lambda: self._post_dynamic_text(text),
+                    budget_exempt=ignore_limits
                 )
         else:
             success = await self._queue_dynamic_post(
-                text, lambda: self._post_dynamic_text(text)
+                text, lambda: self._post_dynamic_text(text),
+                budget_exempt=ignore_limits
             )
         if success:
             log.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "text": text,

@@ -41,6 +41,7 @@ class DynamicProbe(DynamicMixin):
         self._store = {DYNAMIC_LOG_FILE: list(log if log is not None else [])}
         self._content = content
         self.posted = []
+        self.budget_flags = []
 
     def _load_json(self, path, default=None):
         return self._store.get(path, default)
@@ -62,8 +63,11 @@ class DynamicProbe(DynamicMixin):
             return self._content
         return {"decision": "post", "text": "今天的测试动态", "need_image": False, "image_prompt": ""}
 
-    async def _queue_dynamic_post(self, text, handler):
+    async def _queue_dynamic_post(
+        self, text, handler, *, with_outcome=False, budget_exempt=False
+    ):
         self.posted.append(text)
+        self.budget_flags.append(budget_exempt)
         return True
 
     async def _save_self_memory_record(self, *args, **kwargs):
@@ -137,6 +141,18 @@ class RunDynamicStatusTests(unittest.IsolatedAsyncioTestCase):
         status, detail = await probe._run_dynamic(human_initiated=True, text="   ")
         self.assertEqual(status, "posted")
         self.assertEqual(detail, "今天的测试动态")
+
+    async def test_工具主动发动态豁免统一行为预算(self):
+        probe = DynamicProbe()
+        status, _ = await probe._run_dynamic(human_initiated=True, ignore_limits=True)
+        self.assertEqual(status, "posted")
+        self.assertEqual(probe.budget_flags, [True], "ignore_limits 时应当豁免预算")
+
+    async def test_自动发布不豁免统一行为预算(self):
+        probe = DynamicProbe()
+        status, _ = await probe._run_dynamic()
+        self.assertEqual(status, "posted")
+        self.assertEqual(probe.budget_flags, [False], "自动发布仍受预算约束")
 
     async def test_并发时返回skipped_busy(self):
         probe = DynamicProbe()
