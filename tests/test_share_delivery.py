@@ -117,7 +117,7 @@ class ShareDeliveryTests(unittest.IsolatedAsyncioTestCase):
                     probe = ShareProbe(["/fake/video.mp4"])
                     messages = await self.collect(probe, scene, mode)
                     self.assertEqual([item[0].type for item in messages], ["plain", "video"])
-                    self.assertIn("请稍等...视频一会发出", messages[0][0].text)
+                    self.assertIn("视频稍后发出", messages[0][0].text)
                     self.assertEqual(len(messages[1]), 1)
                     self.assertEqual(messages[1][0].path, "/fake/video.mp4")
                     self.assertNotIn("回放切片", messages[0][0].text)
@@ -162,7 +162,7 @@ class ShareDeliveryTests(unittest.IsolatedAsyncioTestCase):
         probe.config["BILI_SHARE_PARSE_SEND_VIDEO"] = False
         messages = await self.collect(probe)
         self.assertEqual(len(messages), 1)
-        self.assertNotIn("请稍等", messages[0][0].text)
+        self.assertNotIn("视频稍后发出", messages[0][0].text)
         probe._download_video.assert_not_awaited()
 
 

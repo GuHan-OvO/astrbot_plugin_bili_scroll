@@ -17,6 +17,15 @@ from .config import TEMP_VIDEO_DIR, VIDEO_MEMORY_FILE
 from .request_context import inject_temp_context
 
 
+DEFAULT_SHARE_CARD_TEMPLATE = (
+    "🎞️ {title}\n"
+    "{up} · {duration}\n"
+    "{link}\n"
+    "{video_hint}"
+)
+"""解析卡默认模板。可用占位符见 _build_share_card_text；渲染后为空的行会被删掉。"""
+
+
 class ShareMixin:
     """处理群聊和私聊里的 B站视频分享。"""
 
@@ -296,26 +305,43 @@ class ShareMixin:
         return intro[:260]
 
     def _build_share_card_text(self, info, intro):
-        bvid = info.get("bvid", "")
-        link = f"https://www.bilibili.com/video/{bvid}" if bvid else ""
-        title = info.get("title") or "未知标题"
-        owner = info.get("owner_name") or "未知UP"
-        owner_mid = info.get("owner_mid") or "?"
-        tname = info.get("tname") or "未知分区"
-        intro = (intro or self._share_video_intro(info)).strip()
-        lines = [
-            "🎞️ B站视频解析",
-            "━━━━━━━━━━━━",
-            f"标题：{title}",
-            f"UP主：{owner}（UID:{owner_mid}）",
-            f"分区：{tname} | 时长：{self._format_duration(info.get('duration', 0))}",
-        ]
-        if link:
-            lines.append(f"原链接：{link}")
-        lines.extend(["", f"简介：{intro}"])
-        if self.config.get("BILI_SHARE_PARSE_SEND_VIDEO", True):
-            lines.append("\n请稍等...视频一会发出")
-        return "\n".join(lines)
+        """按模板渲染解析卡。
+
+        模板取自 ``BILI_SHARE_PARSE_CARD_TEMPLATE``。占位符渲染后为空的行整行删掉，
+        所以「未知分区」「没有简介」这类空洞不会出现在卡里；模板里写了未知占位符的行
+        同样丢掉，免得把 ``{xxx}`` 原样发出去。
+        """
+        bvid = str(info.get("bvid", "") or "")
+        values = {
+            "title": str(info.get("title") or "未知标题").strip(),
+            "up": str(info.get("owner_name") or "未知UP").strip(),
+            "uid": str(info.get("owner_mid") or "").strip(),
+            "partition": str(info.get("tname") or "").strip(),
+            "duration": self._format_duration(info.get("duration", 0)),
+            "link": f"https://www.bilibili.com/video/{bvid}" if bvid else "",
+            "bvid": bvid,
+            "intro": (intro or self._share_video_intro(info) or "").strip(),
+            "video_hint": (
+                "视频稍后发出"
+                if self.config.get("BILI_SHARE_PARSE_SEND_VIDEO", True)
+                else ""
+            ),
+        }
+        template = str(self.config.get("BILI_SHARE_PARSE_CARD_TEMPLATE") or "").strip()
+        if not template:
+            template = DEFAULT_SHARE_CARD_TEMPLATE
+        lines = []
+        for raw in template.splitlines():
+            rendered = raw
+            for key, value in values.items():
+                rendered = rendered.replace("{" + key + "}", value)
+            if "{" in rendered:
+                continue
+            rendered = rendered.rstrip()
+            if not rendered.strip():
+                continue
+            lines.append(rendered)
+        return "\n".join(lines) if lines else (values["title"] or "B站视频解析")
 
     def _share_video_component(self, video_path):
         try:

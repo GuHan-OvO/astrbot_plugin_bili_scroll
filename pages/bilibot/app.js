@@ -2461,7 +2461,7 @@ function renderAccount() {
     ${renderConfigSection("主人身份", "用于私信推荐、@主人和安全的跨平台记忆共享校验", ["OWNER_MID", "OWNER_NAME", "OWNER_BILI_NAME"], "heart")}`;
 }
 
-const BASIC_GROUP_ORDER = ["联动插件配置", "人设与模型", "Embedding 与记忆", "视频分析", "图片识别", "联网搜索", "图片生成", "总结", "性格演化", "Cookie 与系统", "高级接口"];
+const BASIC_GROUP_ORDER = ["联动插件配置", "人设与模型", "Embedding 与记忆", "视频分析", "分享解析", "图片识别", "联网搜索", "图片生成", "总结", "性格演化", "Cookie 与系统", "高级接口"];
 
 const BASIC_KEY_ORDER = {
   "联动插件配置": ["LINK_COMPANION_ENABLE", "PC_BRIDGE_ENABLE", "LINK_COMPANION_INJECT_WATCH", "LINK_COMPANION_SCHEDULE"],
@@ -2483,6 +2483,8 @@ function basicGroupFor(key, field) {
   if (/性格演化/.test(group) || key.startsWith("EVOLVE_")) return "性格演化";
   if (/高级·记忆/.test(group) || key.startsWith("EMBED_")) return "Embedding 与记忆";
   if (key.startsWith("VIDEO_VISION_") || /视频分析/.test(group)) return "视频分析";
+  // 分享解析原先全部落 null，基础设置页一项都看不到；解析卡模板尤其需要能改。
+  if (/分享解析/.test(group) || key.startsWith("BILI_SHARE_PARSE")) return "分享解析";
   if (key.startsWith("IMAGE_VISION_")) return "图片识别";
   if (/图片生成/.test(group) || key.startsWith("IMAGE_GEN_")) return "图片生成";
   if (/联网搜索/.test(group) || key.startsWith("WEB_SEARCH_")) return "联网搜索";
@@ -2679,7 +2681,7 @@ function renderBasics() {
     <div class="accordion-list">${BASIC_GROUP_ORDER.map((name, index) => {
       const keys = groups[name];
       if (!keys.length) return "";
-      const iconName = { "联动插件配置": "controller", "人设与模型": "heart", "性格演化": "star", "Embedding 与记忆": "memory-card", "视频分析": "video", "图片识别": "sun", "图片生成": "sun", "联网搜索": "search", "总结": "calendar", "Cookie 与系统": "settings", "高级接口": "controller" }[name] || "settings";
+      const iconName = { "联动插件配置": "controller", "人设与模型": "heart", "性格演化": "star", "Embedding 与记忆": "memory-card", "视频分析": "video", "分享解析": "arrow-right", "图片识别": "sun", "图片生成": "sun", "联网搜索": "search", "总结": "calendar", "Cookie 与系统": "settings", "高级接口": "controller" }[name] || "settings";
       const evolutionToggle = name === "性格演化" && hasKey("ENABLE_PERSONALITY_EVOLUTION") ? `<div class="settings-inline-toggle"><div><strong>旧版每日性格演化</strong><small>实验性功能，建议先关闭并积累几天真实反馈；已有数据会保留。</small></div>${renderControl("ENABLE_PERSONALITY_EVOLUTION", state.schema.ENABLE_PERSONALITY_EVOLUTION)}</div>` : "";
       const evolutionKeys = name === "性格演化" ? keys.filter((key) => key !== "ENABLE_PERSONALITY_EVOLUTION") : keys;
       return `<details class="settings-group card" ${query || index < 2 ? "open" : ""}><summary><span class="section-icon">${icon(iconName)}</span><div><strong>${esc(name)}</strong><small>${evolutionKeys.length + (evolutionToggle ? 1 : 0)} 项配置</small></div>${icon("arrow-right")}</summary><div class="settings-group-body"><div class="settings-group-inner">${evolutionToggle}${renderFields(evolutionKeys)}</div></div></details>`;
