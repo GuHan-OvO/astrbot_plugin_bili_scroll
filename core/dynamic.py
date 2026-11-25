@@ -357,7 +357,7 @@ B站动态的感觉：
             logger.error(f"[BiliBot] 生成动态内容失败: {e}")
             return None
 
-    async def _run_dynamic(self, human_initiated=False, ignore_limits=False):
+    async def _run_dynamic(self, human_initiated=False, ignore_limits=False, text=""):
         """跑一次动态发布，返回 ``(status, detail)``。
 
         status 取值：posted / skipped_busy / skipped_limit / skipped_interval /
@@ -365,6 +365,8 @@ B站动态的感觉：
 
         ``ignore_limits=True`` 供 LLM 工具主动要求发动态时使用：跳过每日条数与最短间隔，
         但保留并发锁（同一时刻只允许一条在发）与功能开关。
+
+        ``text`` 非空表示调用方已给好原文：直接按它发布，不再让插件自己生成文案。
         """
         lock = getattr(self, "_dynamic_run_lock", None)
         if lock is None:
@@ -375,7 +377,9 @@ B站动态的感觉：
         async with lock:
             try:
                 return await self._run_dynamic_inner(
-                    human_initiated=human_initiated, ignore_limits=ignore_limits
+                    human_initiated=human_initiated,
+                    ignore_limits=ignore_limits,
+                    text=text,
                 )
             except asyncio.CancelledError:
                 logger.info("[BiliBot] 动态发布任务被取消")
@@ -384,7 +388,7 @@ B站动态的感觉：
                 logger.error(f"[BiliBot] 动态发布任务异常退出: {e}\n{traceback.format_exc()}")
                 return "failed", str(e)
 
-    async def _run_dynamic_inner(self, human_initiated=False, ignore_limits=False):
+    async def _run_dynamic_inner(self, human_initiated=False, ignore_limits=False, text=""):
         logger.info("[BiliBot] 📢 开始发布动态...")
         log = self._load_json(DYNAMIC_LOG_FILE, [])
         today = datetime.now().strftime("%Y-%m-%d")
@@ -423,8 +427,19 @@ B站动态的感觉：
             if not human_initiated and not self._dynamic_post_due(log):
                 logger.info("[BiliBot] 尚未到自动动态发布间隔，跳过")
                 return "skipped_interval", ""
-        logger.info("[BiliBot] 🤔 正在想要发什么...")
-        content = await self._generate_dynamic_content(human_initiated=human_initiated)
+        forced_text = str(text or "").strip()
+        if forced_text:
+            # 调用方给好了原文：跳过生成与「有没有动机」的判断，直接发。
+            logger.info("[BiliBot] 📝 使用调用方给出的文案（%d 字）", len(forced_text))
+            content = {
+                "decision": "post",
+                "text": forced_text[:2000],
+                "need_image": False,
+                "image_prompt": "",
+            }
+        else:
+            logger.info("[BiliBot] 🤔 正在想要发什么...")
+            content = await self._generate_dynamic_content(human_initiated=human_initiated)
         if not content:
             logger.error("[BiliBot] ❌ 生成动态内容失败")
             return "failed", "生成动态内容失败"

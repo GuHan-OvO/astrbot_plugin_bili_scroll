@@ -1,4 +1,4 @@
-"""post_dynamic 工具：状态透传、ignore_limits、注册开关与自检可用性。
+"""bili_post_dynamic 工具：状态透传、ignore_limits、注册开关与自检可用性。
 
 覆盖 2026-11-25 新增能力：
 - `_run_dynamic` 返回 (status, detail)，不再只有 bool（避免「说了没做」）；
@@ -111,6 +111,33 @@ class RunDynamicStatusTests(unittest.IsolatedAsyncioTestCase):
         status, _ = await probe._run_dynamic(human_initiated=True)
         self.assertEqual(status, "skipped_no_motivation")
 
+    async def test_指定文本时不再调用生成(self):
+        probe = DynamicProbe()
+        probe._generate_dynamic_content = AsyncMock(
+            side_effect=AssertionError("给了 text 就不该再生成")
+        )
+        status, detail = await probe._run_dynamic(human_initiated=True, text="  主模型写的文案  ")
+        self.assertEqual(status, "posted")
+        self.assertEqual(detail, "主模型写的文案")
+        self.assertEqual(probe.posted, ["主模型写的文案"])
+
+    async def test_指定文本超长按2000字截断(self):
+        probe = DynamicProbe()
+        status, detail = await probe._run_dynamic(human_initiated=True, text="字" * 2500)
+        self.assertEqual(status, "posted")
+        self.assertEqual(len(detail), 2000)
+
+    async def test_指定文本跳过没有动机的判断(self):
+        probe = DynamicProbe(content={"decision": "skip", "text": ""})
+        status, _ = await probe._run_dynamic(human_initiated=True, text="就走这条")
+        self.assertEqual(status, "posted")
+
+    async def test_空文本仍然走生成(self):
+        probe = DynamicProbe()
+        status, detail = await probe._run_dynamic(human_initiated=True, text="   ")
+        self.assertEqual(status, "posted")
+        self.assertEqual(detail, "今天的测试动态")
+
     async def test_并发时返回skipped_busy(self):
         probe = DynamicProbe()
         lock = asyncio.Lock()
@@ -137,11 +164,11 @@ class ToolRegistrationTests(unittest.TestCase):
         return [tool.name for tool in tools]
 
     def test_默认不注册发动态工具(self):
-        self.assertNotIn("post_dynamic", self._names({"ENABLE_LLM_TOOLS": True}))
+        self.assertNotIn("bili_post_dynamic", self._names({"ENABLE_LLM_TOOLS": True}))
 
     def test_显式开启后注册(self):
         names = self._names({"ENABLE_LLM_TOOLS": True, "BILI_DYNAMIC_TOOL_ENABLED": True})
-        self.assertIn("post_dynamic", names)
+        self.assertIn("bili_post_dynamic", names)
 
     def test_私信分享工具同样按开关注册(self):
         self.assertNotIn("watch_and_share_video_private", self._names({"ENABLE_LLM_TOOLS": True}))

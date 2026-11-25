@@ -604,31 +604,44 @@ def create_tools(plugin):
 
     @dataclass
     class PostDynamicTool(FunctionTool[AstrAgentContext]):
-        name: str = "post_dynamic"
+        name: str = "bili_post_dynamic"
         description: str = (
-            "Publish one Bilibili dynamic on the bot's own account. The text is written by the bot "
-            "from her own persona and recent activity; you cannot specify the content. "
-            "Call only when the user explicitly asks her to post a dynamic."
+            "在B站发一条动态——B站版的微博/朋友圈，发在她自己的B站主页上，粉丝可见。"
+            "用户给出了具体要发的内容时，放进 text 参数原样发布；"
+            "用户只说「发条动态」而没给内容时，text 留空，由插件按她的近期活动和人格自己写。"
+            "用户要求「发条动态」「发个动态」「去B站发动态」「发动态吧」时调用；"
+            "只是聊天里提到「动态」两个字不算。"
         )
         parameters: dict = Field(default_factory=lambda: {
             "type": "object",
-            "properties": {},
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": (
+                        "要发布的内容。用户明确给出原文并要求发布时传；"
+                        "用户没给内容就不要传，让她自己写。上限 2000 字。"
+                    ),
+                },
+            },
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
             denied = _write_permission_denied(context)
             if denied:
                 return denied
+            given_text = str(kwargs.get("text", "") or "").strip()
             try:
                 status, detail = await asyncio.wait_for(
-                    plugin._run_dynamic(human_initiated=True, ignore_limits=True),
+                    plugin._run_dynamic(
+                        human_initiated=True, ignore_limits=True, text=given_text
+                    ),
                     timeout=90,
                 )
             except asyncio.TimeoutError:
                 # 生成一条动态要几十秒，超时不算失败：说明已经开始，结果写日志。
                 return "动态发布已经开始，写完会记录到日志。"
             except Exception as exc:
-                logger.warning(f"[BiliBot] post_dynamic 工具异常: {exc}")
+                logger.warning(f"[BiliBot] bili_post_dynamic 工具异常: {exc}")
                 return "发动态失败（详情见日志）。"
             if status == "posted":
                 preview = str(detail or "")[:30]

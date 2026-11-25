@@ -70,10 +70,26 @@ class WritePermissionTests(unittest.IsolatedAsyncioTestCase):
         result = await self._like(plugin, ctx(admin=False))
         self.assertIn("点赞成功", result)
 
+    async def test_发动态工具把text透传下去(self):
+        plugin = _PermPlugin("anyone")
+        plugin.config["BILI_DYNAMIC_TOOL_ENABLED"] = True
+        captured = {}
+
+        async def fake_run(human_initiated=False, ignore_limits=False, text=""):
+            captured.update(human_initiated=human_initiated, ignore_limits=ignore_limits, text=text)
+            return "posted", text
+
+        plugin._run_dynamic = fake_run
+        tool = tools(plugin)["bili_post_dynamic"]
+        result = await tool.call(ctx(admin=True), text="  主模型写的  ")
+        self.assertEqual(captured["text"], "主模型写的", "前后空白应被裁掉")
+        self.assertTrue(captured["ignore_limits"], "工具仍应绕过每日条数与间隔")
+        self.assertIn("已发动态", result)
+
     async def test_发动态工具同样受权限约束(self):
         plugin = _PermPlugin()
         plugin.config["BILI_DYNAMIC_TOOL_ENABLED"] = True
-        tool = tools(plugin)["post_dynamic"]
+        tool = tools(plugin)["bili_post_dynamic"]
         result = await tool.call(ctx(admin=False))
         self.assertIn("只能由管理员", result)
 
