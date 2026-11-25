@@ -1561,6 +1561,23 @@
     "editor_language": "markdown",
     "editor_theme": "vs-dark"
   },
+  "BILI_DYNAMIC_TOOL_ENABLED": {
+    "description": "【高级·动态工具】允许模型主动发一条B站动态",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后模型可调用 post_dynamic：文案仍由插件按人设与近期活动生成，模型不能指定内容。每次调用都会真的发一条，不受 DYNAMIC_DAILY_COUNT 与最短间隔限制，建议按需临时打开。",
+    "condition": {
+      "ENABLE_DYNAMIC": true
+    }
+  },
+  "BILI_WRITE_TOOL_PERMISSION": {
+    "description": "【高级·写操作】模型执行发动态/评论/点赞/投币/收藏/拉黑时，谁可以使用",
+    "type": "string",
+    "default": "admin_only",
+    "options": ["admin_only", "follow_host", "anyone"],
+    "labels": ["仅管理员", "跟随AstrBot配置", "不限制"],
+    "hint": "仅管理员=插件自己校验，非管理员调用直接拒绝；跟随AstrBot配置=交给 AstrBot 的「插件→组件」权限，不配等于不限制；不限制=任何人可让模型执行写操作。"
+  },
   "ENABLE_DYNAMIC": {
     "description": "【动态·总开关】启用自动发动态",
     "type": "bool",

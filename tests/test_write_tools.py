@@ -99,6 +99,8 @@ class _FakePlugin(BilibiliAPIMixin):
             "BILI_JCT": "csrf",
             "ENABLE_LLM_TOOLS": True,
             "COMMENT_VERIFY_ENABLED": False,
+            # 这组用例只测「标识解析 + 失败原因透传」，调用者权限另有专测。
+            "BILI_WRITE_TOOL_PERMISSION": "anyone",
         }
         self.event_runtime = _FakeRuntime()
         self.post_response = post_response or {"code": 0, "data": {"rpid": 99}}

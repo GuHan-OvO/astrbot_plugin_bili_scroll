@@ -131,6 +131,34 @@ def create_tools(plugin):
                 hint = reason
         return f"{action_label}失败：{hint}" if hint else f"{action_label}失败（详情见日志）。"
 
+    def _write_permission_denied(context) -> str | None:
+        """写操作调用者校验：返回 None 放行，否则返回给模型的拒绝文案。
+
+        策略由 ``BILI_WRITE_TOOL_PERMISSION`` 决定：
+
+        - ``admin_only``（默认）：插件自己判 ``event.is_admin()``；
+        - ``follow_host``：不自查，交给 AstrBot 的 tool_permissions（面板可配成 admin）；
+        - ``anyone``：不限制。
+
+        拿不到会话（后台任务、测试）时按拒绝处理——写操作宁可不做，也不静默放开。
+        """
+        mode = str(
+            plugin.config.get("BILI_WRITE_TOOL_PERMISSION", "admin_only") or ""
+        ).strip().lower()
+        if mode in ("anyone", "follow_host"):
+            return None
+        try:
+            event = context.context.event
+        except AttributeError:
+            event = None
+        if event is not None:
+            try:
+                if bool(event.is_admin()):
+                    return None
+            except Exception:
+                pass
+        return "这个操作只能由管理员发起。"
+
     # ── 记忆类工具 ──
 
     @dataclass
@@ -575,6 +603,43 @@ def create_tools(plugin):
     # ── B站操作工具 ──
 
     @dataclass
+    class PostDynamicTool(FunctionTool[AstrAgentContext]):
+        name: str = "post_dynamic"
+        description: str = (
+            "Publish one Bilibili dynamic on the bot's own account. The text is written by the bot "
+            "from her own persona and recent activity; you cannot specify the content. "
+            "Call only when the user explicitly asks her to post a dynamic."
+        )
+        parameters: dict = Field(default_factory=lambda: {
+            "type": "object",
+            "properties": {},
+        })
+
+        async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            denied = _write_permission_denied(context)
+            if denied:
+                return denied
+            try:
+                status, detail = await asyncio.wait_for(
+                    plugin._run_dynamic(human_initiated=True, ignore_limits=True),
+                    timeout=90,
+                )
+            except asyncio.TimeoutError:
+                # 生成一条动态要几十秒，超时不算失败：说明已经开始，结果写日志。
+                return "动态发布已经开始，写完会记录到日志。"
+            except Exception as exc:
+                logger.warning(f"[BiliBot] post_dynamic 工具异常: {exc}")
+                return "发动态失败（详情见日志）。"
+            if status == "posted":
+                preview = str(detail or "")[:30]
+                return f"已发动态：{preview}…" if preview else "已发动态。"
+            if status == "skipped_busy":
+                return "已经有一条动态在发布，这次先不重复发。"
+            if status == "skipped_no_motivation":
+                return "她这次没有想发的，跳过了。"
+            return "发动态失败（详情见日志）。"
+
+    @dataclass
     class PostCommentTool(FunctionTool[AstrAgentContext]):
         name: str = "post_comment"
         description: str = "Post a comment on a Bilibili video. Only when user agrees or asks."
@@ -588,6 +653,9 @@ def create_tools(plugin):
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            denied = _write_permission_denied(context)
+            if denied:
+                return denied
             try:
                 raw_oid = kwargs.get("oid", "")
                 comment_text = kwargs.get("comment_text", "")
@@ -618,6 +686,9 @@ def create_tools(plugin):
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            denied = _write_permission_denied(context)
+            if denied:
+                return denied
             aid, error = await plugin._resolve_video_aid(kwargs.get("oid", ""))
             if not aid:
                 return f"点赞未执行：{error}。"
@@ -645,6 +716,9 @@ def create_tools(plugin):
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            denied = _write_permission_denied(context)
+            if denied:
+                return denied
             aid, error = await plugin._resolve_video_aid(kwargs.get("oid", ""))
             if not aid:
                 return f"投币未执行：{error}。"
@@ -676,6 +750,9 @@ def create_tools(plugin):
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            denied = _write_permission_denied(context)
+            if denied:
+                return denied
             aid, error = await plugin._resolve_video_aid(kwargs.get("oid", ""))
             if not aid:
                 return f"收藏未执行：{error}。"
@@ -920,14 +997,17 @@ def create_tools(plugin):
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            denied = _write_permission_denied(context)
+            if denied:
+                return denied
             uid = str(kwargs.get("uid", "")).strip()
             reason = kwargs.get("reason", "恶意评论") or "恶意评论"
             if not uid or not uid.isdigit():
-                return ToolExecResult(is_success=False, description="UID 无效，请提供纯数字的B站UID。")
+                return "UID 无效，请提供纯数字的B站UID。"
 
             # 检查是否是主人
             if plugin._is_owner(uid):
-                return ToolExecResult(is_success=False, description="不能拉黑主人！")
+                return "不能拉黑主人！"
 
             import os, json
             from datetime import datetime as dt
@@ -955,16 +1035,10 @@ def create_tools(plugin):
 
             if api_ok:
                 logger.info(f"[BiliBot] 🚫 工具拉黑 UID:{uid}（{reason}）")
-                return ToolExecResult(
-                    is_success=True,
-                    description=f"已拉黑 UID:{uid}，B站API调用成功。",
-                )
+                return f"已拉黑 UID:{uid}，B站API调用成功。"
             else:
                 logger.warning(f"[BiliBot] ⚠️ 工具拉黑 UID:{uid} B站API失败，已加本地黑名单")
-                return ToolExecResult(
-                    is_success=True,
-                    description=f"UID:{uid} 已加入本地黑名单，但B站API调用失败（可能需要重新登录）。",
-                )
+                return f"UID:{uid} 已加入本地黑名单，但B站API调用失败（可能需要重新登录）。"
 
     # ── 精简后的组合工具 ──
 
@@ -1061,6 +1135,9 @@ def create_tools(plugin):
         })
 
         async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+            denied = _write_permission_denied(context)
+            if denied:
+                return denied
             action = str(kwargs.get("action", "") or "").strip().lower()
             target = str(kwargs.get("target", "") or "").strip()
             if not target:
@@ -1125,32 +1202,37 @@ def create_tools(plugin):
                 )
             return "不支持的番剧操作。"
 
-    # ── 一键开关守卫：ENABLE_LLM_TOOLS=False 时所有工具直接返回提示 ──
-
-    def _guard_tool(tool):
-        original_call = tool.call
-
-        async def guarded_call(context, **kwargs):
-            if not plugin.config.get("ENABLE_LLM_TOOLS", True):
-                return "⚠️ LLM工具已关闭，管理员可用 /bili开关 工具 开启。"
-            return await original_call(context, **kwargs)
-
-        tool.call = guarded_call
-        return tool
-
-    # 默认只向模型暴露少量、职责清晰的入口。
-    tools = [
-        RecallBiliTool(),
-        ParseBiliShareTool(),
-        SearchBilibiliTool(),
-        WatchVideoTool(),
-        BiliBangumiTool(),
-        BiliActionTool(),
-        WatchVideosTool(),
+    # ── 工具注册表 ──
+    # 所有工具的开关都在这一处声明，别处不再散落 if。
+    # 每项是 (工具类, 需要同时为真的配置键, 缺省值)；键为空表示始终注册。
+    tool_specs = (
+        (RecallBiliTool, (), None),
+        (ParseBiliShareTool, (), None),
+        (SearchBilibiliTool, (), None),
+        (WatchVideoTool, (), None),
+        (BiliBangumiTool, (), None),
+        (BiliActionTool, (), None),
+        (WatchVideosTool, (), None),
         # 拉黑具有更高风险，保留独立工具名和独立确认语义。
-        BlockBiliUserTool(),
+        (BlockBiliUserTool, (), None),
+        # 私信分享与发动态会把内容真的发到 B站，默认不注册给模型。
+        (WatchAndShareVideoPrivateTool, ("BILI_PRIVATE_SHARE_TOOL_ENABLED",), False),
+        (PostDynamicTool, ("BILI_DYNAMIC_TOOL_ENABLED",), False),
+    )
+
+    if not plugin.config.get("ENABLE_LLM_TOOLS", True):
+        # 总开关关闭时一个都不注册：模型看不到入口，也就不会调完再收到「已关闭」。
+        logger.info("[BiliBot] LLM 工具总开关已关闭，本次不注册任何工具")
+        return []
+
+    enabled = [
+        tool_cls()
+        for tool_cls, keys, default in tool_specs
+        if all(bool(plugin.config.get(key, default)) for key in keys)
     ]
-    # 私信分享工具默认隐藏，只有管理员显式开启后才注册给 LLM。
-    if plugin.config.get("BILI_PRIVATE_SHARE_TOOL_ENABLED", False):
-        tools.append(WatchAndShareVideoPrivateTool())
-    return [_guard_tool(t) for t in tools]
+    logger.info(
+        "[BiliBot] LLM 工具注册 %d 个：%s",
+        len(enabled),
+        ", ".join(tool.name for tool in enabled),
+    )
+    return enabled

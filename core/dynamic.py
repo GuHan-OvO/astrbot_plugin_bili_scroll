@@ -357,23 +357,34 @@ B站动态的感觉：
             logger.error(f"[BiliBot] 生成动态内容失败: {e}")
             return None
 
-    async def _run_dynamic(self, human_initiated=False):
+    async def _run_dynamic(self, human_initiated=False, ignore_limits=False):
+        """跑一次动态发布，返回 ``(status, detail)``。
+
+        status 取值：posted / skipped_busy / skipped_limit / skipped_interval /
+        skipped_no_motivation / failed / cancelled。
+
+        ``ignore_limits=True`` 供 LLM 工具主动要求发动态时使用：跳过每日条数与最短间隔，
+        但保留并发锁（同一时刻只允许一条在发）与功能开关。
+        """
         lock = getattr(self, "_dynamic_run_lock", None)
         if lock is None:
             lock = self._dynamic_run_lock = asyncio.Lock()
         if lock.locked():
             logger.info("[BiliBot] 📢 已有动态发布流程在进行，本次跳过")
-            return False
+            return "skipped_busy", ""
         async with lock:
             try:
-                await self._run_dynamic_inner(human_initiated=human_initiated)
+                return await self._run_dynamic_inner(
+                    human_initiated=human_initiated, ignore_limits=ignore_limits
+                )
             except asyncio.CancelledError:
                 logger.info("[BiliBot] 动态发布任务被取消")
+                return "cancelled", ""
             except Exception as e:
                 logger.error(f"[BiliBot] 动态发布任务异常退出: {e}\n{traceback.format_exc()}")
-        return True
+                return "failed", str(e)
 
-    async def _run_dynamic_inner(self, human_initiated=False):
+    async def _run_dynamic_inner(self, human_initiated=False, ignore_limits=False):
         logger.info("[BiliBot] 📢 开始发布动态...")
         log = self._load_json(DYNAMIC_LOG_FILE, [])
         today = datetime.now().strftime("%Y-%m-%d")
@@ -396,29 +407,34 @@ B站动态的感觉：
                 self._autonomous_limit_max("dynamic") if hasattr(self, "_autonomous_limit_max") else _limit("AUTONOMOUS_DYNAMIC_DAILY_LIMIT", 2),
             ) if value > 0
         ]
-        plan = self._autonomous_plan_for_today() if hasattr(self, "_autonomous_plan_for_today") else {}
-        if plan and not human_initiated:
-            plan_limit = len(plan.get("dynamic_times", []))
-            if plan_limit:
-                limits.append(plan_limit)
-        if limits and len(today_posts) >= min(limits):
-            logger.info(f"[BiliBot] 今天已发 {len(today_posts)} 条动态（上限 {min(limits)}），跳过")
-            return
-        if not human_initiated and not self._dynamic_post_due(log):
-            logger.info("[BiliBot] 尚未到自动动态发布间隔，跳过")
-            return
+        if ignore_limits:
+            # 工具主动要求发动态：按设计跳过每日条数与最短间隔，
+            # 仍然受并发锁、ENABLE_DYNAMIC 与工具开关约束。
+            logger.info("[BiliBot] 📢 工具主动发动态：跳过每日条数与间隔限制")
+        else:
+            plan = self._autonomous_plan_for_today() if hasattr(self, "_autonomous_plan_for_today") else {}
+            if plan and not human_initiated:
+                plan_limit = len(plan.get("dynamic_times", []))
+                if plan_limit:
+                    limits.append(plan_limit)
+            if limits and len(today_posts) >= min(limits):
+                logger.info(f"[BiliBot] 今天已发 {len(today_posts)} 条动态（上限 {min(limits)}），跳过")
+                return "skipped_limit", ""
+            if not human_initiated and not self._dynamic_post_due(log):
+                logger.info("[BiliBot] 尚未到自动动态发布间隔，跳过")
+                return "skipped_interval", ""
         logger.info("[BiliBot] 🤔 正在想要发什么...")
         content = await self._generate_dynamic_content(human_initiated=human_initiated)
         if not content:
             logger.error("[BiliBot] ❌ 生成动态内容失败")
-            return
+            return "failed", "生成动态内容失败"
         if content.get("decision") != "post":
             logger.info("[BiliBot] 今天没有足够具体的动态发布动机，本次跳过")
-            return
+            return "skipped_no_motivation", ""
         text = str(content.get("text", "") or "").strip()
         if not text:
             logger.warning("[BiliBot] 动态文案为空，跳过本次发布")
-            return
+            return "skipped_no_motivation", "文案为空"
         need_image = content.get("need_image", False)
         image_prompt = content.get("image_prompt", "")
         logger.info(f"[BiliBot] 📝 文案：{text[:50]}...")
@@ -464,5 +480,6 @@ B站动态的感觉：
             short_text = text[:60] if len(text) > 60 else text
             await self._save_self_memory_record("dynamic", f"[{now_str}] Bot发了一条动态：{short_text}", source="bilibili", memory_type="dynamic")
             logger.info("[BiliBot] 🎉 动态发布完成！")
-        else:
-            logger.error("[BiliBot] ❌ 动态发布失败")
+            return "posted", text
+        logger.error("[BiliBot] ❌ 动态发布失败")
+        return "failed", "发布接口返回失败"

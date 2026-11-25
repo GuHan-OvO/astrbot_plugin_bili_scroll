@@ -113,11 +113,57 @@ def _config_report(plugin) -> dict:
         value = _config_value(plugin, key)
         optional.append({"key": key, "hint": hint, "value": value if not isinstance(value, str) else (value[:40] or "（空）")})
 
+    optional.extend(_tool_availability(plugin))
     try:
         total = len(plugin.config.keys())
     except Exception:
         total = 0
     return {"total_keys": total, "required": required, "optional": optional}
+
+
+def _tool_availability(plugin) -> list[dict]:
+    """模型能用哪些 B站 写操作。
+
+    「自检全绿但发不了动态」的根因是自检从不检查工具入口；这里把每类写操作
+    是否真的暴露给模型、缺哪个开关，直接列在配置区。
+    """
+    llm_raw = _config_value(plugin, "ENABLE_LLM_TOOLS")
+    llm_on = llm_raw is not False  # 未配置按开启处理，与 tools 层的默认一致
+    dynamic_master = bool(_config_value(plugin, "ENABLE_DYNAMIC"))
+    dynamic_tool = bool(_config_value(plugin, "BILI_DYNAMIC_TOOL_ENABLED"))
+    share_tool = bool(_config_value(plugin, "BILI_PRIVATE_SHARE_TOOL_ENABLED"))
+
+    def row(label, extra_ok, missing):
+        if not llm_on:
+            return {"key": label, "value": "不可用", "hint": "LLM 工具总开关 ENABLE_LLM_TOOLS 已关闭"}
+        if extra_ok:
+            return {"key": label, "value": "可用", "hint": "模型可直接调用"}
+        return {"key": label, "value": "不可用", "hint": "需要开启 " + "、".join(missing)}
+
+    dynamic_missing = []
+    if not dynamic_master:
+        dynamic_missing.append("ENABLE_DYNAMIC")
+    if not dynamic_tool:
+        dynamic_missing.append("BILI_DYNAMIC_TOOL_ENABLED")
+
+    write_mode = str(
+        _config_value(plugin, "BILI_WRITE_TOOL_PERMISSION") or "admin_only"
+    ).strip().lower()
+    write_scope = {
+        "admin_only": "仅管理员",
+        "follow_host": "跟随AstrBot配置",
+        "anyone": "不限制",
+    }.get(write_mode, "仅管理员")
+
+    def with_scope(row_item):
+        row_item["hint"] = f"{row_item['hint']}；调用者：{write_scope}"
+        return row_item
+
+    return [
+        with_scope(row("工具：发动态", dynamic_master and dynamic_tool, dynamic_missing)),
+        with_scope(row("工具：评论/点赞/投币/收藏", True, [])),
+        with_scope(row("工具：私信分享视频", share_tool, ["BILI_PRIVATE_SHARE_TOOL_ENABLED"])),
+    ]
 
 
 _ANOMALY_STATES = ("self_only", "folded", "invisible", "deleted")
