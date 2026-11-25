@@ -3,6 +3,30 @@
 本分支从 **v1.8.0** 起独立演进：`metadata.yaml` 的 `repo` 指向本仓库、不跟随上游更新。
 更早的版本历史属于上游项目，不在本仓库维护。
 
+## v2.1.3-beta.1 — 2026-11-25
+
+### 新增：模型可以主动发动态
+
+- 新增工具 `post_dynamic`（默认不注册，需在基础设置页打开 `BILI_DYNAMIC_TOOL_ENABLED`）。
+  文案仍由插件按人设与近期活动生成，模型不能指定内容；调用时**跳过每日条数与最短间隔**，
+  只保留并发锁与 `ENABLE_DYNAMIC` 开关。
+- `_run_dynamic` 改为返回 `(status, detail)`（posted / skipped_busy / skipped_limit /
+  skipped_interval / skipped_no_motivation / failed / cancelled），`/bili动态` 据此给不同回执。
+
+### 新增：写操作权限与工具注册统一开关
+
+- 新增 `BILI_WRITE_TOOL_PERMISSION`（`admin_only` 默认 / `follow_host` / `anyone`）：
+  评论、点赞、投币、收藏、关注、拉黑、私信分享、发动态统一过这道校验；拿不到会话时按拒绝处理。
+- `create_tools()` 改成注册表驱动（`tool_specs`），所有工具开关集中一处；`ENABLE_LLM_TOOLS`
+  改在注册层生效——关闭时不再注册任何工具（原先工具仍在列表里、模型调完才收到「已关闭」），
+  并在注册后打一行日志。
+- 自检的「工具」行现在标出调用范围（仅管理员 / 跟随AstrBot配置 / 不限制）。
+
+### 修复
+
+- `bili_block_user` 一调用就 TypeError：`ToolExecResult` 是 `str | CallToolResult` 的 union 别名，
+  被当类调用了 4 次，改为直接返回字符串。
+
 ## v2.1.2 — 2026-11-24
 
 ### 修复：评分字段超长不再作废整条评价
